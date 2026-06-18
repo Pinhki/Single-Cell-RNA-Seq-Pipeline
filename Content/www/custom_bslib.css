@@ -1,0 +1,1136 @@
+/* ==========================================================================
+   Wan Lab – Layout & Utility Overrides
+   ========================================================================== */
+
+/* --- Global Corner System (single control point) --- */
+:root {
+  --wan-radius-sm: 8px;
+  --wan-radius-md: 10px;
+  --wan-radius-lg: 14px;
+  --wan-radius-btn: 10px;
+  --wan-radius-btn-lg: 12px;
+  --wan-corner-smoothing: 0.46;
+  --wan-corner-smoothing-soft: 0.34;
+  --wan-corner-smoothing-strong: 0.58;
+  --wan-corner-smoothing-btn: 0.38;
+  --wan-concentric-step: 3px;
+  --wan-radius-sm-inner: clamp(0px, calc(var(--wan-radius-sm) - var(--wan-concentric-step)), 999px);
+  --wan-radius-md-inner: clamp(0px, calc(var(--wan-radius-md) - var(--wan-concentric-step)), 999px);
+  --wan-radius-lg-inner: clamp(0px, calc(var(--wan-radius-lg) - var(--wan-concentric-step)), 999px);
+}
+
+/* Apply a unified smooth corner aesthetic across the app */
+.card,
+.btn,
+.form-control,
+.form-select,
+.selectize-control .selectize-input,
+.irs-line,
+.irs-bar,
+.irs-bar-edge,
+.modal-content,
+.dropdown-menu,
+.dropdown-item,
+.table,
+.dataTables_wrapper .dataTables_scroll,
+.bslib-sidebar-layout > .sidebar,
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr,
+.rds-export-wrap,
+.rds-export-empty-msg,
+.rds-bundle-note,
+.flow-gate-card {
+  border-radius: var(--wan-radius-md) !important;
+  clip-path: none !important;
+  -webkit-clip-path: none !important;
+  --wan-corner-smoothing-local: var(--wan-corner-smoothing);
+}
+
+/* Small controls */
+.btn-sm,
+.sidebar-file-item,
+.rds-meta-chip,
+.rds-bundle-chip {
+  border-radius: var(--wan-radius-sm) !important;
+  --wan-corner-smoothing-local: var(--wan-corner-smoothing-soft);
+}
+
+/* Buttons are intentionally less smoothed than cards to avoid pill/capsule drift */
+.btn {
+  border-radius: var(--wan-radius-btn) !important;
+  --wan-corner-smoothing-local: var(--wan-corner-smoothing-btn);
+}
+
+.btn.btn-lg {
+  border-radius: var(--wan-radius-btn-lg) !important;
+  --wan-corner-smoothing-local: var(--wan-corner-smoothing-btn);
+}
+
+/* Larger blocks */
+.welcome-hero-card,
+.env-hero-card,
+.rds-top-card {
+  border-radius: var(--wan-radius-lg) !important;
+  --wan-corner-smoothing-local: var(--wan-corner-smoothing-strong);
+}
+
+/* Nested elements use an inner radius to preserve concentricity */
+.dropdown-menu .dropdown-item {
+  border-radius: var(--wan-radius-sm-inner) !important;
+  --wan-corner-smoothing-local: var(--wan-corner-smoothing-soft);
+}
+
+/* Utility class for custom markup that needs smooth rectangular corners. */
+.wan-squircle {
+  --wan-corner-smoothing-local: var(--wan-corner-smoothing);
+}
+
+/* Progressive enhancement:
+   Default path is classic border-radius for predictable borders/shadows.
+   Apply continuous superellipse corners anywhere the app already uses rounded rectangles. */
+@supports (corner-shape: superellipse(1.414)) {
+  .wan-squircle,
+  .card,
+  .btn,
+  .form-control,
+  .form-select,
+  .selectize-control .selectize-input,
+  .irs-line,
+  .irs-bar,
+  .irs-bar-edge,
+  .modal-content,
+  .dropdown-menu,
+  .dropdown-item,
+  .table,
+  .dataTables_wrapper .dataTables_scroll,
+  .bslib-sidebar-layout > .sidebar,
+  .bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr,
+  .rds-export-wrap,
+  .rds-export-empty-msg,
+  .rds-bundle-note,
+  .rds-code-block-wrap,
+  .rds-important-note,
+  .rds-import-note,
+  .flow-inline-note,
+  .flow-gate-card,
+  .welcome-hero-card,
+  .env-hero-card,
+  .rds-top-card,
+  .sidebar-section .btn,
+  .card-page-card,
+  .sidebar-file-item,
+  .sidebar-file-item .sidebar-remove-btn,
+  .wl-side,
+  .app-page .alert,
+  .app-page .focus_card_style,
+  .app-page .important_card_style,
+  .beta-badge,
+  .deprecated-badge,
+  .app-page .plot_area_card_style,
+  .tabbable > .nav.nav-tabs .nav-link,
+  .tabbable > .nav.nav-pills .nav-link,
+  .app-tabs-wrap .nav.nav-tabs .nav-link,
+  .app-tabs-wrap .nav.nav-pills .nav-link,
+  body.figure-studio-active .app-page .lab-hero,
+  body.figure-studio-active .app-page .poline-hero,
+  body.figure-studio-active .app-page .lab-card,
+  body.figure-studio-active .app-page .poline-card,
+  body.figure-studio-active .app-page .lab-chip,
+  body.figure-studio-active .app-page .poline-chip,
+  body.figure-studio-active .app-page .lab-code,
+  body.figure-studio-active .app-page .poline-code,
+  .hto-scatter-controls,
+  .hto-pop-grid details,
+  .hto-tsne-opts,
+  .hto-heatmap-box,
+  .hto-method-picker .radio label,
+  .hto-normalize-picker .checkbox label,
+  .elbow-missing-warning-card,
+  .analysis-selector-overlay-link,
+  .dbl-inline-note,
+  .vdj-panel-stack .well,
+  .rv-demo,
+  .import-samples-modal .import-yellow-note,
+  .vdj-detect-modal .checkbox label,
+  .welcome-flow-step,
+  .so-card,
+  .wl-pdf-preview-resize-box,
+  .mcp-shell,
+  .mcp-swatch,
+  .mcp-select,
+  .mcp-chip,
+  .ccp-shell,
+  .ccp-swatch,
+  .ccp-select,
+  .ccp-chip {
+    corner-shape: superellipse(1.414);
+  }
+}
+
+/* --- Typography (Arial for non-navbar UI text only) --- */
+.tab-content,
+.bslib-sidebar-layout > .sidebar,
+.footer,
+.tab-content p,
+.tab-content span,
+.tab-content label,
+.tab-content li,
+.tab-content td,
+.tab-content th,
+.tab-content small,
+.tab-content strong,
+.tab-content em,
+.tab-content h1,
+.tab-content h2,
+.tab-content h3,
+.tab-content h4,
+.tab-content h5,
+.tab-content h6,
+.bslib-sidebar-layout > .sidebar p,
+.bslib-sidebar-layout > .sidebar span,
+.bslib-sidebar-layout > .sidebar label,
+.bslib-sidebar-layout > .sidebar li,
+.bslib-sidebar-layout > .sidebar td,
+.bslib-sidebar-layout > .sidebar th,
+.bslib-sidebar-layout > .sidebar h1,
+.bslib-sidebar-layout > .sidebar h2,
+.bslib-sidebar-layout > .sidebar h3,
+.bslib-sidebar-layout > .sidebar h4,
+.bslib-sidebar-layout > .sidebar h5,
+.bslib-sidebar-layout > .sidebar h6,
+.footer,
+.footer span,
+.footer a {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Keep buttons/icons in default UI font stack so icon fonts render correctly */
+.tab-content button,
+.tab-content .btn,
+.bslib-sidebar-layout > .sidebar button,
+.bslib-sidebar-layout > .sidebar .btn {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.tab-content i.fa,
+.tab-content i.fas,
+.tab-content i.far,
+.tab-content i.fab,
+.bslib-sidebar-layout > .sidebar i.fa,
+.bslib-sidebar-layout > .sidebar i.fas,
+.bslib-sidebar-layout > .sidebar i.far,
+.bslib-sidebar-layout > .sidebar i.fab {
+  font-family: "Font Awesome 5 Free", "Font Awesome 5 Brands" !important;
+}
+
+/* --- SIDEBAR STYLING --- */
+.bslib-sidebar-layout {
+  overflow-x: clip;
+}
+.bslib-sidebar-layout > .main,
+.bslib-sidebar-layout > .sidebar,
+.bslib-sidebar-layout > .sidebar > .sidebar-content {
+  overflow-x: hidden !important;
+}
+.bslib-sidebar-layout > .sidebar {
+  background-color: #f8f9fa;
+  border-left: 1px solid #dee2e6;
+}
+
+/* bslib adds body-level gap spacing (16px) via .bslib-gap-spacing.
+   In page-fill + sidebar mode this creates a visible right inset.
+   Keep body padding flush so sidebar hugs the viewport edge. */
+body.bslib-page-fill.has-page-sidebar.bslib-gap-spacing {
+  padding-right: 0 !important;
+  padding-left: 0 !important;
+}
+
+/* Light mode: right sidebar should read like a soft floating surface. */
+body:not(.app-dark-mode) .bslib-sidebar-layout.sidebar-right > .sidebar {
+  background-color: #ffffff;
+  border-left: 0;
+  box-shadow: -12px 0 34px rgba(15, 23, 42, 0.038), -2px 0 8px rgba(15, 23, 42, 0.025);
+}
+
+/* Right sidebar stays light in both modes for consistent import/workspace UX. */
+body.app-dark-mode .bslib-sidebar-layout.sidebar-right > .sidebar {
+  background-color: #ffffff;
+  border-left: 0;
+  box-shadow: -12px 0 34px rgba(15, 23, 42, 0.038), -2px 0 8px rgba(15, 23, 42, 0.025);
+  color: #1f2937;
+}
+.sidebar-section {
+  margin-bottom: 15px;
+}
+.sidebar-section .btn {
+  border-radius: var(--wan-radius-md);
+  font-weight: 500;
+}
+
+/* --- MAIN CONTENT SPACING FIX --- */
+.bslib-page-fill > .bslib-sidebar-layout > .main {
+  /* Removed extra padding overrides to restore default alignment */
+}
+
+/* --- Shared Card Page Template --- */
+.card-page-wrap {
+  padding-top: var(--card-page-top-offset, 0px);
+  background: transparent;
+}
+
+.card-page-card {
+  border: 1px solid #e5e7eb;
+  border-radius: var(--wan-radius-md);
+  --wan-corner-smoothing-local: var(--wan-corner-smoothing);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.card-page-content > :last-child {
+  margin-bottom: 0;
+}
+
+.card-page-content {
+  background: transparent;
+}
+
+/* --- UTILITIES --- */
+.card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: var(--wan-radius-md);
+  padding: 20px;
+  margin: 20px 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+/* Light mode cards: no border + very subtle high-blur shadow. */
+body:not(.app-dark-mode) .card,
+body:not(.app-dark-mode) .card-page-card {
+  background: #ffffff;
+  border: 0;
+  box-shadow: 0 10px 34px rgba(15, 23, 42, 0.035), 0 2px 8px rgba(15, 23, 42, 0.018);
+}
+
+/* Dark mode layout parity: keep card border width the same as light mode (no size shift). */
+body.app-dark-mode .card,
+body.app-dark-mode .card-page-card {
+  border: 0;
+}
+
+/* Focus/important highlight cards must never be overridden by generic card rules. */
+body:not(.app-dark-mode) .app-page .focus_card_style {
+  border: 1px solid #bbf7d0 !important;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.24), 0 6px 14px rgba(34, 197, 94, 0.16) !important;
+}
+
+body:not(.app-dark-mode) .app-page .important_card_style {
+  border: 1px solid #fecaca !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.24), 0 6px 14px rgba(239, 68, 68, 0.16) !important;
+}
+
+.shiny-input-container { width: 100%; }
+
+/* QC Page Specifics */
+.qc-violins { display: flex; flex-wrap: wrap; gap: 10px; }
+.qc-vln { flex: 1; min-width: 300px; }
+
+/* Hidden inputs utility */
+.shiny-input-container[style*="none"] {
+  display: none !important;
+}
+
+/* --- Sidebar compact layout tweaks --- */
+.sidebar-env-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 32px;
+}
+.sidebar-env-right {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.sidebar-env-status {
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+.sidebar-env-right > .shiny-html-output {
+  display: inline-flex;
+  align-items: center;
+}
+.sidebar-env-label {
+  font-size: 0.82rem;
+  color: #64748b;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sidebar-env-status.status-missing {
+  color: #dc3545;
+}
+
+.sidebar-env-status.status-ready {
+  color: #198754;
+}
+
+.sidebar-file-actions {
+  margin-bottom: 8px;
+}
+.right-sidebar-stack {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.sidebar-data-section {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.sidebar-data-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.sidebar-bottom-actions {
+  margin-top: auto;
+  padding-top: 4px;
+  border-top: 1px solid #dde2e8;
+}
+
+.sidebar-bottom-actions .workspace-tip {
+  font-size: 12px;
+  line-height: 1.25;
+  color: #5f6b7a;
+  margin-bottom: 8px;
+}
+
+.sidebar-bottom-actions .workspace-btn {
+  font-weight: 600;
+}
+
+.sidebar-bottom-actions .workspace-btn.workspace-btn-ready,
+.sidebar-bottom-actions .workspace-btn.workspace-btn-ready:focus,
+.sidebar-bottom-actions .workspace-btn.workspace-btn-ready:hover {
+  background-color: #10b981 !important;
+  border-color: #10b981 !important;
+  color: #ffffff !important;
+}
+
+.sidebar-bottom-actions .workspace-btn.workspace-btn-disabled,
+.sidebar-bottom-actions .workspace-btn.workspace-btn-disabled:focus,
+.sidebar-bottom-actions .workspace-btn.workspace-btn-disabled:hover {
+  background-color: #9ca3af !important;
+  border-color: #9ca3af !important;
+  color: #ffffff !important;
+}
+
+/* Ensure sidebar container itself is a full-height flex column */
+.bslib-sidebar-layout > .sidebar > .sidebar-content,
+.bslib-sidebar-layout > .sidebar > .sidebar-content.bslib-gap-spacing {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  gap: 0 !important;
+  padding-top: calc(var(--_icon-size, 1rem) / 2) !important;
+}
+
+.bslib-sidebar-layout > .sidebar .dataTable,
+.bslib-sidebar-layout > .sidebar table.dataTable {
+  font-size: 0.82rem;
+}
+
+.bslib-sidebar-layout > .sidebar table.dataTable th,
+.bslib-sidebar-layout > .sidebar table.dataTable td {
+  padding: 4px 6px;
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-table {
+  table-layout: fixed;
+  width: 100% !important;
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-table th:nth-child(1),
+.bslib-sidebar-layout > .sidebar table.sidebar-data-table td:nth-child(1) {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-table th:nth-child(2),
+.bslib-sidebar-layout > .sidebar table.sidebar-data-table td:nth-child(2) {
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu {
+  width: 100% !important;
+  max-width: 100% !important;
+  table-layout: fixed !important;
+  border-collapse: separate;
+  border-spacing: 0 6px;
+}
+.bslib-sidebar-layout > .sidebar .dataTables_wrapper table.sidebar-data-menu,
+.bslib-sidebar-layout > .sidebar .dataTables_scrollBody table.sidebar-data-menu {
+  width: 100% !important;
+  max-width: 100% !important;
+  table-layout: fixed !important;
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu.no-footer {
+  border-bottom: 0 !important;
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu thead {
+  display: none;
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr {
+  background: transparent;
+  border: 0;
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr.selected,
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr:hover {
+  background: transparent !important;
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu td.sidebar-file-cell {
+  padding: 4px 2px !important;
+  width: 100% !important;
+  max-width: 0 !important;
+  overflow: hidden;
+  border: 0 !important;
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr:hover > td,
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr.selected > td {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.sidebar-file-item {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+}
+.sidebar-file-item .sfi-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  font-size: 0.80rem;
+  font-weight: 600;
+  line-height: 1.14 !important;
+  color: #1f2937;
+  white-space: normal !important;
+  overflow: hidden !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+  padding-right: 24px;
+}
+.sidebar-file-item .sfi-title .sfi-title-text {
+  display: block;
+  min-width: 0;
+  width: 100%;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+.sidebar-file-item .sfi-meta1,
+.sidebar-file-item .sfi-meta2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  margin-top: 0 !important;
+  font-size: 0.70rem;
+  color: #5f6b7a;
+  line-height: 1.15;
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+  padding-right: 24px;
+}
+.sidebar-file-item .sfi-meta-sep {
+  color: #6b7280;
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu .sidebar-file-item .sfi-title {
+  min-width: 0 !important;
+  width: 100% !important;
+  line-height: 1.14 !important;
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu .sidebar-file-item .sfi-title .sfi-title-text {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu .sidebar-file-item .sfi-meta1,
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu .sidebar-file-item .sfi-meta2 {
+  margin-top: 0 !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
+.sidebar-file-empty {
+  font-size: 0.82rem;
+  color: #6b7280;
+  padding: 6px 2px;
+}
+.bslib-sidebar-layout > .sidebar .dataTables_wrapper,
+.bslib-sidebar-layout > .sidebar .datatables {
+  min-height: 0 !important;
+  overflow-x: hidden !important;
+  max-width: 100%;
+}
+
+.bslib-sidebar-layout > .sidebar .dataTables_wrapper .dataTables_scroll,
+.bslib-sidebar-layout > .sidebar .dataTables_wrapper .dataTables_scrollBody {
+  overflow-x: hidden !important;
+}
+
+/* --- Sidebar top-row alignment (collapse + environment) --- */
+.bslib-sidebar-layout > .sidebar {
+  position: relative;
+}
+
+.bslib-sidebar-layout > .sidebar .collapse-toggle,
+.bslib-sidebar-layout > .sidebar .sidebar-toggle,
+.bslib-sidebar-layout > .sidebar .bslib-sidebar-toggle,
+.bslib-sidebar-layout > .collapse-toggle,
+.bslib-sidebar-layout > .bslib-sidebar-toggle {
+  position: absolute;
+  top: calc(var(--_icon-size, 1rem) / 2);
+  right: 8px;
+  margin: 0;
+  z-index: 10;
+}
+
+/* Right-side sidebar: keep equal top/left inset for the fold button */
+.bslib-sidebar-layout.sidebar-right > .collapse-toggle,
+.bslib-sidebar-layout.sidebar-right > .bslib-sidebar-toggle,
+.bslib-sidebar-layout.sidebar-right > .sidebar .collapse-toggle,
+.bslib-sidebar-layout.sidebar-right > .sidebar .bslib-sidebar-toggle {
+  top: 8px;
+  left: 8px;
+  right: auto;
+}
+
+.sidebar-env-section {
+  margin-top: 2px;
+  padding-top: 0;
+}
+.bslib-sidebar-layout:not(.sidebar-right) .sidebar-env-row {
+  padding-right: calc(var(--_icon-button-size, 2rem) + 6px);
+  padding-left: 0;
+}
+.bslib-sidebar-layout.sidebar-right .sidebar-env-row {
+  padding-left: calc(var(--_icon-button-size, 2rem) + 3px);
+  padding-right: 0;
+}
+
+/* --- Welcome page layout --- */
+.welcome-page-wrap {
+  --welcome-card-gap: 14px;
+  padding: var(--welcome-card-gap);
+}
+
+.welcome-page-wrap .row {
+  margin-left: calc(-1 * var(--welcome-card-gap) / 2);
+  margin-right: calc(-1 * var(--welcome-card-gap) / 2);
+}
+
+.welcome-page-wrap [class*="col-"] {
+  padding-left: calc(var(--welcome-card-gap) / 2);
+  padding-right: calc(var(--welcome-card-gap) / 2);
+}
+
+.welcome-hero-card {
+  margin-top: 0;
+  margin-bottom: var(--welcome-card-gap);
+  border: 1px solid #dfe3e8;
+  background: #ffffff;
+}
+
+.welcome-eyebrow {
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: #6b7280;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.welcome-title {
+  margin: 0 0 8px 4px;
+  font-size: 1.46rem !important;
+  font-weight: 700 !important;
+  line-height: 1.2;
+}
+
+.welcome-lead {
+  margin-bottom: 6px;
+  font-size: 0.92rem;
+}
+
+.welcome-sublead {
+  margin-top: 10px;
+  margin-bottom: 2px;
+  color: #6b7280;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.welcome-cta-row {
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.welcome-cta-row .btn {
+  min-width: 180px;
+  padding: 10px 18px;
+  border-radius: var(--wan-radius-btn-lg) !important;
+  --wan-corner-smoothing-local: var(--wan-corner-smoothing-btn);
+}
+
+.welcome-cta-row .welcome-btn-start.btn {
+  background: #22c55e !important;
+  border-color: #34d278 !important;
+  border-width: 2px !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.28);
+}
+
+.welcome-cta-row .welcome-btn-start.btn:hover,
+.welcome-cta-row .welcome-btn-start.btn:focus {
+  background: #16a34a !important;
+  border-color: #2dc06a !important;
+  border-width: 2px !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 16px rgba(34, 197, 94, 0.32);
+}
+
+.welcome-cta-row .welcome-btn-start.btn:active {
+  background: #15803d !important;
+  border-color: #24ad5b !important;
+  border-width: 2px !important;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.24);
+}
+
+.welcome-cta-row .welcome-link-why,
+.welcome-cta-row .welcome-link-why:visited {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 42px;
+  padding: 0;
+  margin: 0;
+  text-decoration: none;
+  background: transparent !important;
+  border: 0 !important;
+  color: #b08900 !important;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.1;
+  align-self: flex-end;
+}
+
+.welcome-cta-row .welcome-link-why:hover,
+.welcome-cta-row .welcome-link-why:focus {
+  color: #8f6f00 !important;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  outline: none;
+}
+
+.welcome-cta-row .welcome-link-why:active {
+  color: #705700 !important;
+}
+
+.welcome-block {
+  min-height: 260px;
+  margin-top: 0;
+  margin-bottom: var(--welcome-card-gap);
+}
+
+.welcome-block-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: #1f2937;
+}
+
+.welcome-update-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.welcome-update-list li {
+  margin-bottom: 6px;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.welcome-steps {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.welcome-steps li {
+  margin-bottom: 8px;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.welcome-empty-note {
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.welcome-tutorial-modal-content {
+  max-height: 72vh;
+  overflow-y: auto;
+  padding: 8px 12px 10px;
+  box-sizing: border-box;
+}
+
+.welcome-tutorial-modal-content .card {
+  margin-top: 0;
+  margin-bottom: 12px;
+  margin-left: 2px;
+  margin-right: 2px;
+}
+
+.welcome-tutorial-modal-content .card:last-child {
+  margin-bottom: 0;
+}
+
+.welcome-tutorial-figure {
+  margin-top: 10px;
+}
+
+.welcome-tutorial-figure .img-responsive {
+  width: 100%;
+  height: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: var(--wan-radius-sm);
+  background: #ffffff;
+}
+
+.welcome-tutorial-citation {
+  margin: 6px 0 0 0;
+  font-size: 0.82rem;
+  color: #6b7280;
+  line-height: 1.35;
+}
+
+.welcome-credits {
+  margin-top: 0;
+  padding: 8px 2px;
+  border-top: 1px solid #e5e7eb;
+  color: #6b7280;
+}
+
+.welcome-credits-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  color: #4b5563;
+}
+
+.welcome-credits-line {
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.welcome-credits-note {
+  white-space: pre-line;
+}
+
+.welcome-update-link {
+  margin-top: 8px;
+  font-size: 0.82rem;
+  color: #4b5563;
+}
+
+.welcome-update-link a {
+  color: #4b5563;
+  text-decoration: underline;
+}
+
+.welcome-update-link a:hover {
+  color: #1f2937;
+}
+
+/* --- Environment page professional layout --- */
+.env-page-wrap {
+  padding-top: var(--card-page-top-offset, 6px);
+}
+
+.env-hero-card {
+  margin-top: 0;
+  margin-bottom: 12px;
+  border: 1px solid #dfe3e8;
+}
+
+.env-hero-card h2 {
+  margin: 0 0 6px 0;
+  font-size: 1.55rem !important;
+  font-weight: 700 !important;
+}
+
+.env-hero-note {
+  margin: 0;
+  font-size: 0.92rem;
+  color: #4b5563;
+}
+
+.env-select-card,
+.env-log-card,
+.env-next-card {
+  border: 1px solid #e5e7eb;
+}
+
+.env-next-card {
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.env-card-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: #1f2937;
+}
+
+.env-card-subtitle {
+  font-size: 0.86rem;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
+.env-details-block {
+  margin: 8px 0 10px 0;
+  padding: 8px 10px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+}
+
+.env-detail-title {
+  font-size: 0.86rem;
+  font-weight: 700;
+  margin-top: 2px;
+  margin-bottom: 4px;
+  color: #374151;
+}
+
+.env-details-block ul {
+  margin-top: 0;
+  margin-bottom: 8px;
+  padding-left: 18px;
+}
+
+.env-details-block li {
+  font-size: 0.84rem;
+  line-height: 1.3;
+  margin-bottom: 3px;
+}
+
+.env-status-inline {
+  margin-top: 10px;
+  font-size: 0.86rem;
+  color: #4b5563;
+}
+
+#env_log.env-log-pre {
+  min-height: 110px;
+  max-height: 170px;
+  overflow-y: auto;
+  font-size: 0.8rem;
+  line-height: 1.25;
+  margin-bottom: 0;
+}
+
+.env-next-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.env-next-actions .btn {
+  min-width: 180px;
+}
+
+/* --- Environment version card selector --- */
+.env-choice-grid {
+  display: flex;
+  flex-flow: row wrap;
+  gap: 12px;
+  margin-top: 6px;
+  margin-bottom: 8px;
+}
+
+.env-choice-card {
+  border: 1px solid #d6d6d6;
+  background: #ffffff;
+  padding: 10px;
+  min-height: 250px;
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .12s ease;
+  flex: 1 1 280px;
+}
+
+.env-choice-card:hover {
+  border-color: #8c8c8c;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+.env-choice-card.active {
+  border-color: #505050;
+  box-shadow: 0 0 0 2px rgba(80,80,80,0.14) inset;
+  background: #fafafa;
+}
+
+.env-choice-card.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: #f5f5f5;
+}
+
+.env-choice-logo {
+  width: 100%;
+  height: 58px;
+  object-fit: contain;
+  object-position: left center;
+  margin-bottom: 8px;
+}
+
+.env-choice-logo-fallback {
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  font-size: 1.8rem;
+  color: #6e6e6e;
+  background: #f4f4f4;
+  margin-bottom: 8px;
+}
+
+.env-choice-name {
+  font-size: 0.98rem;
+  font-weight: 700;
+  margin-bottom: 2px;
+  color: #202020;
+}
+
+.env-choice-sub {
+  font-size: 0.8rem;
+  color: #6c6c6c;
+  margin-bottom: 6px;
+}
+
+.env-choice-list {
+  margin: 0;
+  padding-left: 17px;
+}
+
+.env-choice-list li {
+  font-size: 0.82rem;
+  line-height: 1.3;
+  margin-bottom: 3px;
+  color: #4d4d4d;
+}
+
+.env-primary-action {
+  margin-top: 8px;
+}
+
+.env-primary-action .btn {
+  min-width: 220px;
+}
+
+/* keep log compact and below cards */
+#env_log.env-log-pre {
+  min-height: 90px;
+  max-height: 150px;
+}
+
+/* Sidebar file type tint */
+.sidebar-file-item {
+  padding: 6px 8px;
+  border-radius: var(--wan-radius-md);
+  transition: box-shadow 120ms ease, border-color 120ms ease;
+}
+.sidebar-file-item.sfi-seurat {
+  background: #edf4ff;
+  border: 1px solid #d6e6ff;
+}
+.sidebar-file-item.sfi-tabular {
+  background: #ecf9f0;
+  border: 1px solid #d4eddc;
+}
+.sidebar-file-item.sfi-vdj {
+  background: #fff8db;
+  border: 1px solid #f4d77a;
+}
+.sidebar-file-item.sfi-warning {
+  background: #fff1f2;
+  border: 1px solid #fda4af;
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr:hover .sidebar-file-item,
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr.selected .sidebar-file-item {
+  background-image: none;
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr:hover .sidebar-file-item.sfi-seurat,
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr.selected .sidebar-file-item.sfi-seurat {
+  box-shadow: 0 0 0 1px rgba(183, 208, 245, 0.9), 0 5px 10px -9px rgba(72, 122, 197, 0.30);
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr:hover .sidebar-file-item.sfi-tabular,
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr.selected .sidebar-file-item.sfi-tabular {
+  box-shadow: 0 0 0 1px rgba(190, 224, 203, 0.9), 0 5px 10px -9px rgba(39, 130, 86, 0.28);
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr:hover .sidebar-file-item.sfi-vdj,
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr.selected .sidebar-file-item.sfi-vdj {
+  box-shadow: 0 0 0 1px rgba(240, 214, 130, 0.92), 0 5px 10px -9px rgba(182, 141, 33, 0.30);
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr:hover .sidebar-file-item.sfi-warning,
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr.selected .sidebar-file-item.sfi-warning {
+  box-shadow: 0 0 0 1px rgba(244, 114, 129, 0.92), 0 5px 10px -9px rgba(190, 24, 93, 0.35);
+}
+.sidebar-file-item .sidebar-remove-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--wan-radius-sm-inner);
+  --wan-corner-smoothing-local: var(--wan-corner-smoothing-soft);
+  background: rgba(15, 23, 42, 0.08);
+  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+}
+.sidebar-file-item .sidebar-remove-btn:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr:hover .sidebar-remove-btn,
+.bslib-sidebar-layout > .sidebar table.sidebar-data-menu tbody tr.selected .sidebar-remove-btn,
+.sidebar-file-item:focus-within .sidebar-remove-btn {
+  opacity: 1;
+  pointer-events: auto;
+}

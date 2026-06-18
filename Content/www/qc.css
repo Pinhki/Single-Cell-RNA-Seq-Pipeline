@@ -1,0 +1,388 @@
+/* ============ QC sidebar + plots (BS3/BS5 friendly) ============ */
+
+/* Keep viewport gutter width stable to prevent left-panel width flicker
+   when busy overlays toggle page scroll locking. */
+html,
+body{
+  scrollbar-gutter: stable both-edges;
+}
+
+/* Sidebar inner stack follows outer independent scroll container */
+.qc-sticky{
+  position: static;
+  top: auto;
+  max-height: none;
+  overflow: visible;
+  /* Keep scrollbar aligned to the right edge */
+  padding-right: 0;
+  margin-right: 0;
+  scrollbar-gutter: stable;
+}
+
+.qc-sticky h4{
+  margin-top: 0;
+  font-weight: 700;
+  color: var(--fg, #111827);
+}
+.qc-subtitle{
+  font-size: 1.45rem;
+  line-height: 1.2;
+  margin-top: 0.2rem;
+  margin-bottom: 0.35rem;
+}
+.qc-panel-title{
+  font-size: 0.9rem;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  margin-top: 0;
+  margin-bottom: 0.2rem;
+}
+
+/* Remove extra wrapper spacing so only the inner .wl-side card defines margins */
+.qc-sidebar-panel > .well,
+.qc-sidebar-panel > form.well,
+.qc-sidebar-panel > .panel {
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Keep QC left card compact (avoid "double box" feel from large inset) */
+.qc-sidebar-panel .wl-side {
+  padding: 10px 12px !important;
+}
+
+#qc_parameter_table .qc-row-excluded td{
+  text-decoration: line-through;
+  color: #7b7f87;
+  opacity: 0.78;
+}
+#qc_parameter_table .qc-row-excluded td:last-child{
+  text-decoration: none;
+  color: inherit;
+  opacity: 1;
+}
+
+
+/* ================================================================
+   A) bslib::accordion() variant  (container has .qc-accordion)
+   ================================================================ */
+
+.qc-accordion .accordion{ border:0; border-radius:0; background:transparent; }
+.qc-accordion .accordion-item{
+  border:0;
+  border-bottom: 1px solid var(--line, #e5e7eb);
+  background: transparent;
+  overflow: hidden;
+}
+
+/* Kill tint/box-shadow in ALL states */
+.qc-accordion .accordion-button,
+.qc-accordion .accordion-button:hover,
+.qc-accordion .accordion-button:focus,
+.qc-accordion .accordion-button:active,
+.qc-accordion .accordion-button:focus-visible,
+.qc-accordion .accordion-button.collapsed,
+.qc-accordion .accordion-button:not(.collapsed){
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Header layout + smaller type */
+.qc-accordion .accordion-button{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;           /* enables ellipsis down-chain */
+  width: 100%;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 0;
+  line-height: 1.2;
+  font-size: 14px;        /* smaller title */
+  font-weight: 500;
+  color: #1f2937;
+}
+.qc-accordion .accordion-button > *{ min-width: 0; }
+
+/* Chevron: visible but NEVER intercepts clicks */
+.qc-accordion .accordion-button::after{
+  content: "";
+  flex: 0 0 12px;
+  width: 12px; height: 12px;
+  margin-left: 8px;
+  background: no-repeat center/12px 12px
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6,3 11,8 6,13'/></svg>");
+  transform: none;
+  opacity: .75;
+  pointer-events: none;   /* ← critical so clicks pass through */
+  transition: transform .15s ease, opacity .15s ease;
+}
+.qc-accordion .accordion-button:not(.collapsed)::after{
+  transform: rotate(90deg);
+  opacity: 1;
+}
+
+/* Title text: ellipsis + pointer */
+.qc-accordion .accordion-button .sample-title-text{
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;           /* critical for ellipsis */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2937;
+  cursor: pointer;
+}
+
+/* Body */
+.qc-accordion .accordion-body{
+  background: transparent !important;
+  padding: 4px 0 8px;
+}
+.qc-accordion .form-group{ margin-bottom: 8px; }
+
+/* Inputs stay within column */
+.qc-accordion .shiny-input-container,
+.qc-accordion .form-control,
+.qc-accordion .irs,
+.qc-accordion .irs-line,
+.qc-accordion .irs-bar,
+.qc-accordion .slider-animate-container{
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* BS3 card/panel guard (some themes) */
+.qc-accordion .card,
+.qc-accordion .panel{
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+/* ================================================================
+   B) Reference-style Bootstrap collapse variant (.qc-collapse)
+   ================================================================ */
+
+.qc-collapse .qc-collapse-item{ border-bottom: 1px solid #e5e7eb; }
+
+/* Header anchor (acts like a button) */
+.qc-collapse .qc-collapse-header{
+  display:flex; align-items:center; gap:8px;
+  width:100%; padding:6px 0;
+  text-decoration:none;
+  background:transparent !important;
+  border:0; box-shadow:none !important;
+  color:#1f2937; font-size:14px; font-weight:500;
+  cursor:pointer;
+}
+.qc-collapse .qc-collapse-header:focus,
+.qc-collapse .qc-collapse-header:active{
+  outline:none; box-shadow:none !important;
+  background:transparent !important;
+}
+
+/* Title with ellipsis */
+.qc-collapse .qc-collapse-header .sample-title-text{
+  flex:1 1 auto; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+
+/* Chevron (right when closed, down when open) */
+.qc-collapse .qc-collapse-header::after{
+  content:""; flex:0 0 12px; width:12px; height:12px; margin-left:8px;
+  background:no-repeat center/12px 12px
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6,3 11,8 6,13'/></svg>");
+  transform:rotate(0deg); opacity:.75; pointer-events:none;
+  transition:transform .15s ease, opacity .15s ease;
+}
+.qc-collapse .qc-collapse-header[aria-expanded="true"]::after{
+  transform:rotate(90deg); opacity:1;
+}
+
+/* Collapse body base (open state spacing) */
+.qc-collapse .collapse{
+  background:transparent;
+  padding:8px 0 12px;
+  transition: height .2s ease;
+}
+
+/* Hide collapsed content (works for BS3 and BS5) */
+.qc-collapse .collapse:not(.show):not(.in){
+  display:block;                     /* keep layout from jumping */
+  height:0 !important;
+  overflow:hidden !important;
+  padding-top:0 !important;
+  padding-bottom:0 !important;
+}
+
+/* Transition state (BS3 & BS5) */
+.qc-collapse .collapsing{
+  height:0 !important;
+  overflow:hidden !important;
+  padding-top:0 !important;
+  padding-bottom:0 !important;
+}
+
+/* Prevent inputs from overflowing */
+.qc-collapse .shiny-input-container,
+.qc-collapse .form-control,
+.qc-collapse .irs,
+.qc-collapse .irs-line,
+.qc-collapse .irs-bar{
+  max-width:100%; box-sizing:border-box;
+}
+.qc-collapse .qc-collapse-header.is-selected { color:#111; }
+/* ------------------- Plots ------------------- */
+.qc-violins{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(260px, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+.atac-qc-violins{
+  grid-template-columns: repeat(4, minmax(220px, 1fr));
+}
+.atac-qc-violins.one{ grid-template-columns: 1fr; }
+.atac-qc-violins.two{ grid-template-columns: repeat(2, minmax(260px, 1fr)); }
+.atac-qc-violins.three{ grid-template-columns: repeat(3, minmax(240px, 1fr)); }
+.atac-qc-violins.four{ grid-template-columns: repeat(4, minmax(220px, 1fr)); }
+.qc-vln{ min-height: 320px; }
+
+.qc-scatters{
+  display: grid;
+  grid-auto-flow: row;
+  justify-items: center;
+  gap: 12px;
+}
+.qc-square{
+  width: min(860px, 100%);
+  max-width: 860px;
+  aspect-ratio: 1 / 1;
+  height: auto;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+
+.qc-square .html-widget,
+.qc-square .plotly,
+.qc-square #qc_scatter_main{
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.qc-vln .shiny-spinner-output-container,
+.qc-square .shiny-spinner-output-container{ width:100%; height:100%; }
+.qc-vln .shiny-spinner,
+.qc-square .shiny-spinner{
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.loader, .spinner-border{ color:#9aa0a6; }
+
+.qc-violins > .plotly,
+.qc-scatters > .plotly,
+.qc-vln > .plotly{ margin: 0; }
+
+.atac-qc-scatter{
+  width: 100%;
+}
+
+#atac_qc_scatter_plot{
+  width: 100% !important;
+}
+
+/* ------------------- Responsive ------------------- */
+@media (max-width: 1200px){
+  .qc-violins{ grid-template-columns: repeat(2, minmax(260px, 1fr)); }
+  .atac-qc-violins{ grid-template-columns: repeat(2, minmax(240px, 1fr)); }
+}
+@media (max-width: 800px){
+  .qc-violins{ grid-template-columns: 1fr; }
+  .atac-qc-violins{ grid-template-columns: 1fr; }
+  .qc-square{ width: 100%; max-width: 100%; }
+}
+/* QC table action buttons: reduce oversized controls and keep compact rhythm */
+#qc_parameter_table_box .btn,
+#qc_parameter_table .btn {
+  padding: 4px 10px;
+  line-height: 1.2;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+#qc_parameter_table_box #qc_exclude_selected_btn,
+#qc_parameter_table_box #qc_include_selected_btn {
+  min-height: 32px;
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+#qc_parameter_table_box .qc-toggle-row {
+  min-height: 30px;
+  padding: 3px 10px;
+  font-size: 11px;
+}
+/* Compact threshold controls in left sidebar */
+.qc-sticky .help-block,
+.qc-sticky .helpText {
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.qc-collapse .shiny-input-container,
+.qc-accordion .shiny-input-container {
+  margin-bottom: 8px;
+}
+.qc-collapse .control-label,
+.qc-accordion .control-label {
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.qc-collapse .irs,
+.qc-accordion .irs {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* Keep QC export label/icon left-aligned even when text wraps to 2 lines. */
+#qc_download_report_btn {
+  text-align: left !important;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+/* Compact QC parameter table */
+#qc_parameter_table,
+#qc_parameter_table_box,
+#qc_parameter_table .dataTables_wrapper,
+#qc_parameter_table_box .dataTables_wrapper {
+  min-height: 0 !important;
+}
+
+#qc_parameter_table table.dataTable thead th,
+#qc_parameter_table_box table.dataTable thead th {
+  font-size: 11px;
+  white-space: nowrap;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+#qc_parameter_table table.dataTable tbody td,
+#qc_parameter_table_box table.dataTable tbody td {
+  font-size: 12px;
+  white-space: nowrap;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+#qc_parameter_table .qc-col-name {
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

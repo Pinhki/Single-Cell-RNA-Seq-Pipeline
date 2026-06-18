@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Bootstrap Progress</title>
+  <link rel="stylesheet" href="./global.css" />
+  <link rel="stylesheet" href="./navbar.css" />
+  <link rel="stylesheet" href="./footer.css" />
+  <style>
+    :root{
+      --fg:#2a2a2a; --muted:#6b7280; --line:#e8e8e8; --bg:#fafafa; --card:#fff;
+      --ok:#16a34a; --run:#2563eb; --fail:#dc2626; --wait:#9ca3af;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;background:var(--bg);color:var(--fg);
+      font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+      min-height:100vh;display:flex;flex-direction:column;overflow:hidden;
+    }
+    .navbar{flex:0 0 auto}
+    .navbar .container-fluid{
+      display:block;min-height:unset;flex:none;
+      padding-left:15px;padding-right:15px;
+    }
+    .navbar-nav .nav-link,
+    .navbar-nav .nav-link.active{
+      color:#f3f4f6 !important;
+      opacity:1 !important;
+      font-weight:600;
+    }
+    .monitor-shell{
+      padding-left:15px;padding-right:15px;
+      flex:1 1 auto;min-height:0;display:flex;flex-direction:column;
+    }
+    .content-wrap{
+      max-width:1180px;width:100%;
+      padding:16px 20px 12px;
+      margin:0 auto;
+      flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:14px;
+      overflow:hidden;
+    }
+    .card{
+      padding:0;margin:0;border:0;
+      border-radius:var(--wan-radius-md,12px) !important;
+      overflow:hidden;
+      box-shadow:0 10px 34px rgba(15,23,42,0.035), 0 2px 8px rgba(15,23,42,0.018);
+      background:#fff;
+    }
+    .progress-card{padding:16px 18px}
+    .top{padding:16px 18px;flex:0 0 auto;min-height:0;overflow:visible}
+    .title{margin:0 0 4px;font-size:20px;font-weight:700}
+    .sub{margin:0 0 14px;color:var(--muted)}
+    .comfort{margin:0 0 14px}
+    .comfort h3{margin:0 0 6px;font-size:15px;font-weight:700;color:#1f2937}
+    .comfort p{margin:0 0 6px;font-size:13px;color:#4b5563}
+    .comfort ul{margin:0;padding-left:18px;color:#4b5563}
+    .comfort li{margin:4px 0;font-size:13px}
+    .metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}
+    .metric{border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+    .k{font-size:12px;color:var(--muted)} .v{font-size:16px;font-weight:700;margin-top:2px}
+    .bar-wrap{height:12px;background:#eceff3;border:1px solid #e3e7ed;border-radius:999px;overflow:visible;position:relative}
+    .bar{
+      height:100%;
+      width:62%;
+      position:relative;
+      overflow:hidden;
+      border-radius:999px;
+      transition:width 550ms cubic-bezier(.22,.61,.36,1);
+      background:linear-gradient(90deg,#15803d 0%,#22c55e 35%,#4ade80 65%,#16a34a 100%);
+      background-size:220% 100%;
+      animation:barWave 2.2s linear infinite, barGlowPulse 1.8s ease-in-out infinite;
+      box-shadow:0 0 0 rgba(34,197,94,0), 0 0 16px rgba(34,197,94,0.35), inset 0 0 8px rgba(255,255,255,0.2);
+      filter:drop-shadow(0 0 6px rgba(34,197,94,0.45)) drop-shadow(0 0 14px rgba(34,197,94,0.28));
+    }
+    .bar::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:linear-gradient(120deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.25) 45%,rgba(255,255,255,0) 90%);
+      transform:translateX(-100%);
+      animation:barSheen 2.4s ease-in-out infinite;
+      pointer-events:none;
+    }
+    @keyframes barWave{
+      0%{background-position:220% 50%}
+      100%{background-position:0% 50%}
+    }
+    @keyframes barSheen{
+      0%{transform:translateX(-120%)}
+      100%{transform:translateX(140%)}
+    }
+    @keyframes barGlowPulse{
+      0%,100%{
+        box-shadow:0 0 0 rgba(34,197,94,0), 0 0 12px rgba(34,197,94,0.28), inset 0 0 6px rgba(255,255,255,0.16);
+        filter:drop-shadow(0 0 5px rgba(34,197,94,0.38)) drop-shadow(0 0 12px rgba(34,197,94,0.24));
+      }
+      50%{
+        box-shadow:0 0 0 rgba(34,197,94,0), 0 0 26px rgba(34,197,94,0.52), inset 0 0 10px rgba(255,255,255,0.24);
+        filter:drop-shadow(0 0 8px rgba(34,197,94,0.58)) drop-shadow(0 0 20px rgba(34,197,94,0.4));
+      }
+    }
+    .bottom{display:grid;grid-template-columns:1.25fr .95fr;gap:14px;flex:1 1 auto;min-height:0}
+    .panel{display:flex;flex-direction:column;min-height:0}
+    .h{padding:12px 14px;border-bottom:1px solid var(--line);font-weight:700}
+    .pin{margin:8px 10px 0;padding:8px 10px;background:#fff7f7;border:1px solid #fee2e2;border-radius:10px;font-size:12px;color:#7f1d1d}
+    .rows{padding:8px 10px;overflow:auto;flex:1 1 auto;min-height:0}
+    .row{display:grid;grid-template-columns:20px 1.6fr .75fr .55fr .55fr;gap:10px;align-items:center;padding:8px;border-bottom:1px dashed #edf0f3;font-size:13px}
+    .row:last-child{border-bottom:none}
+    .pkg{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .badge{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:700;background:#f3f4f6;border:1px solid #e5e7eb}
+    .ok{color:var(--ok)} .run{color:var(--run)} .fail{color:var(--fail)} .wait{color:var(--wait)}
+    .status-done{color:#15803d;font-weight:700}
+    .status-fail{color:#b91c1c;font-weight:800}
+    .log-line-done{color:#15803d}
+    .log-line-fail{color:#b91c1c;font-weight:800}
+    .foot{padding:10px 14px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
+    .log{margin:0;padding:10px 12px;overflow:auto;flex:1 1 auto;min-height:0;background:#fcfcfc;color:#374151;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap}
+    .handoff{display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:10px 14px;border-top:1px solid var(--line)}
+    .btn{border:1px solid #d1d5db;background:#fff;border-radius:8px;padding:6px 10px;cursor:pointer}
+    .btn.primary{background:#111827;color:#fff;border-color:#111827}
+    .navbar-brand, .navbar-brand:hover, .navbar-brand:focus,
+    .navbar-nav .nav-link, .navbar-nav .nav-link:hover, .navbar-nav .nav-link:focus{
+      text-decoration:none !important;
+    }
+    .footer{
+      margin:0 !important;flex:0 0 auto;
+      width:100vw;
+      margin-left:calc(50% - 50vw) !important;
+      margin-right:calc(50% - 50vw) !important;
+    }
+    .footer-inner{margin:0 !important}
+    @media (max-width:980px){
+      body{overflow:auto}
+      .monitor-shell{display:block}
+      .content-wrap{display:block;overflow:visible;padding:14px 12px 10px}
+      .top{max-height:none;overflow:visible}
+      .metrics{grid-template-columns:1fr}
+      .bottom{grid-template-columns:1fr;min-height:unset}
+      .rows{max-height:320px}
+      .log{max-height:320px}
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-default navbar-static-top">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#" aria-label="Wan Lab Single Cell title" style="text-decoration:none !important;">
+        <span class="navbar-title-responsive">
+          <span class="navbar-title-main" style="text-decoration:none !important;">Wan Lab Single Cell</span>
+          <span class="navbar-title-ver" style="text-decoration:none !important;">Installer</span>
+        </span>
+      </a>
+      <ul class="navbar-nav">
+        <li class="nav-item">
+          <a class="nav-link active" href="#" aria-current="page" style="text-decoration:none !important;">First-time setup</a>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="container-fluid monitor-shell">
+    <div class="content-wrap">
+    <section class="card progress-card top">
+      <h1 class="title">First-time setup may take a while — thank you for your patience.</h1>
+      <div class="comfort" role="note" aria-label="Setup reassurance">
+        <h3>You are in a safe, standard setup</h3>
+        <p><strong>We are setting up the same native R and Python environment used by standard research workflows.</strong> This is the one-time foundation that makes your results reliable and reproducible.</p>
+        <ul>
+          <li><strong>Why this can feel slow:</strong> on first run, your computer may need to fetch many packages, build parts that are machine-specific, and verify that everything works together before analysis starts.</li>
+          <li><strong>Can this be skipped?</strong> for a first clean setup, no. Most of the wait comes from the R/Python package ecosystem itself: unlike commercial apps, many community packages are not shipped as fully machine-validated bundles for every environment, so local build, compatibility tuning, and verification are required before analysis can run reliably. Completing this once gives you a stable environment that is reused on later launches.</li>
+          <li><strong>Trusted foundation:</strong> this app uses standard, widely used R/Python packages and native runtime workflows, not experimental or untested tooling.</li>
+          <li><strong>Reproducible across machines:</strong> package versions are pinned so analyses remain consistent across different computers and stay aligned with established published practices.</li>
+          <li><strong>No risk to your current setup:</strong> installation runs in an isolated sandbox, so your existing R/Python environments and versions are not modified.</li>
+        </ul>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="k">Overall Progress</div><div class="v" id="pctText">--</div></div>
+        <div class="metric"><div class="k">Current Phase</div><div class="v" id="phaseText">Waiting for live bootstrap data...</div></div>
+        <div class="metric"><div class="k">Estimated Time Left</div><div class="v" id="etaText">--</div></div>
+      </div>
+      <div class="sub" id="liveStamp">Live data: waiting for stream...</div>
+      <div class="bar-wrap"><div class="bar" id="bar"></div></div>
+    </section>
+
+    <section class="bottom">
+      <article class="card progress-card panel">
+        <div class="h">Package Progress</div>
+        <div class="pin" style="display:none"></div>
+        <div class="rows" id="rows"></div>
+        <div class="foot" id="counts">Done: 0 · Running: 0 · Queued: 0 · Failed: 0</div>
+      </article>
+
+      <article class="card progress-card panel">
+        <div class="h">Live Install Log</div>
+        <pre class="log" id="logBox"></pre>
+        <div class="handoff">
+          <span id="successMsg" style="display:none;color:#166534">Setup complete. Auto-switching in <span id="countdown">5</span>s…</span>
+          <button class="btn primary" id="enterBtn" style="display:none">Open App Now</button>
+        </div>
+      </article>
+    </section>
+    </div>
+
+    <div class="footer">
+      <div class="footer-inner">
+        <span>Wan Lab Single Cell Pipeline Installer</span>
+        <span> • </span>
+        <span>© 2025 Wan Lab</span>
+        <span> • </span>
+        <a href="https://sites.wustl.edu/wanlab/" target="_blank" rel="noopener">Lab Website</a>
+        <span> • </span>
+        <span class="footer-policy"><strong>Unauthorized</strong> LLM-assisted <strong>reverse engineering, modification, or adaptation</strong> of this app is strictly <strong>prohibited</strong>. Ask permission and contribute with <strong>etiquette</strong>.</span>
+        <span> • </span>
+        <a href="mailto:rongzhen@wustl.edu" target="_blank" rel="noopener">Contact Developer</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    try {
+      const injectedState = __BOOTSTRAP_STATE_JSON__;
+      if (!window.__BOOTSTRAP_STATE__ && injectedState && typeof injectedState === "object") {
+        window.__BOOTSTRAP_STATE__ = injectedState;
+      }
+      const fallbackState = {
+        app_version: "Installer",
+        percent: 0,
+        phase: "Waiting for live bootstrap data...",
+        eta_text: "--",
+        done: 0,
+        running: 0,
+        queued: 0,
+        failed: 0,
+        rows: [],
+        log_tail: [
+          "[monitor] Live bootstrap data not connected yet.",
+          "[monitor] If this persists, the runtime state injection failed."
+        ],
+        failed_pinned: [],
+        monitor_mode: "disconnected",
+        refresh_ms: 1000
+      };
+
+      function rowStyle(status) {
+        const s = String(status || "").toLowerCase();
+        if (s === "failed") return { icon: "✖", cls: "fail" };
+        if (s === "running") return { icon: "◐", cls: "run" };
+        if (s === "done") return { icon: "✔", cls: "ok" };
+        return { icon: "○", cls: "wait" };
+      }
+
+      function fmtElapsed(v) {
+        if (v === null || v === undefined || !isFinite(v)) return "--";
+        return `${Math.max(0, Math.round(Number(v)))}s`;
+      }
+      function escHtml(s) {
+        return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      }
+
+      function preserveScroll(el, renderFn) {
+        if (!el) return renderFn();
+        const nearBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 6;
+        const prevTop = el.scrollTop;
+        renderFn();
+        if (nearBottom) el.scrollTop = el.scrollHeight;
+        else el.scrollTop = prevTop;
+      }
+
+      let state = (window.__BOOTSTRAP_STATE__ && typeof window.__BOOTSTRAP_STATE__ === "object")
+        ? window.__BOOTSTRAP_STATE__
+        : fallbackState;
+      let handoffTimerId = null;
+      let handoffRemaining = 5;
+
+      function openAppNow() {
+        const candidates = [
+          "../../Launch_mac.command",
+          "../../Launch_mac.sh",
+          "../../Launch_Windows.bat"
+        ];
+        for (const rel of candidates) {
+          try {
+            window.location.href = rel;
+            return;
+          } catch (e) {}
+        }
+        try {
+          alert("Could not auto-open launcher from this browser context. Please run Launch_mac.command (or Launch_Windows.bat) from the app folder.");
+        } catch (e) {}
+      }
+
+      function applyState(nextState, hasLiveState) {
+        state = (nextState && typeof nextState === "object") ? nextState : fallbackState;
+
+        document.getElementById("pctText").textContent = `${state.percent ?? 0}%`;
+        document.getElementById("phaseText").textContent = state.phase || "Starting...";
+        document.getElementById("etaText").textContent = state.eta_text || "--";
+        document.getElementById("bar").style.width = `${Math.max(0, Math.min(100, Number(state.percent || 0)))}%`;
+
+        const navVer = document.querySelector(".navbar-title-ver");
+        if (navVer) navVer.textContent = `${state.app_version || "Installer"}`;
+        const footVer = document.querySelector(".footer-inner span");
+        if (footVer) footVer.textContent = `Wan Lab Single Cell Pipeline ${state.app_version || "Installer"}`;
+
+        const rowsNode = document.getElementById("rows");
+        preserveScroll(rowsNode, () => {
+          rowsNode.innerHTML = "";
+          const rows = Array.isArray(state.rows) ? state.rows : [];
+          rows.forEach((r) => {
+            const { icon, cls } = rowStyle(r.status);
+            const el = document.createElement("div");
+            el.className = "row";
+            el.innerHTML = `
+              <div class="${cls}">${icon}</div>
+              <div class="pkg">${r.pkg || "Unknown package"}</div>
+              <span class="badge">${r.source || "--"}</span>
+              <div class="${String(r.status||'').toLowerCase()==='done' ? 'status-done' : (String(r.status||'').toLowerCase()==='failed' ? 'status-fail' : '')}">${r.status || "queued"}</div>
+              <div>${fmtElapsed(r.elapsed_s)}</div>`;
+            rowsNode.appendChild(el);
+          });
+        });
+
+        const done = Number(state.done || 0);
+        const running = Number(state.running || 0);
+        const queued = Number(state.queued || 0);
+        const failed = Number(state.failed || 0);
+        document.getElementById("counts").textContent = `Done: ${done} · Running: ${running} · Queued: ${queued} · Failed: ${failed}`;
+
+        const failPin = document.querySelector(".pin");
+        const failedPinned = Array.isArray(state.failed_pinned) ? state.failed_pinned : [];
+        if (failedPinned.length) {
+          failPin.innerHTML = `Pinned failed package(s): <strong>${failedPinned.join(", ")}</strong>`;
+          failPin.style.display = "block";
+        } else {
+          failPin.style.display = "none";
+        }
+
+        const logNode = document.getElementById("logBox");
+        preserveScroll(logNode, () => {
+          const logs = Array.isArray(state.log_tail) ? state.log_tail : [];
+          const rendered = logs.map((line) => {
+            const raw = String(line || "");
+            const safe = escHtml(raw);
+            const low = raw.toLowerCase();
+            if (/(error|fail|failed)/.test(low)) return `<span class="log-line-fail">${safe}</span>`;
+            if (/(installed| done\\b|\\bdone\\b)/.test(low)) return `<span class="log-line-done">${safe}</span>`;
+            return safe;
+          }).join("\n");
+          logNode.innerHTML = rendered;
+        });
+
+        const stamp = document.getElementById("liveStamp");
+        if (stamp) {
+          if (hasLiveState) {
+            stamp.textContent = `Live data: ${state.updated_at || "--"} · seq ${state.write_seq || 0} · ${state.state_source || "unknown"}`;
+          } else {
+            stamp.textContent = "Live data: waiting for stream...";
+          }
+        }
+
+        if (!hasLiveState) {
+          document.getElementById("phaseText").textContent = "Waiting for live bootstrap data...";
+          const titleEl = document.querySelector(".title");
+          if (titleEl) titleEl.textContent = "Bootstrap monitor connected, waiting for live data stream...";
+        }
+
+        const successMsg = document.getElementById("successMsg");
+        const enterBtn = document.getElementById("enterBtn");
+        const countdownNode = document.getElementById("countdown");
+        if (enterBtn && !enterBtn.dataset.bound) {
+          enterBtn.dataset.bound = "1";
+          enterBtn.addEventListener("click", function() { openAppNow(); });
+        }
+        if ((state.monitor_mode || "") === "completed_wait_click") {
+          successMsg.style.display = "inline";
+          enterBtn.style.display = "inline-block";
+          if (handoffTimerId === null) {
+            handoffRemaining = 5;
+            if (countdownNode) countdownNode.textContent = String(handoffRemaining);
+            handoffTimerId = window.setInterval(() => {
+              handoffRemaining -= 1;
+              if (countdownNode) countdownNode.textContent = String(Math.max(0, handoffRemaining));
+              if (handoffRemaining <= 0) {
+                window.clearInterval(handoffTimerId);
+                handoffTimerId = null;
+                openAppNow();
+              }
+            }, 1000);
+          }
+        } else {
+          successMsg.style.display = "none";
+          enterBtn.style.display = "none";
+          if (handoffTimerId !== null) {
+            window.clearInterval(handoffTimerId);
+            handoffTimerId = null;
+          }
+        }
+      }
+
+      applyState(state, state !== fallbackState);
+
+      async function pollState() {
+        if ((state.monitor_mode || "") === "completed_wait_click") return;
+        const refreshMs = Math.max(500, Number(state.refresh_ms || 900));
+        try {
+          await new Promise((resolve) => {
+            const prior = window.__BOOTSTRAP_STATE_LIVE__;
+            const s = document.createElement("script");
+            s.src = `./bootstrap_progress_state.js?ts=${Date.now()}`;
+            s.async = true;
+            s.onload = () => {
+              const nextState = window.__BOOTSTRAP_STATE_LIVE__;
+              if (nextState && nextState !== prior && typeof nextState === "object") {
+                applyState(nextState, true);
+              }
+              if (s.parentNode) s.parentNode.removeChild(s);
+              resolve();
+            };
+            s.onerror = () => {
+              if (s.parentNode) s.parentNode.removeChild(s);
+              resolve();
+            };
+            document.head.appendChild(s);
+          });
+        } catch (e) {}
+        window.setTimeout(pollState, refreshMs);
+      }
+      pollState();
+    } catch (err) {
+      const phaseEl = document.getElementById("phaseText");
+      const logEl = document.getElementById("logBox");
+      if (phaseEl) phaseEl.textContent = "Live monitor script error";
+      if (logEl) logEl.textContent = `[monitor-js-error] ${String(err && err.message ? err.message : err)}`;
+    }
+  </script>
+</body>
+</html>

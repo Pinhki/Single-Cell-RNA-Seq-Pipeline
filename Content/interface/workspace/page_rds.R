@@ -456,15 +456,12 @@ RDS_SINGLE_EXPORT_USAGE_CODE <- paste(
 .empty_rds_review_table_df <- function() {
   data.frame(
     object = character(0),
+    cell_count = integer(0),
     assay = character(0),
-    slot_counts = logical(0),
-    slot_data = logical(0),
-    slot_scale = logical(0),
     n_features = integer(0),
     total_counts = numeric(0),
     median_counts_per_cell = numeric(0),
     reductions = character(0),
-    cells = integer(0),
     stage = character(0),
     samples = character(0),
     meta_cols = integer(0),
@@ -713,11 +710,17 @@ rds_ui <- shiny::fluidPage(
       font-variant-numeric: tabular-nums;
       letter-spacing: -0.01em;
     }
-    #rds_review_card table.rds-review-dt tbody td.rds-num-nowrap {
+    #rds_review_card table.rds-review-dt tbody td.rds-num-nowrap,
+    #rds_review_card table.rds-review-dt thead th.rds-num-nowrap {
       white-space: nowrap !important;
       overflow-wrap: normal !important;
       word-break: normal !important;
       font-variant-numeric: tabular-nums;
+      text-align: center !important;
+    }
+    #rds_review_card table.rds-review-dt tbody td.rds-object-strong,
+    #rds_review_card table.rds-review-dt tbody td.rds-cell-count-strong {
+      font-weight: 700 !important;
     }
     #rds_review_card table.rds-review-dt thead th.rds-assay-nowrap,
     #rds_review_card table.rds-review-dt tbody td.rds-assay-nowrap {
@@ -726,14 +729,19 @@ rds_ui <- shiny::fluidPage(
       word-break: normal !important;
       min-width: 64px;
     }
-    #rds_review_card table.rds-review-dt thead th:nth-child(2),
-    #rds_review_card table.rds-review-dt tbody td:nth-child(2) {
+    #rds_review_card table.rds-review-dt thead th:nth-child(3),
+    #rds_review_card table.rds-review-dt tbody td:nth-child(3) {
       white-space: nowrap !important;
       overflow-wrap: normal !important;
       word-break: normal !important;
       min-width: 72px;
     }
     #rds_review_card table.rds-review-dt tbody td.rds-delim-wrap {
+      white-space: normal !important;
+      overflow-wrap: normal !important;
+      word-break: normal !important;
+    }
+    #rds_review_card table.rds-review-dt tbody td.rds-res-wrap {
       white-space: normal !important;
       overflow-wrap: normal !important;
       word-break: normal !important;
@@ -2112,15 +2120,12 @@ rds_server <- function(input, output, session,
       if (!nrow(at)) {
         data.frame(
           object = n,
+          cell_count = sm$n_cells,
           assay = NA_character_,
-          slot_counts = FALSE,
-          slot_data = FALSE,
-          slot_scale = FALSE,
           n_features = NA_integer_,
           total_counts = NA_real_,
           median_counts_per_cell = NA_real_,
           reductions = paste(sm$reductions, collapse=","),
-          cells = sm$n_cells,
           stage = sm$stage,
           samples = paste(sm$sample_names, collapse="; "),
           meta_cols = sm$meta_ncols,
@@ -2130,14 +2135,14 @@ rds_server <- function(input, output, session,
       } else {
         cbind(
           object = n,
+          cell_count = sm$n_cells,
           .safe_select_cols(
             at,
-            c("assay","slot_counts","slot_data","slot_scale",
+            c("assay",
               "n_features","total_counts","median_counts_per_cell"),
             default = NA
           ),
           reductions = paste(sm$reductions, collapse=","),
-          cells = sm$n_cells,
           stage = sm$stage,
           samples = paste(sm$sample_names, collapse="; "),
           meta_cols = sm$meta_ncols,
@@ -2177,13 +2182,13 @@ rds_server <- function(input, output, session,
             "}"
           ),
           columnDefs = list(
-            list(targets = 0, width = "260px"),
-            list(targets = 1, width = "72px", className = "dt-body-nowrap rds-assay-nowrap"),
-            list(targets = 13, width = "220px"),
+            list(targets = 0, className = "dt-body-nowrap rds-object-strong"),
+            list(targets = 1, className = "dt-body-nowrap dt-body-center rds-num-nowrap rds-cell-count-strong"),
+            list(targets = 2, width = "72px", className = "dt-body-nowrap rds-assay-nowrap"),
             list(targets = "_all", className = "dt-body-nowrap"),
-            list(targets = c(5, 6, 7, 9, 12), className = "dt-body-nowrap rds-num-nowrap"),
+            list(targets = c(1, 3, 4, 5, 9), className = "dt-body-nowrap dt-body-center rds-num-nowrap"),
             list(
-              targets = c(0, 8, 10, 13),
+              targets = 7,
               className = "dt-body-nowrap rds-delim-wrap",
               render = DT::JS(
                 "function(data, type, row, meta){",
@@ -2194,7 +2199,30 @@ rds_server <- function(input, output, session,
               )
             ),
             list(
-              targets = 11,
+              targets = 5,
+              className = "dt-body-nowrap rds-delim-wrap",
+              render = DT::JS(
+                "function(data, type, row, meta){",
+                "  if (type !== 'display' || data == null) return data;",
+                "  var txt = $('<div/>').text(String(data)).html();",
+                "  return txt.replace(/,/g, ',<wbr>');",
+                "}"
+              )
+            ),
+            list(
+              targets = 10,
+              className = "rds-res-wrap",
+              render = DT::JS(
+                "function(data, type, row, meta){",
+                "  if (type !== 'display' || data == null) return data;",
+                "  var txt = $('<div/>').text(String(data)).html();",
+                "  txt = txt.replace(/,/g, ',<wbr>');",
+                "  return '<div class=\"rds-res-container\" style=\"white-space: normal !important; word-break: normal; overflow-wrap: normal;\">' + txt + '</div>';",
+                "}"
+              )
+            ),
+            list(
+              targets = 8,
               className = "dt-body-nowrap rds-delim-wrap",
               createdCell = DT::JS(
                 "function(td, cellData, rowData, row, col){",
@@ -3817,11 +3845,11 @@ rds_server <- function(input, output, session,
   
   .disable_tab <- function(id) shinyjs::runjs(sprintf(
     "$('a[data-value=%s]').addClass('disabled').on('click.rds_gate_block',function(e){e.preventDefault();return false;});",
-    shQuote(id)
+    jsonlite::toJSON(id, auto_unbox = TRUE)
   ))
   .enable_tab <- function(id) shinyjs::runjs(sprintf(
     "$('a[data-value=%s]').removeClass('disabled').off('click.rds_gate_block');",
-    shQuote(id)
+    jsonlite::toJSON(id, auto_unbox = TRUE)
   ))
   
   tab_ids <- list(

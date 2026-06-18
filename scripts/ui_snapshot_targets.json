@@ -1,0 +1,125 @@
+{
+  "default_url": "http://127.0.0.1:3838",
+  "targets": {
+    "navbar": {
+      "url": "http://127.0.0.1:3838",
+      "selector": ".navbar, nav, .bslib-page-navbar",
+      "wait_for_selector": ".navbar, nav, .bslib-page-navbar",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      }
+    },
+    "dropdown": {
+      "url": "http://127.0.0.1:3838",
+      "selector": ".dropdown-menu, .selectize-dropdown, .dropdown",
+      "wait_for_selector": "body",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      }
+    },
+    "right-sidebar": {
+      "url": "http://127.0.0.1:3838",
+      "selector": "#right_sidebar, .right-sidebar, aside, .sidebar",
+      "wait_for_selector": "body",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      }
+    },
+    "data-browser": {
+      "url": "http://127.0.0.1:3838",
+      "selector": "table, .dataTables_wrapper, .DTFC_ScrollWrapper",
+      "wait_for_selector": "body",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      }
+    },
+    "qc-panel": {
+      "url": "http://127.0.0.1:3838",
+      "selector": "#qc, [id*='qc'], .qc, main",
+      "wait_for_selector": "body",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      }
+    },
+    "dropdown-open": {
+      "selector": ".dropdown-menu, .selectize-dropdown, .dropdown",
+      "wait_for_selector": "body",
+      "click_selector": ".dropdown-toggle, .selectize-input, [data-bs-toggle='dropdown']",
+      "after_click_wait_ms": 500,
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      }
+    },
+    "modal": {
+      "selector": ".modal.show, .modal, [role='dialog']",
+      "wait_for_selector": "body",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      }
+    },
+    "loading-overlay": {
+      "selector": ".shiny-busy, .shiny-output-error, .loading, .busy, [class*='loading'], [class*='busy']",
+      "wait_for_selector": "body",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      }
+    },
+    "left-nav-rail": {
+      "selector": ".navbar, .navbar-static-top, .bslib-page-navbar .navbar",
+      "wait_for_selector": ".navbar, .navbar-static-top, .bslib-page-navbar .navbar",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      }
+    },
+    "example-card-by-text": {
+      "selector": ".card",
+      "text": "Quality Control",
+      "nth": 0,
+      "wait_for_selector": "body",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      }
+    },
+    "example-button-by-text": {
+      "selector": "button, .btn, a.btn",
+      "text": "Run",
+      "nth": 0,
+      "wait_for_selector": "body",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      }
+    },
+    "welcome-hero": {
+      "selector": ".welcome-hero-card",
+      "text": "Welcome",
+      "nth": 0,
+      "wait_for_selector": "body",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      }
+    },
+    "welcome-qc-button": {
+      "selector": "button, .btn, a.btn",
+      "text": "QC",
+      "nth": 0,
+      "within": ".welcome-hero-card",
+      "wait_for_selector": "body",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      }
+    }
+  }
+}

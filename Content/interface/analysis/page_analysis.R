@@ -559,6 +559,18 @@ analysis_ui <- fluidPage(
         height: 100% !important;
         min-height: 100% !important;
       }
+      #prep_elbow_ui,
+      #prep_elbow_ui .elbow-preview-box,
+      #prep_elbow_ui .elbow-preview-shell,
+      #prep_elbow_plot {
+        height: clamp(420px, calc(var(--app-viewport-h, 100vh) - var(--app-shell-top-h, 0px) - var(--footer-h, 0px) - 260px), 760px) !important;
+        min-height: 420px !important;
+      }
+      #prep_elbow_plot img {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: contain !important;
+      }
 
       .elbow-missing-warning-card {
         background: #fff8db;
@@ -631,14 +643,22 @@ analysis_ui <- fluidPage(
         height: auto !important;
       }
 
-      .integration-method-cards .radio {
+      .integration-method-cards,
+      .integration-method-cards .shiny-input-container,
+      .integration-method-cards .shiny-options-group,
+      .integration-method-cards .radio,
+      .integration-method-cards .form-check {
+        width: 100% !important;
+        max-width: 100% !important;
         margin: 0 0 8px 0;
       }
-      .integration-method-cards .radio > label {
+      .integration-method-cards .radio > label,
+      .integration-method-cards .form-check > label,
+      .integration-method-cards .form-check-label {
         display: flex;
         align-items: center;
         gap: 8px;
-        width: 100%;
+        width: 100% !important;
         border: 1px solid #cfd6df;
         border-radius: 12px;
         background: #f5f5f5;
@@ -647,21 +667,28 @@ analysis_ui <- fluidPage(
         transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
         cursor: pointer;
       }
-      .integration-method-cards .radio > label:hover {
+      .integration-method-cards .radio > label:hover,
+      .integration-method-cards .form-check > label:hover,
+      .integration-method-cards .form-check-label:hover {
         border-color: #bfc7d1;
         background: #f0f0f0;
       }
-      .integration-method-cards .radio input[type='radio'] {
+      .integration-method-cards .radio input[type='radio'],
+      .integration-method-cards .form-check input[type='radio'] {
         position: static;
         flex: 0 0 auto;
         margin: 0;
         vertical-align: unset;
       }
-      .integration-method-cards .radio input[type='radio']:checked + .inte-method-card {
+      .integration-method-cards .radio input[type='radio']:checked + .inte-method-card,
+      .integration-method-cards .form-check-input:checked ~ .form-check-label,
+      .integration-method-cards .form-check-input:checked + .inte-method-card {
         border-color: #22c55e;
         background: #ecfdf3;
       }
-      .integration-method-cards .radio > label:has(input[type='radio']:checked) {
+      .integration-method-cards .radio > label:has(input[type='radio']:checked),
+      .integration-method-cards .form-check:has(input[type='radio']:checked),
+      .integration-method-cards .form-check-label:has(input[type='radio']:checked) {
         border-color: #22c55e;
         background: #ecfdf3;
         box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.25);
@@ -742,12 +769,66 @@ analysis_ui <- fluidPage(
             }, {priority: 'event'});
           } catch(e) {}
         }
+        function reconcilePlotTabState(preferredValue) {
+          var root = document.getElementById('analysis_tabs_by_type');
+          if (!root) return '';
+          var nav = root.querySelector('ul.nav');
+          if (!nav) return '';
+          var allTabs = Array.prototype.slice.call(nav.querySelectorAll('a[data-value], .nav-link[data-value]'))
+            .filter(function(a) { return a.closest('ul.nav') === nav; });
+          if (!allTabs.length) return '';
+          var selected = null;
+          if (preferredValue) {
+            for (var i = 0; i < allTabs.length; i++) {
+              if ((allTabs[i].getAttribute('data-value') || '') === preferredValue) {
+                selected = allTabs[i];
+                break;
+              }
+            }
+          }
+          if (!selected) {
+            selected = nav.querySelector('a[aria-selected=\"true\"][data-value], a.active[data-value], li.active a[data-value]');
+          }
+          if (!selected) selected = allTabs[0];
+          var selectedHref = selected.getAttribute('href') || '';
+          var selectedValue = selected.getAttribute('data-value') || '';
+          var paneIds = {};
+          for (var t = 0; t < allTabs.length; t++) {
+            var href = allTabs[t].getAttribute('href') || '';
+            if (href.charAt(0) === '#') paneIds[href.slice(1)] = true;
+            if (allTabs[t].classList.contains('active')) allTabs[t].classList.remove('active');
+            if (allTabs[t].getAttribute('aria-selected') !== 'false') allTabs[t].setAttribute('aria-selected', 'false');
+            if (allTabs[t].parentElement && allTabs[t].parentElement.classList.contains('active')) {
+              allTabs[t].parentElement.classList.remove('active');
+            }
+          }
+          if (!selected.classList.contains('active')) selected.classList.add('active');
+          if (selected.getAttribute('aria-selected') !== 'true') selected.setAttribute('aria-selected', 'true');
+          if (selected.parentElement && !selected.parentElement.classList.contains('active')) selected.parentElement.classList.add('active');
+          Object.keys(paneIds).forEach(function(id) {
+            var pane = document.getElementById(id);
+            if (!pane) return;
+            if (pane.classList.contains('active')) pane.classList.remove('active');
+            if (pane.classList.contains('show')) pane.classList.remove('show');
+          });
+          if (selectedHref.charAt(0) === '#') {
+            var selectedPane = document.getElementById(selectedHref.slice(1));
+            if (selectedPane) {
+              if (!selectedPane.classList.contains('active')) selectedPane.classList.add('active');
+              if (!selectedPane.classList.contains('show')) selectedPane.classList.add('show');
+            }
+          }
+          return selectedValue;
+        }
         function pushPlotTabFromDom() {
           try {
             var root = document.getElementById('analysis_tabs_by_type');
             if (!root) return;
-            var active = root.querySelector('ul.nav li.active a[data-value], ul.nav a.active[data-value], ul.nav-link.active[data-value]');
-            var allTabs = Array.prototype.slice.call(root.querySelectorAll('ul.nav a[data-value], ul.nav-link[data-value]'));
+            var nav = root.querySelector('ul.nav');
+            if (!nav) return;
+            var active = nav.querySelector('li.active a[data-value], a.active[data-value], .nav-link.active[data-value]');
+            var allTabs = Array.prototype.slice.call(nav.querySelectorAll('a[data-value], .nav-link[data-value]'))
+              .filter(function(a) { return a.closest('ul.nav') === nav; });
             var values = allTabs.map(function(a){ return a.getAttribute('data-value') || ''; }).filter(Boolean);
             var visible = !!(root.offsetParent !== null);
             var activeValue = active ? (active.getAttribute('data-value') || '') : '';
@@ -755,6 +836,7 @@ analysis_ui <- fluidPage(
               lastNonEmptyPlotTab = activeValue;
             }
             var activeForInput = activeValue || lastNonEmptyPlotTab || '';
+            activeForInput = reconcilePlotTabState(activeForInput) || activeForInput;
             var sig = [activeForInput, visible ? '1' : '0', values.join(',')].join('|');
             if (window.Shiny && Shiny.setInputValue && sig !== lastDiagSig) {
               lastDiagSig = sig;
@@ -778,11 +860,14 @@ analysis_ui <- fluidPage(
         document.addEventListener('shown.bs.tab', function(ev) {
           var el = ev && ev.target ? ev.target : null;
           if (!el) return;
-          var root = document.getElementById('analysis_tabs_by_type');
-          if (!root || !root.contains(el)) return;
+            var root = document.getElementById('analysis_tabs_by_type');
+            if (!root || !root.contains(el)) return;
+            var nav = root.querySelector('ul.nav');
+            if (!nav || el.closest('ul.nav') !== nav) return;
           var v = el.getAttribute('data-value') || '';
           if (!v) return;
           lastNonEmptyPlotTab = v;
+          reconcilePlotTabState(v);
           if (window.Shiny && Shiny.setInputValue) {
             Shiny.setInputValue('plot_tabs', v, {priority: 'event'});
             emitPlotTabEvent(v, 'shown_bs_tab', true, v, []);
@@ -814,7 +899,10 @@ analysis_ui <- fluidPage(
             if (!val) return;
             var root = document.getElementById('analysis_tabs_by_type');
             if (!root) return;
-            var links = root.querySelectorAll('a[data-value]');
+            var nav = root.querySelector('ul.nav');
+            if (!nav) return;
+            var links = Array.prototype.slice.call(nav.querySelectorAll('a[data-value]'))
+              .filter(function(a) { return a.closest('ul.nav') === nav; });
             var node = null;
             for (var i = 0; i < links.length; i++) {
               if ((links[i].getAttribute('data-value') || '') === val) {
@@ -832,6 +920,7 @@ analysis_ui <- fluidPage(
             } else {
               node.click();
             }
+            reconcilePlotTabState(val);
             if (window.Shiny && window.Shiny.setInputValue) {
               window.Shiny.setInputValue('plot_tabs', val, {priority: 'event'});
             }
@@ -1865,6 +1954,8 @@ analysis_server <- function(input, output, session, shared_data) {
     last_heartbeat = NA_real_,
     ensure_attempts = 0L
   ))
+  route_heartbeat_tick <- reactiveVal(0L)
+  route_ensure_tick <- reactiveVal(0L)
   analysis_plot_tabs_initialized <- reactiveVal(FALSE)
   analysis_last_nonempty_plot_tab <- reactiveVal("normalize / integrate")
   analysis_last_dom_tab_restore <- reactiveVal("")
@@ -2086,6 +2177,8 @@ analysis_server <- function(input, output, session, shared_data) {
       last_heartbeat = now,
       ensure_attempts = 0L
     ))
+    route_heartbeat_tick(isolate(route_heartbeat_tick()) + 1L)
+    route_ensure_tick(isolate(route_ensure_tick()) + 1L)
     analysis_plot_tabs_initialized(FALSE)
     analysis_selector_bind_attempts(0L)
     .perf_log("route_enter", details = c(
@@ -2110,10 +2203,8 @@ analysis_server <- function(input, output, session, shared_data) {
     }, once = TRUE)
   }, ignoreInit = FALSE)
 
-  route_heartbeat_tick <- reactiveTimer(1000, session)
-  route_ensure_tick <- reactiveTimer(500, session)
-
-  observeEvent(route_heartbeat_tick(), {
+  observe({
+    route_heartbeat_tick()
     st <- isolate(analysis_route_trace())
     if (!isTRUE(st$active)) return(invisible(NULL))
     isolate({
@@ -2137,10 +2228,12 @@ analysis_server <- function(input, output, session, shared_data) {
         ))
       }
     })
+    invalidateLater(1000, session)
     invisible(NULL)
-  }, ignoreInit = FALSE)
+  })
 
-  observeEvent(route_ensure_tick(), {
+  observe({
+    route_ensure_tick()
     st <- isolate(analysis_route_trace())
     if (!isTRUE(st$active)) return(invisible(NULL))
     tab_now <- isolate(.scalar_chr(input$main_navbar, default = ""))
@@ -2164,22 +2257,24 @@ analysis_server <- function(input, output, session, shared_data) {
       ))
     }
     analysis_route_trace(modifyList(st, list(ensure_attempts = attempts + 1L)))
+    invalidateLater(500, session)
     invisible(NULL)
-  }, ignoreInit = FALSE)
+  })
 
   observe({
     st <- analysis_route_trace()
     if (!isTRUE(st$active)) return(invisible(NULL))
     plot_tab_input_now <- .scalar_chr(input$plot_tabs, default = "")
     plot_tab_effective_now <- .scalar_chr(.current_plot_tab(), default = "")
+    plot_tab_present_now <- nzchar(plot_tab_input_now) || nzchar(plot_tab_effective_now)
     selector_main_now <- .scalar_chr(input$active_object_name_input, default = "")
     selector_inline_now <- .scalar_chr(input$active_object_name_input_inline, default = "")
     selector_umap_inline_now <- .scalar_chr(input$active_object_name_input_umap_inline, default = "")
     selector_ready <- nzchar(selector_main_now) || nzchar(selector_inline_now) || nzchar(selector_umap_inline_now)
     route_ready <- isTRUE(.analysis_data_is_ready_flag()) &&
       identical(.scalar_chr(input$main_navbar, default = ""), "analysis_tab") &&
-      isTRUE(analysis_plot_tabs_initialized()) &&
-      nzchar(plot_tab_effective_now) &&
+      (isTRUE(analysis_plot_tabs_initialized()) || isTRUE(plot_tab_present_now)) &&
+      isTRUE(plot_tab_present_now) &&
       isTRUE(selector_ready) &&
       nzchar(.scalar_chr(shared_data$active_object_name, default = ""))
     if (!isTRUE(route_ready)) return(invisible(NULL))
@@ -2398,10 +2493,11 @@ analysis_server <- function(input, output, session, shared_data) {
     sobj <- .get_active_sobj(shared_data)
     num_samples <- max(length(sel), if (!is.null(sobj)) length(unique(sobj$orig.ident)) else 1L)
     inobject_active <- isTRUE(.analysis_inobject_reintegrate_active())
-    hide_preprocess_cards <- identical(mode_now, "replace") &&
+    reintegrate_locked <- isTRUE(.analysis_should_lock_elbow_preview())
+    hide_preprocess_cards <- (identical(mode_now, "replace") &&
       !isTRUE(analysis_reintegration_enabled()) &&
       !isTRUE(inobject_active) &&
-      !isTRUE(prof$non_integrated_only)
+      !isTRUE(prof$non_integrated_only)) || isTRUE(reintegrate_locked)
     if (isTRUE(hide_preprocess_cards)) {
       shinyjs::hide("normalization_block")
       shinyjs::hide("integration_block")
@@ -4627,8 +4723,32 @@ function(el, x) {
   }
 
   .build_embedding_preview_static_plot <- function(sobj, reduction_name, plot_format = "UMAP", color_by = NULL) {
+    .preview_message_plot <- function(message) {
+      p_msg <- ggplot2::ggplot() +
+        ggplot2::annotate(
+          "text",
+          x = 0,
+          y = 0,
+          label = message,
+          size = 4,
+          color = "#111827"
+        ) +
+        ggplot2::xlim(-1, 1) +
+        ggplot2::ylim(-1, 1) +
+        ggplot2::theme_void()
+      attr(p_msg, "wanlab_preview_message") <- TRUE
+      p_msg
+    }
     emb <- tryCatch(Seurat::Embeddings(sobj, reduction_name), error = function(e) NULL)
     validate(need(!is.null(emb) && is.matrix(emb) && ncol(emb) >= 2, "Embedding preview unavailable."))
+    finite_rows <- is.finite(as.numeric(emb[, 1])) & is.finite(as.numeric(emb[, 2]))
+    if (!any(finite_rows)) {
+      .perf_log("umap_config_static_plot:no_finite_embedding_rows", details = c(
+        sprintf("object=%s", .scalar_chr(shared_data$active_object_name, default = "<empty>")),
+        sprintf("reduction=%s", .scalar_chr(reduction_name, default = "<empty>"))
+      ))
+      return(.preview_message_plot("Embedding preview unavailable: no finite embedding coordinates."))
+    }
     axis_prefix <- .reduction_pca_dims_label(sobj, reduction_name)
     if (!nzchar(axis_prefix)) {
       axis_prefix <- if (identical(toupper(as.character(plot_format %||% "UMAP")), "TSNE")) "TSNE_PCA" else "UMAP_PCA"
@@ -4647,8 +4767,30 @@ function(el, x) {
         container_width = 1050,
         dot_size = 0.85
       ),
-      error = function(e) ggplot2::ggplot() + ggplot2::ggtitle("Embedding preview unavailable")
+      error = function(e) {
+        .perf_log("umap_config_static_plot:build_error", details = c(
+          sprintf("object=%s", .scalar_chr(shared_data$active_object_name, default = "<empty>")),
+          sprintf("reduction=%s", .scalar_chr(reduction_name, default = "<empty>")),
+          sprintf("plot_format=%s", .scalar_chr(plot_format, default = "<empty>")),
+          sprintf("color_by=%s", .scalar_chr(color_by, default = "<empty>")),
+          sprintf("error=%s", conditionMessage(e))
+        ))
+        .preview_message_plot(paste("Embedding preview unavailable:", conditionMessage(e)))
+      }
     )
+    layer_n <- tryCatch(length(p$layers), error = function(e) 0L)
+    plot_data_n <- tryCatch(if (is.data.frame(p$data)) nrow(p$data) else NA_integer_, error = function(e) NA_integer_)
+    if (!isTRUE(attr(p, "wanlab_preview_message")) &&
+        (!is.finite(layer_n) || layer_n < 1L || !is.finite(plot_data_n) || is.na(plot_data_n) || plot_data_n < 1L)) {
+      .perf_log("umap_config_static_plot:no_plot_layers", details = c(
+        sprintf("object=%s", .scalar_chr(shared_data$active_object_name, default = "<empty>")),
+        sprintf("reduction=%s", .scalar_chr(reduction_name, default = "<empty>")),
+        sprintf("color_by=%s", .scalar_chr(color_by, default = "<empty>")),
+        sprintf("layers=%s", as.character(layer_n)),
+        sprintf("plot_data_n=%s", as.character(plot_data_n))
+      ))
+      p <- .preview_message_plot("Embedding preview unavailable: plot contained no drawable cell data.")
+    }
     dot_lg <- .umap_legend_dot_size(.umap_point_size_from_plot(p, 0.85), 10)
     p +
       ggplot2::labs(x = x_title, y = y_title) +
@@ -5184,7 +5326,7 @@ function(el, x, data) {
     )
     .cfg_preview_cache(list(
       key = cache_key,
-      result = list(object_name = nm, object = sobj, plot = NULL, reduction = red)
+      result = list(object_name = nm, object = sobj, plot = NULL, reduction = red, params = params)
     ))
     invisible(NULL)
   }
@@ -6576,18 +6718,28 @@ function(el, x, data) {
   })
   
   # render elbow UI (returns NULL when not ready → no placeholder)
-  output$prep_elbow_ui <- renderUI({
-    snapshot <- analysis_active_elbow_preview()
-    div(
-      class = "elbow-preview-box elbow-preview-shell",
-      if (isTRUE(snapshot$ready)) {
-        plotOutput("prep_elbow_plot", height = "100%", width = "100%")
-      } else {
-        div(class = "elbow-preview-placeholder")
-      }
-    )
-  })
+	  output$prep_elbow_ui <- renderUI({
+	    snapshot <- analysis_active_elbow_preview()
+	    div(
+	      class = "elbow-preview-box elbow-preview-shell",
+	      style = "width:100%; height:clamp(420px, calc(var(--app-viewport-h, 100vh) - var(--app-shell-top-h, 0px) - var(--footer-h, 0px) - 260px), 760px); min-height:420px; overflow:hidden;",
+	      if (isTRUE(snapshot$ready)) {
+	        plotOutput(
+	          "prep_elbow_plot",
+	          height = "100%",
+	          width = "100%"
+	        )
+	      } else {
+	        div(class = "elbow-preview-placeholder", style = "width:100%; height:100%; min-height:420px;")
+	      }
+	    )
+	  })
   output$prep_elbow_plot <- renderPlot({
+    plot_h <- suppressWarnings(as.numeric(session$clientData$output_prep_elbow_plot_height %||% NA_real_))
+    if (is.finite(plot_h) && plot_h < 50) {
+      .perf_log("prep_elbow_plot:zero_height_guard", details = sprintf("height=%.3f", plot_h))
+      shiny::req(FALSE)
+    }
     snapshot <- analysis_active_elbow_preview()
     nm <- .scalar_chr(snapshot$object_name, default = "")
     .perf_log("prep_elbow_plot:render", details = sprintf("object=%s", .scalar_chr(nm, default = "<empty>")))
@@ -6621,6 +6773,14 @@ function(el, x, data) {
       return(invisible(NULL))
     }
     suppressWarnings(print(p_final))
+  }, height = function() {
+    h <- suppressWarnings(as.numeric(session$clientData$output_prep_elbow_ui_height %||% NA_real_))
+    if (!is.finite(h) || h < 420) {
+      plot_area_h <- suppressWarnings(as.numeric(session$clientData$output_plot_area_height %||% NA_real_))
+      if (is.finite(plot_area_h)) h <- plot_area_h
+    }
+    if (!is.finite(h)) h <- 520
+    max(420, min(760, h))
   })
   .generate_elbow_for_active <- function() {
     nm <- shared_data$active_object_name
@@ -6999,12 +7159,14 @@ function(el, x, data) {
       title("Embedding preview unavailable for this object (no UMAP/tSNE reduction).")
       return(invisible(NULL))
     }
-    .build_embedding_preview_static_plot(
+    p_static <- .build_embedding_preview_static_plot(
       sobj = sobj_plot,
       reduction_name = red_use,
       plot_format = (out_params$plot_format %||% "UMAP"),
       color_by = color_by_static
     )
+    print(p_static)
+    invisible(p_static)
   })
 
   output$umap_viz_plot_ui <- renderUI({

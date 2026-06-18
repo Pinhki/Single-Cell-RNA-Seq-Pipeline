@@ -314,6 +314,7 @@ wanlab_canonicalize_registry <- function(registry, sample_sheet = NULL) {
 .time_source("interface/figures/page_figure_alluvial.R")
 .time_source("interface/figures/page_figure_cluster_alluvial.R")
 .time_source("interface/figures/page_figure_pseudobulk_volcano.R")
+.time_source("interface/figures/page_figure_tcr_studio.R")
 
 # Keep flowgate sourced last to preserve legacy global symbol order.
 .time_source("interface/qc/page_flowgate.R")
@@ -333,6 +334,295 @@ ui <- tagList(
   tags$head(
     qc_busy_spinner_assets,
     wl_code_block_assets(),
+    tags$script(HTML("
+      (function() {
+        var lastInteractionTime = 0;
+        var inputsUpdatingFromServer = {};
+
+        function recordInteraction(e) {
+          lastInteractionTime = Date.now();
+        }
+
+        document.addEventListener('mousedown', recordInteraction, true);
+        document.addEventListener('keydown', recordInteraction, true);
+        document.addEventListener('touchstart', recordInteraction, true);
+
+        document.addEventListener('shiny:updateinput', function(event) {
+          if (event.message && event.message.id) {
+            var id = event.message.id;
+            inputsUpdatingFromServer[id] = event.message.value;
+            var el = document.getElementById(id);
+            if (el) {
+              el.__prev_value = event.message.value;
+              if (el.type === 'checkbox' || el.type === 'radio') {
+                el.__prev_checked = event.message.value;
+              }
+              console.log('[AUTOFILL DIAGNOSTIC] Server update message for:', id, 'value:', event.message.value);
+            }
+            setTimeout(function() {
+              delete inputsUpdatingFromServer[id];
+            }, 0);
+          }
+        });
+
+        function handleInputChange(event) {
+          var target = event.target;
+
+          // Always allow programmatic changes from selectize/Shiny scripts (untrusted/synthetic events)
+          var isSynthetic = event.isTrusted === false || 
+                            event.isTrusted === undefined || 
+                            (event.originalEvent && event.originalEvent.isTrusted === false) ||
+                            (event.originalEvent && event.originalEvent.isTrusted === undefined);
+          if (isSynthetic) {
+            target.__prev_value = target.value;
+            if (target.type === 'checkbox' || target.type === 'radio') {
+              target.__prev_checked = target.checked;
+            }
+            return;
+          }
+
+          if (target.value === target.__prev_value) {
+            if (target.type === 'checkbox' || target.type === 'radio') {
+              if (target.checked === target.__prev_checked) return;
+            } else {
+              return;
+            }
+          }
+
+          var timeSinceInteraction = Date.now() - lastInteractionTime;
+          var isUpdating = inputsUpdatingFromServer.hasOwnProperty(target.id);
+          var expectedValue = inputsUpdatingFromServer[target.id];
+          var matchesExpected = false;
+          if (isUpdating) {
+            if (target.type === 'checkbox' || target.type === 'radio') {
+              matchesExpected = String(target.checked) === String(expectedValue);
+            } else {
+              matchesExpected = String(target.value) === String(expectedValue);
+            }
+          }
+
+          console.log('[AUTOFILL DIAGNOSTIC] Change event on guarded input:', target.id, 
+            'value:', target.value, 
+            'checked:', target.checked,
+            'prev:', target.__prev_value, 
+            'isUpdating:', isUpdating, 
+            'expectedValue:', expectedValue, 
+            'matchesExpected:', matchesExpected, 
+            'timeSinceInteraction:', timeSinceInteraction
+          );
+
+          if ((!isUpdating || !matchesExpected) && timeSinceInteraction > 200) {
+            event.stopImmediatePropagation();
+            event.preventDefault();
+            if (target.__prev_value !== undefined) {
+              target.value = target.__prev_value;
+              if (target.type === 'checkbox' || target.type === 'radio') {
+                target.checked = target.__prev_checked;
+              }
+              if (target.selectize) {
+                target.selectize.setValue(target.__prev_value, false);
+              }
+            }
+            console.log('[AUTOFILL GUARD] Blocked browser auto-restore/autofill on:', target.id, 
+              'value was:', target.value, 
+              'reset to:', target.__prev_value
+            );
+          } else {
+            target.__prev_value = target.value;
+            if (target.type === 'checkbox' || target.type === 'radio') {
+              target.__prev_checked = target.checked;
+            }
+          }
+        }
+
+        function getCanonicalValue(el) {
+          var container = typeof el.closest === 'function' ? el.closest('[data-canonical-value]') : null;
+          var val = el.getAttribute('data-canonical-value') || (container ? container.getAttribute('data-canonical-value') : null);
+          if (val !== undefined && val !== null) return val;
+          
+          if (el.tagName === 'SELECT') {
+            var selOpt = el.querySelector('option[selected]');
+            if (selOpt) return selOpt.value;
+            return el.options.length > 0 ? el.options[0].value : '';
+          } else if (el.type === 'checkbox' || el.type === 'radio') {
+            return el.hasAttribute('checked') || el.defaultChecked;
+          } else {
+            return el.getAttribute('value') || el.defaultValue || '';
+          }
+        }
+
+        function initElement(el) {
+          var id = el.id || '';
+          var shouldGuard = id && (
+            id.startsWith('recluster_new_') || 
+            id.startsWith('active_object_name_') || 
+            id.startsWith('recluster_dataset_')
+          ) && !id.includes('_color_') && el.type !== 'color';
+          if (shouldGuard) {
+            if (!el.__guard_registered) {
+              el.__guard_registered = true;
+              el.addEventListener('change', handleInputChange, true);
+              if (window.jQuery) {
+                window.jQuery(el).on('change', handleInputChange);
+              } else {
+                var checkJQuery = setInterval(function() {
+                  if (window.jQuery) {
+                    clearInterval(checkJQuery);
+                    window.jQuery(el).on('change', handleInputChange);
+                  }
+                }, 50);
+              }
+            }
+
+            if (el.__prev_value === undefined) {
+              var canonicalVal = getCanonicalValue(el);
+              if (el.type === 'checkbox' || el.type === 'radio') {
+                el.__prev_value = canonicalVal;
+                el.__prev_checked = canonicalVal;
+                if (el.checked !== canonicalVal) {
+                  console.log('[AUTOFILL GUARD] Corrected pre-autofilled checkbox/radio on init:', el.id, 'from:', el.checked, 'to:', canonicalVal);
+                  el.checked = canonicalVal;
+                }
+              } else {
+                el.__prev_value = canonicalVal;
+                if (el.value !== canonicalVal) {
+                  console.log('[AUTOFILL GUARD] Corrected pre-autofilled select/input on init:', el.id, 'from:', el.value, 'to:', canonicalVal);
+                  el.value = canonicalVal;
+                  if (el.selectize) {
+                    el.selectize.setValue(canonicalVal, true);
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        function initElements() {
+          var els = document.querySelectorAll('input, select, textarea');
+          for (var i = 0; i < els.length; i++) {
+            initElement(els[i]);
+          }
+        }
+
+        initElements();
+        document.addEventListener('shiny:connected', initElements);
+        document.addEventListener('shiny:value', initElements);
+        document.addEventListener('shiny:bound', initElements);
+        document.addEventListener('shiny:recalculated', initElements);
+
+        // MutationObserver to catch dynamically added nodes immediately upon insertion
+        var observer = new MutationObserver(function(mutations) {
+          for (var i = 0; i < mutations.length; i++) {
+            var addedNodes = mutations[i].addedNodes;
+            for (var j = 0; j < addedNodes.length; j++) {
+              var node = addedNodes[j];
+              if (node.nodeType === 1) {
+                var els = node.querySelectorAll ? node.querySelectorAll('input, select, textarea') : [];
+                if (node.tagName === 'INPUT' || node.tagName === 'SELECT' || node.tagName === 'TEXTAREA') {
+                  els = Array.prototype.slice.call(els);
+                  els.unshift(node);
+                }
+                for (var m = 0; m < els.length; m++) {
+                  initElement(els[m]);
+                }
+              }
+            }
+          }
+        });
+        observer.observe(document.documentElement, {
+          childList: true,
+          subtree: true
+        });
+
+        // Active background poller running every 50ms to detect and reverse browser form-restoration value changes
+        setInterval(function() {
+          var guardedIds = [
+            'recluster_new_dataset_select', 
+            'active_object_name_input', 
+            'active_object_name_input_inline', 
+            'active_object_name_input_umap_inline', 
+            'recluster_dataset_select'
+          ];
+          for (var k = 0; k < guardedIds.length; k++) {
+            var el = document.getElementById(guardedIds[k]);
+            if (!el) continue;
+            
+            if (el.__prev_value === undefined) {
+              var canonicalVal = getCanonicalValue(el);
+              if (el.type === 'checkbox' || el.type === 'radio') {
+                el.__prev_value = canonicalVal;
+                el.__prev_checked = canonicalVal;
+                if (el.checked !== canonicalVal) {
+                  console.log('[AUTOFILL GUARD] Corrected pre-autofilled checkbox on query:', el.id, 'from:', el.checked, 'to:', canonicalVal);
+                  el.checked = canonicalVal;
+                }
+              } else {
+                el.__prev_value = canonicalVal;
+                if (el.value !== canonicalVal) {
+                  console.log('[AUTOFILL GUARD] Corrected pre-autofilled select/input on query:', el.id, 'from:', el.value, 'to:', canonicalVal);
+                  el.value = canonicalVal;
+                  if (el.selectize) {
+                    el.selectize.setValue(canonicalVal, true);
+                  }
+                }
+              }
+            } else {
+              if (el.type === 'checkbox' || el.type === 'radio') {
+                if (el.checked !== el.__prev_checked) {
+                  var timeSinceInteraction = Date.now() - lastInteractionTime;
+                  var isUpdating = inputsUpdatingFromServer.hasOwnProperty(el.id);
+                  var expectedValue = inputsUpdatingFromServer[el.id];
+                  var matchesExpected = isUpdating && String(el.checked) === String(expectedValue);
+
+                  console.log('[AUTOFILL DIAGNOSTIC] Poller detected checkbox change on:', el.id, 
+                    'checked:', el.checked, 
+                    'prev:', el.__prev_checked, 
+                    'isUpdating:', isUpdating, 
+                    'expectedValue:', expectedValue,
+                    'matchesExpected:', matchesExpected,
+                    'timeSinceInteraction:', timeSinceInteraction
+                  );
+
+                  if ((!isUpdating || !matchesExpected) && timeSinceInteraction > 200) {
+                    console.log('[AUTOFILL GUARD] Reset unauthorized checkbox/radio change:', el.id, 'from:', el.checked, 'to:', el.__prev_checked);
+                    el.checked = el.__prev_checked;
+                  } else {
+                    el.__prev_checked = el.checked;
+                    el.__prev_value = el.checked;
+                  }
+                }
+              } else {
+                if (el.value !== el.__prev_value) {
+                  var timeSinceInteraction = Date.now() - lastInteractionTime;
+                  var isUpdating = inputsUpdatingFromServer.hasOwnProperty(el.id);
+                  var expectedValue = inputsUpdatingFromServer[el.id];
+                  var matchesExpected = isUpdating && String(el.value) === String(expectedValue);
+
+                  console.log('[AUTOFILL DIAGNOSTIC] Poller detected select change on:', el.id, 
+                    'value:', el.value, 
+                    'prev:', el.__prev_value, 
+                    'isUpdating:', isUpdating, 
+                    'expectedValue:', expectedValue,
+                    'matchesExpected:', matchesExpected,
+                    'timeSinceInteraction:', timeSinceInteraction
+                  );
+
+                  if ((!isUpdating || !matchesExpected) && timeSinceInteraction > 200) {
+                    console.log('[AUTOFILL GUARD] Reset unauthorized input change:', el.id, 'from:', el.value, 'to:', el.__prev_value);
+                    el.value = el.__prev_value;
+                    if (el.selectize) {
+                      el.selectize.setValue(el.__prev_value, false);
+                    }
+                  } else {
+                    el.__prev_value = el.value;
+                  }
+                }
+              }
+            }
+          }
+        }, 50);
+      })();
+    ")),
     tags$style(HTML("
       /* Global Plotly font override across all pages */
       .js-plotly-plot,
@@ -551,6 +841,85 @@ ui <- tagList(
           document.body.style.cursor = '';
           document.body.style.userSelect = '';
         });
+        // Portrait display optimizations: auto-collapse sidebar and inject resize handles
+        var __sidebarCheckedPortrait = null;
+        function checkAndCollapseSidebar() {
+          var isPortrait = window.matchMedia('(max-width: 991.98px), (orientation: portrait)').matches;
+          if (isPortrait && __sidebarCheckedPortrait !== true) {
+            var sidebar = document.querySelector('.bslib-sidebar-layout.sidebar-right');
+            if (sidebar && !sidebar.classList.contains('sidebar-collapsed')) {
+              var toggle = sidebar.querySelector('.collapse-toggle, .bslib-sidebar-toggle');
+              if (toggle) toggle.click();
+            }
+          }
+          __sidebarCheckedPortrait = isPortrait;
+        }
+        document.addEventListener('shiny:connected', checkAndCollapseSidebar);
+        window.addEventListener('resize', checkAndCollapseSidebar);
+
+        function injectPortraitResizeHandles() {
+          var pages = document.querySelectorAll('.plotting-page');
+          pages.forEach(function (page) {
+            var plotAreas = page.querySelectorAll('.plot_area_card_style');
+            plotAreas.forEach(function (plotArea) {
+              if (plotArea.querySelector('.app-resize-handle')) return;
+              
+              if (!plotArea.id) {
+                plotArea.id = 'plot_area_auto_' + Math.random().toString(36).substr(2, 9);
+              }
+              
+              var handle = document.createElement('div');
+              handle.className = 'app-resize-handle wl-portrait-only-resizer';
+              handle.setAttribute('data-target', plotArea.id);
+              handle.innerHTML = '<span class=\\'app-resize-handle-grip\\'></span><span class=\\'app-resize-handle-text\\'>Drag to resize</span>';
+              
+              plotArea.appendChild(handle);
+              plotArea.classList.add('app-resizable-plot');
+              page.classList.add('app-resizable-plot-page');
+              
+              // Drag listeners: update CSS property on the page container to persist state
+              handle.addEventListener('mousedown', function (ev) {
+                var startY = ev.clientY;
+                var startH = plotArea.getBoundingClientRect().height;
+                var dragHandler = function (moveEv) {
+                  var dy = moveEv.clientY - startY;
+                  var nextH = Math.max(320, Math.round(startH + dy));
+                  page.style.setProperty('--wl-portrait-plot-height', nextH + 'px');
+                  if (typeof scheduleResizePlotly === 'function') scheduleResizePlotly(plotArea);
+                };
+                document.addEventListener('mousemove', dragHandler);
+                document.addEventListener('mouseup', function upHandler() {
+                  document.removeEventListener('mousemove', dragHandler);
+                  document.removeEventListener('mouseup', upHandler);
+                });
+              });
+              
+              handle.addEventListener('pointerdown', function (ev) {
+                var startY = ev.clientY;
+                var startH = plotArea.getBoundingClientRect().height;
+                var dragHandler = function (moveEv) {
+                  var dy = moveEv.clientY - startY;
+                  var nextH = Math.max(320, Math.round(startH + dy));
+                  page.style.setProperty('--wl-portrait-plot-height', nextH + 'px');
+                  if (typeof scheduleResizePlotly === 'function') scheduleResizePlotly(plotArea);
+                };
+                document.addEventListener('pointermove', dragHandler);
+                document.addEventListener('pointerup', function upHandler() {
+                  document.removeEventListener('pointermove', dragHandler);
+                  document.removeEventListener('pointerup', upHandler);
+                });
+              });
+            });
+          });
+        }
+        
+        document.addEventListener('DOMContentLoaded', injectPortraitResizeHandles);
+        document.addEventListener('shiny:connected', injectPortraitResizeHandles);
+        document.addEventListener('shown.bs.tab', injectPortraitResizeHandles, true);
+        
+        var portraitObserver = new MutationObserver(injectPortraitResizeHandles);
+        portraitObserver.observe(document.documentElement, { childList: true, subtree: true });
+
         document.addEventListener('DOMContentLoaded', function() { initResizeHandles(document); });
         document.addEventListener('shiny:connected', function() { initResizeHandles(document); });
         document.addEventListener('shiny:value', function(ev) {
@@ -1195,6 +1564,7 @@ ui <- tagList(
     figure_dotplot_ui = figure_dotplot_ui,
     figure_alluvial_ui = figure_alluvial_ui,
     figure_cluster_alluvial_ui = figure_cluster_alluvial_ui,
+    figure_tcr_studio_ui = figure_tcr_studio_ui,
     figure_pseudobulk_volcano_hidden_ui = figure_pseudobulk_volcano_ui,
     export_ui = export_ui,
     export_vdj_safe_ui = export_vdj_safe_ui,
@@ -1414,10 +1784,27 @@ server <- function(input, output, session) {
     )
   }
 
-  .write_emergency_recovery_rds <- function(reason = "Unhandled error", err = NULL) {
+  .emergency_recovery_output_dir <- function() {
     project_root <- tryCatch(normalizePath(here::here(".."), winslash = "/", mustWork = FALSE), error = function(e) here::here(".."))
-    out_dir <- file.path(project_root, "emergency_recovery")
-    dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+    candidates <- c(
+      file.path(project_root, "emergency_recovery"),
+      file.path(tempdir(), "wan_lab_single_cell_emergency_recovery")
+    )
+    for (out_dir in candidates) {
+      ok <- tryCatch({
+        dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+        test_path <- tempfile(".write_test_", tmpdir = out_dir)
+        suppressWarnings(writeLines("ok", con = test_path, useBytes = TRUE))
+        unlink(test_path)
+        TRUE
+      }, error = function(e) FALSE)
+      if (isTRUE(ok)) return(out_dir)
+    }
+    stop("No writable emergency recovery output directory is available.")
+  }
+
+  .write_emergency_recovery_rds <- function(reason = "Unhandled error", err = NULL) {
+    out_dir <- .emergency_recovery_output_dir()
     stamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
     full_path <- file.path(out_dir, paste0("emergency_workspace_", stamp, ".rds"))
 
@@ -1552,9 +1939,7 @@ server <- function(input, output, session) {
     }, error = function(e) character(0))
     tb_lines <- tryCatch(utils::capture.output(traceback(50)), error = function(e) character(0))
     trace_path <- tryCatch({
-      project_root <- normalizePath(here::here(".."), winslash = "/", mustWork = FALSE)
-      out_dir <- file.path(project_root, "emergency_recovery")
-      dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+      out_dir <- .emergency_recovery_output_dir()
       stamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
       p <- file.path(out_dir, paste0("app_error_trace_", stamp, ".log"))
       details <- c(
@@ -1758,7 +2143,7 @@ server <- function(input, output, session) {
     "atac_qc", "analysis", "recluster", "recluster_new", "multiome_wnn",
     "cellchat", "scenic", "monocle2", "nichenet", "niches", "sctenifoldknk", "rna_velocity_v052",
     "multiome_marker", "export", "export_vdj_safe", "multiome_export_check",
-    "rds", "figure_umap", "figure_feature", "figure_dotplot", "figure_alluvial", "figure_cluster_alluvial", "figure_color_picker_lab", "figure_poline_lab", "cellwhisperer"
+    "rds", "figure_umap", "figure_feature", "figure_dotplot", "figure_alluvial", "figure_cluster_alluvial", "figure_tcr_studio", "figure_color_picker_lab", "figure_poline_lab", "cellwhisperer"
   )) assign(nm, FALSE, envir = module_init)
   .init_once <- function(flag_name, fn) {
     if (isTRUE(get0(flag_name, envir = module_init, ifnotfound = FALSE))) return(invisible(FALSE))
@@ -1828,6 +2213,7 @@ server <- function(input, output, session) {
     if (identical(tab, "figure_studio_dotplot")) .init_once("figure_dotplot", function() figure_dotplot_server(input, output, session, shared_data))
     if (identical(tab, "figure_studio_alluvial")) .init_once("figure_alluvial", function() figure_alluvial_server(input, output, session, shared_data))
     if (identical(tab, "figure_studio_cluster_alluvial")) .init_once("figure_cluster_alluvial", function() figure_cluster_alluvial_server(input, output, session, shared_data))
+    if (identical(tab, "figure_studio_tcr_studio")) .init_once("figure_tcr_studio", function() figure_tcr_studio_server(input, output, session, shared_data))
     if (identical(tab, "figure_studio_pseudobulk_volcano_hidden")) .init_once("figure_pseudobulk_volcano_hidden", function() figure_pseudobulk_volcano_server(input, output, session, shared_data))
   }, ignoreInit = FALSE)
 
@@ -1858,6 +2244,7 @@ server <- function(input, output, session) {
     figure_studio_dotplot = "figure_dotplot",
     figure_studio_alluvial = "figure_alluvial",
     figure_studio_cluster_alluvial = "figure_cluster_alluvial",
+    figure_studio_tcr_studio = "figure_tcr_studio",
     figure_studio_pseudobulk_volcano_hidden = "figure_pseudobulk_volcano_hidden"
   )
 
@@ -1876,6 +2263,7 @@ server <- function(input, output, session) {
       "figure_studio_dotplot",
       "figure_studio_alluvial",
       "figure_studio_cluster_alluvial",
+      "figure_studio_tcr_studio",
       "figure_studio_pseudobulk_volcano_hidden"
     )
   }
@@ -1894,7 +2282,7 @@ server <- function(input, output, session) {
       "(function(){document.body.classList.toggle('app-dark-mode', %s); try{localStorage.setItem('wl_dark_mode', %s);}catch(e){} var b=document.getElementById('nav_dark_mode_toggle'); if(b){b.innerHTML=%s;}})();",
       if (is_on) "true" else "false",
       if (is_on) "'1'" else "'0'",
-      shQuote(label_html)
+      jsonlite::toJSON(label_html, auto_unbox = TRUE)
     ))
   }
 
@@ -2065,7 +2453,7 @@ server <- function(input, output, session) {
       "environment_tab", "qc_tab", "contam_tab", "hto_tab", "doublet_tab", "vdj_tab", "barcode_tab", "flowgate_tab",
       "analysis_tab", "recluster_tab", "recluster_new_tab", "rna_velocity_tab", "rna_velocity_v052_tab", "cellchat_tab", "scenic_tab", "monocle2_tab",
       "nichenet_tab", "niches_tab", "sctenifoldknk_tab", "cellwhisperer_tab", "export_tab", "export_vdj_safe_tab", "rds_tab",
-      "figure_studio_umap", "figure_studio_feature", "figure_studio_dotplot", "figure_studio_alluvial", "figure_studio_cluster_alluvial", "figure_studio_pseudobulk_volcano_hidden"
+      "figure_studio_umap", "figure_studio_feature", "figure_studio_dotplot", "figure_studio_alluvial", "figure_studio_cluster_alluvial", "figure_studio_tcr_studio", "figure_studio_pseudobulk_volcano_hidden"
     )
     unlocked_menus <- c("setup_menu", "qc_menu", "analysis_menu", "figures_menu", "export_menu")
     nav_hide_in_fast <- c(unlocked_menus, unlocked_tabs)
@@ -2073,6 +2461,7 @@ server <- function(input, output, session) {
 
     for (tab in unlocked_tabs) {
       if (tab %in% admin_locked_vals) next
+      if (tab %in% c("recluster_new_tab", "rds_tab")) next # Handled dynamically below to prevent flashing enable state
       shinyjs::enable(selector = sprintf("a[data-value='%s']", tab))
     }
     for (menu in unlocked_menus) {
@@ -2119,13 +2508,23 @@ server <- function(input, output, session) {
     shinyjs::toggle(selector = "a.nav-link[data-value='hto_tab']", condition = show_hto)
     shinyjs::toggle(selector = "a.dropdown-item[data-value='hto_tab']", condition = show_hto)
 
-    # 2b) Data Browser visible when workspace has loaded objects (unless admin force).
+    # 2b) Data Browser enabled when workspace has loaded objects (unless admin force).
     has_workspace <- length(obj_names) > 0L
     show_data_browser <- isTRUE(shared_data$admin_force_enable_all_menus) || has_workspace
-    shinyjs::toggle(selector = "a.nav-link[data-value='recluster_new_tab']", condition = show_data_browser)
-    shinyjs::toggle(selector = "a.dropdown-item[data-value='recluster_new_tab']", condition = show_data_browser)
+    shinyjs::show(selector = "a.nav-link[data-value='recluster_new_tab']")
+    shinyjs::show(selector = "a.dropdown-item[data-value='recluster_new_tab']")
     if (isTRUE(show_data_browser)) {
+      shinyjs::enable(selector = "a[data-value='recluster_new_tab']")
+      shinyjs::enable(selector = "a.nav-link[data-value='recluster_new_tab']")
+      shinyjs::enable(selector = "a.dropdown-item[data-value='recluster_new_tab']")
       .clear_nav_tab_gate_block("recluster_new_tab")
+    } else {
+      shinyjs::disable(selector = "a[data-value='recluster_new_tab']")
+      shinyjs::disable(selector = "a.nav-link[data-value='recluster_new_tab']")
+      shinyjs::disable(selector = "a.dropdown-item[data-value='recluster_new_tab']")
+      if (identical(current_tab, "recluster_new_tab")) {
+        updateNavbarPage(session, "main_navbar", selected = "welcome_tab")
+      }
     }
 
     # 3) Admin-locked tabs remain hidden until individually unlocked.
@@ -2144,8 +2543,6 @@ server <- function(input, output, session) {
       updateNavbarPage(session, "main_navbar", selected = "qc_tab")
     } else if (!show_hto && identical(current_tab, "hto_tab")) {
       updateNavbarPage(session, "main_navbar", selected = "qc_tab")
-    } else if (!show_data_browser && identical(current_tab, "recluster_new_tab")) {
-      updateNavbarPage(session, "main_navbar", selected = "welcome_tab")
     }
 
     if (has_env) {
@@ -2197,7 +2594,7 @@ server <- function(input, output, session) {
     if (!nzchar(tab_id)) return(invisible(NULL))
     shinyjs::runjs(sprintf(
       "$('a[data-value=%s]').removeClass('disabled').off('click.rds_gate_block');",
-      shQuote(tab_id)
+      jsonlite::toJSON(tab_id, auto_unbox = TRUE)
     ))
     invisible(NULL)
   }

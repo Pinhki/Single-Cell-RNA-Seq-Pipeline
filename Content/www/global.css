@@ -1,7 +1,6 @@
 /* ================================
    Wan Lab – Unified UI Styles (clean, no !important)
    ================================ */
-
 /* ---------- Design tokens ---------- */
 :root{
   --nav-h: 56px;
@@ -38,7 +37,6 @@
   --wl-chevron-size: 8px;
   --wl-chevron-stroke: 2px;
 }
-
 .wl-chevron-right,
 .wl-chevron-right::after {
   width: var(--wl-chevron-size);
@@ -48,13 +46,12 @@
   border-width: 0 var(--wl-chevron-stroke) var(--wl-chevron-stroke) 0;
   transform: rotate(-45deg);
 }
-
-@media (max-width: 991.98px){
+@media (max-width: 991.98px), (orientation: portrait) {
   :root{
+    --nav-h: 64px !important;
     --app-shell-top-h: var(--nav-h);
   }
 }
-
 body.app-dark-mode{
   --bg:#121212;
   --bg-soft:#1a1a1a;
@@ -63,10 +60,8 @@ body.app-dark-mode{
   --fg:#e8e8e8;
   --muted:#a5a5a5;
 }
-
 /* ---------- Global layout ---------- */
 *, *::before, *::after { box-sizing: border-box; }
-
 html, body{
   height:100%;
   background:var(--bg);
@@ -76,25 +71,20 @@ html, body{
   width:100%;
   overflow-x:hidden; /* stop horizontal scroll from wide widgets */
 }
-
 .container-fluid{
   min-height:100%;
   background:transparent;
   color:var(--fg);
-
   /* Keep Bootstrap’s gutter model aligned with .row (-15px margins) */
   padding-left:15px;
   padding-right:15px;
-
   /* Full window width but capped & centered */
   width:100%;
   max-width:var(--app-max-width);
   margin-left:auto;
   margin-right:auto;
-
   flex:1 0 auto;
 }
-
 .content-wrap{
   margin:0 auto;
   padding:16px 20px 40px;
@@ -102,11 +92,9 @@ html, body{
   flex-direction:column;
   flex:1 0 auto;
   min-height:0;
-
   width:100%;
   max-width:var(--app-max-width);
 }
-
 /* ---------- Custom Topbar ---------- */
 .topbar{
   background:#2a2b2f;
@@ -123,15 +111,15 @@ html, body{
   gap:20px;
   padding:12px 20px;
 }
-
 .navbar .container-fluid{
   transform-origin: initial;
 }
-
 body{
   zoom: 90%;
 }
-
+.js-plotly-plot {
+  zoom: 111.111111%;
+}
 #global_overlay.so-backdrop,
 .so-backdrop{
   transform-origin: top left;
@@ -139,19 +127,16 @@ body{
   width: var(--app-viewport-w) !important;
   height: var(--app-viewport-h) !important;
 }
-
 .modal-backdrop{
   inset: 0 !important;
   width: var(--app-viewport-w) !important;
   height: var(--app-viewport-h) !important;
 }
-
 /* Brand */
 .brand-title{ color:#f3f4f6; font-weight:700; }
 .brand-version{ color:#9aa0a6; font-size:.95rem; }
 .brand-version a{ color:#9aa0a6; text-decoration:none; }
 .brand-version a:hover{ color:#ffffff; text-decoration:underline; }
-
 /* Centered nav */
 .topbar .nav{
   display:flex;
@@ -182,7 +167,6 @@ body{
   border-radius:0;
 }
 .topbar .nav a.disabled{ pointer-events:none; opacity:.4; }
-
 /* Right actions */
 .top-actions{
   display:flex; align-items:center; gap:10px; margin-left:auto;
@@ -206,13 +190,11 @@ body{
 .top-actions .btn:disabled, .top-actions .btn.disabled{
   opacity:.55; pointer-events:none; transform:none; box-shadow:none;
 }
-
 @media (max-width: 640px){
   .topbar-inner{ flex-wrap:wrap; gap:10px; }
   .topbar .nav{ order:3; margin-left:0; }
   .top-actions{ margin-left:auto; }
 }
-
 /* Continuous-corner clip-path causes ring/cutout artifacts on buttons in some views. */
 .btn,
 .btn.btn-lg,
@@ -220,7 +202,6 @@ body{
   clip-path: none !important;
   -webkit-clip-path: none !important;
 }
-
 /* Safety: neutralize legacy continuous-corner clipping on all affected UI surfaces. */
 .card,
 .btn,
@@ -250,11 +231,16 @@ body{
   clip-path: none !important;
   -webkit-clip-path: none !important;
 }
-
+.sidebar-data-menu td.sidebar-file-object-name,
+.sidebar-data-menu td.sidebar-file-cell-count {
+  font-weight: 700;
+}
+.sidebar-data-menu td.sidebar-file-cell-count {
+  text-align: center;
+}
 /* ---------- Inputs ---------- */
 .shiny-input-container{ width:100%; }
 .shiny-input-container input[type='file']{ width:100%; }
-
 /* Global dropdown typography (native select + selectize + bootstrap-select). */
 .app-page select.form-control,
 .app-page select.form-select,
@@ -268,7 +254,6 @@ body{
   font-size: var(--app-dropdown-font-size) !important;
   line-height: var(--app-dropdown-line-height);
 }
-
 /* Global compact dropdown control sizing + vertical text centering. */
 .app-page select.form-control,
 .app-page select.form-select,
@@ -279,7 +264,6 @@ body{
   padding-top: var(--app-dropdown-control-padding-y) !important;
   padding-bottom: var(--app-dropdown-control-padding-y) !important;
 }
-
 /* Selectize single-value controls: keep compact height and center content/arrow. */
 .app-page .selectize-control.single .selectize-input {
   min-height: var(--app-dropdown-control-height) !important;
@@ -297,7 +281,6 @@ body{
   top: 50% !important;
   margin-top: -3px !important;
 }
-
 /* ---------- Cards ---------- */
 .card{
   background:var(--card);
@@ -309,7 +292,6 @@ body{
 }
 .card ul, .callout ul{ padding-left:1.2rem; margin-top:6px; margin-bottom:6px; }
 .card li, .callout li{ margin:4px 0; line-height:1.5; }
-
 /* ---------- Callouts ---------- */
 .content-wrap .callout{
   border-left:4px solid; padding:14px 18px; background:white; line-height:1.5;
@@ -327,16 +309,13 @@ body{
 .content-wrap .callout p:last-child{ margin-bottom:0; }
 .content-wrap .callout ul{ margin:0 0 0 1.1rem; }
 .content-wrap .callout li{ margin:3px 0; }
-
 .content-wrap .well,
 .content-wrap .panel,
 .content-wrap .panel-body,
 .content-wrap .card{ border-radius:0; }
-
 .content-wrap .section-title{ margin:28px 0 12px; }
 .content-wrap .callout + .callout{ margin-top:24px; }
 .content-wrap .section-title + .callout{ margin-top:16px; }
-
 /* ---------- Steps ---------- */
 .steps-container{ display:flex; flex-direction:column; }
 .step{
@@ -352,7 +331,6 @@ body{
 .step-dot.muted{ background:#fafafa; color:#6b7280; border-color:#e8e8e8; }
 .step-text h4{ margin:0; font-size:1.55rem; font-weight:600; }
 .step-text p{ margin:2px 0 0; color:#555; }
-
 /* ---------- Footer ---------- */
 .footer{
   border-top:1px solid var(--line);
@@ -370,38 +348,30 @@ body{
 }
 .footer-inner a{ color:var(--muted); text-decoration:none; }
 .footer-inner a:hover{ color:var(--brand-accent); text-decoration:underline; }
-
 /* ---------- Utility ---------- */
 .busy-overlay{ background-color:rgba(255,255,255,0.3); }
-
 /* ---------- Body/tab backgrounds ---------- */
 .tab-content,
 .tab-pane,
 .main-container{ background:transparent; }
-
 .bslib-page-fill{ background:var(--bg); }
-
 /* Let fill-layout main pane use full horizontal space (avoid inherited shell caps). */
 .bslib-page-fill > .bslib-sidebar-layout > .main{
   max-width: none;
 }
-
 /* Plotting pages: remove any remaining tab-shell width clamp in bslib fill layouts. */
 .bslib-page-fill > .bslib-sidebar-layout > .main > .tab-content{
   width: 100%;
   max-width: none;
 }
-
 .bslib-page-fill > .bslib-sidebar-layout > .main > .tab-content > .tab-pane.html-fill-item.html-fill-container:has(> .app-page.plotting-page){
   width: 100% !important;
   max-width: none !important;
 }
-
 .bslib-page-fill > .bslib-sidebar-layout > .main > .tab-content > .tab-pane.html-fill-item.html-fill-container:has(> .app-page.plotting-page) > .app-page.plotting-page{
   width: 100% !important;
   max-width: none !important;
 }
-
 /* ---------- Global Tabset Style ---------- */
 :root{
   --app-tab-text: #111111;
@@ -417,7 +387,6 @@ body{
   --app-dropdown-control-height: 36px;
   --app-dropdown-control-padding-y: 5px;
 }
-
 /* ---------- Shared Lock Overlay Style ---------- */
 .analysis-selector-overlay-wrap{
   position: relative;
@@ -450,7 +419,6 @@ body{
   font-weight:600;
   box-shadow:0 4px 14px rgba(15,23,42,0.08);
 }
-
 /* Never style top app navigation as tabset tabs */
 .navbar .nav,
 .navbar-nav,
@@ -468,7 +436,6 @@ body{
   border-radius: 0 !important;
   white-space: nowrap !important;
 }
-
 /* Apply to tabset tabs only (avoid touching top navbar) */
 .tabbable > .nav.nav-tabs,
 .tabbable > .nav.nav-pills,
@@ -484,7 +451,6 @@ body{
   margin-bottom: 8px !important;
   border-bottom: 1px solid var(--app-tab-border) !important;
 }
-
 .tabbable > .nav.nav-tabs > li,
 .tabbable > .nav.nav-pills > li,
 .tabbable > .nav.nav-tabs > .nav-item,
@@ -500,7 +466,6 @@ body{
   max-width: var(--app-tab-max-width) !important;
   margin-bottom: -1px;
 }
-
 .tabbable > .nav.nav-tabs > li > a,
 .tabbable > .nav.nav-pills > li > a,
 .tabbable > .nav.nav-tabs > .nav-item > a,
@@ -530,7 +495,6 @@ body{
   line-height: 1.2 !important;
   letter-spacing: 0.01em !important;
 }
-
 .tabbable > .nav.nav-tabs > li > a:hover,
 .tabbable > .nav.nav-pills > li > a:hover,
 .tabbable > .nav.nav-tabs > .nav-item > a:hover,
@@ -547,7 +511,6 @@ body{
   background: var(--app-tab-hover-bg) !important;
   border-color: var(--app-tab-border) var(--app-tab-border) transparent var(--app-tab-border) !important;
 }
-
 .tabbable > .nav.nav-tabs > li.active > a,
 .tabbable > .nav.nav-tabs > li.active > a:focus,
 .tabbable > .nav.nav-tabs > li.active > a:hover,
@@ -589,7 +552,6 @@ body{
   border-color: var(--app-tab-border) var(--app-tab-border) var(--app-tab-active-bg) var(--app-tab-border) !important;
   font-weight: 700 !important;
 }
-
 /* Auto font-fit classes are applied by app.js script */
 .tabbable > .nav.nav-tabs .app-tab-fit-sm,
 .tabbable > .nav.nav-pills .app-tab-fit-sm,
@@ -603,18 +565,15 @@ body{
 .app-tabs-wrap .nav.nav-pills .app-tab-fit-xs {
   font-size: 13px !important;
 }
-
 .tabbable > .tab-content,
 .app-tabs-wrap .tab-content {
   padding-top: 22px;
 }
-
 /* Plotting pages should sit flush under navbar; remove inherited top tab-shell inset. */
 .tabbable > .tab-content:has(> .tab-pane.active .plotting-page),
 .app-tabs-wrap > .tab-content:has(> .tab-pane.active .plotting-page) {
   padding-top: 0 !important;
 }
-
 /* Fallback for browsers/builds without :has() support:
    offset the inherited tab-content top padding for active plotting pages. */
 @supports not selector(:has(*)) {
@@ -623,7 +582,6 @@ body{
     margin-top: -22px;
   }
 }
-
 /* Plotting-page internal stage tabs should not add their own top inset. */
 .tabbable:has(> .tab-content > .tab-pane.active .plotting-page) > .nav.nav-tabs,
 .tabbable:has(> .tab-content > .tab-pane.active .plotting-page) > .nav.nav-pills,
@@ -631,7 +589,6 @@ body{
 .app-tabs-wrap:has(> .tab-content > .tab-pane.active .plotting-page) > .nav.nav-pills {
   margin-top: 0 !important;
 }
-
 @media (max-width: 1600px) {
   .tabbable > .nav.nav-tabs > li > a,
   .tabbable > .nav.nav-pills > li > a,
@@ -649,7 +606,6 @@ body{
     padding: 8px 10px !important;
   }
 }
-
 @media (max-width: 1280px) {
   .tabbable > .nav.nav-tabs > li > a,
   .tabbable > .nav.nav-pills > li > a,
@@ -667,7 +623,6 @@ body{
     padding: 7px 9px !important;
   }
 }
-
 /* Light mode: tabset as rounded button rail with sliding active highlight */
 body:not(.app-dark-mode) .tabbable > .nav.nav-tabs,
 body:not(.app-dark-mode) .tabbable > .nav.nav-pills,
@@ -683,7 +638,6 @@ body:not(.app-dark-mode) .app-tabs-wrap .nav.nav-pills {
   margin-bottom: 12px !important;
   box-shadow: none;
 }
-
 body:not(.app-dark-mode) .tabbable > .nav.nav-tabs.app-tab-pill-track::before,
 body:not(.app-dark-mode) .tabbable > .nav.nav-pills.app-tab-pill-track::before,
 body:not(.app-dark-mode) .app-tabs-wrap .nav.nav-tabs.app-tab-pill-track::before,
@@ -701,7 +655,6 @@ body:not(.app-dark-mode) .app-tabs-wrap .nav.nav-pills.app-tab-pill-track::befor
   z-index: 0;
   transition: left 0.26s ease, width 0.26s ease, box-shadow 0.22s ease;
 }
-
 body:not(.app-dark-mode) .tabbable > .nav.nav-tabs > li,
 body:not(.app-dark-mode) .tabbable > .nav.nav-pills > li,
 body:not(.app-dark-mode) .tabbable > .nav.nav-tabs > .nav-item,
@@ -714,7 +667,6 @@ body:not(.app-dark-mode) .app-tabs-wrap .nav.nav-pills > .nav-item {
   z-index: 1;
   margin-bottom: 0;
 }
-
 body:not(.app-dark-mode) .tabbable > .nav.nav-tabs > li > a,
 body:not(.app-dark-mode) .tabbable > .nav.nav-pills > li > a,
 body:not(.app-dark-mode) .tabbable > .nav.nav-tabs > .nav-item > a,
@@ -747,7 +699,6 @@ body:not(.app-dark-mode) .app-tabs-wrap .nav.nav-pills .nav-link {
   box-shadow: none;
   transition: color 0.18s ease, font-weight 0.18s ease, text-shadow 0.18s ease, background-color 0.22s ease, box-shadow 0.22s ease;
 }
-
 body:not(.app-dark-mode) .tabbable > .nav.nav-tabs > li > a:hover,
 body:not(.app-dark-mode) .tabbable > .nav.nav-pills > li > a:hover,
 body:not(.app-dark-mode) .tabbable > .nav.nav-tabs > .nav-item > a:hover,
@@ -766,7 +717,6 @@ body:not(.app-dark-mode) .app-tabs-wrap .nav.nav-pills .nav-link:hover {
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 8px rgba(148, 163, 184, 0.32);
   box-shadow: none;
 }
-
 body:not(.app-dark-mode) .tabbable > .nav.nav-tabs > li.active > a,
 body:not(.app-dark-mode) .tabbable > .nav.nav-tabs > li.active > a:focus,
 body:not(.app-dark-mode) .tabbable > .nav.nav-tabs > li.active > a:hover,
@@ -810,7 +760,6 @@ body:not(.app-dark-mode) .app-tabs-wrap .nav.nav-pills .nav-link.active:hover {
   text-shadow: none;
   box-shadow: none;
 }
-
 /* Dark mode: keep identical tab geometry (padding/height/radius), only swap colors. */
 body.app-dark-mode .tabbable > .nav.nav-tabs,
 body.app-dark-mode .tabbable > .nav.nav-pills,
@@ -826,7 +775,6 @@ body.app-dark-mode .app-tabs-wrap .nav.nav-pills {
   margin-bottom: 12px !important;
   box-shadow: none;
 }
-
 body.app-dark-mode .tabbable > .nav.nav-tabs.app-tab-pill-track::before,
 body.app-dark-mode .tabbable > .nav.nav-pills.app-tab-pill-track::before,
 body.app-dark-mode .app-tabs-wrap .nav.nav-tabs.app-tab-pill-track::before,
@@ -842,7 +790,6 @@ body.app-dark-mode .app-tabs-wrap .nav.nav-pills.app-tab-pill-track::before {
   z-index: 0;
   transition: left 0.26s ease, width 0.26s ease;
 }
-
 body.app-dark-mode .tabbable > .nav.nav-tabs > li,
 body.app-dark-mode .tabbable > .nav.nav-pills > li,
 body.app-dark-mode .tabbable > .nav.nav-tabs > .nav-item,
@@ -855,7 +802,6 @@ body.app-dark-mode .app-tabs-wrap .nav.nav-pills > .nav-item {
   z-index: 1;
   margin-bottom: 0;
 }
-
 body.app-dark-mode .tabbable > .nav.nav-tabs > li > a,
 body.app-dark-mode .tabbable > .nav.nav-pills > li > a,
 body.app-dark-mode .tabbable > .nav.nav-tabs > .nav-item > a,
@@ -886,7 +832,6 @@ body.app-dark-mode .app-tabs-wrap .nav.nav-pills .nav-link {
   max-height: calc(1.14em * 2 + 2px);
   transition: color 0.18s ease, font-weight 0.18s ease;
 }
-
 body.app-dark-mode .tabbable > .nav.nav-tabs > li > a:hover,
 body.app-dark-mode .tabbable > .nav.nav-pills > li > a:hover,
 body.app-dark-mode .tabbable > .nav.nav-tabs > .nav-item > a:hover,
@@ -903,7 +848,6 @@ body.app-dark-mode .app-tabs-wrap .nav.nav-pills .nav-link:hover {
   font-weight: 500 !important;
   background: transparent !important;
 }
-
 body.app-dark-mode .tabbable > .nav.nav-tabs > li.active > a,
 body.app-dark-mode .tabbable > .nav.nav-tabs > li.active > a:focus,
 body.app-dark-mode .tabbable > .nav.nav-tabs > li.active > a:hover,
@@ -945,12 +889,10 @@ body.app-dark-mode .app-tabs-wrap .nav.nav-pills .nav-link.active:hover {
   color: #f3f4f6 !important;
   font-weight: 500 !important;
 }
-
 /* ---------- Width & stability ---------- */
 /* Keep tabs full width, but do not override Bootstrap row width math. */
 .tab-content, .tab-pane { width:100%; }
 [class*="col-"] { min-width:0; }
-
 /* Global plotting-page fix:
    Some plotting tab panes are not in standard container gutter flow, so Bootstrap
    row negative margins can shift content left. Neutralize row side margins only
@@ -960,7 +902,6 @@ body.app-dark-mode .app-tabs-wrap .nav.nav-pills .nav-link.active:hover {
   margin-left: 0 !important;
   margin-right: 0 !important;
 }
-
 /* Make all common Shiny outputs block-level and span the row */
 .shiny-plot-output,
 .shiny-html-output,
@@ -976,20 +917,16 @@ body.app-dark-mode .app-tabs-wrap .nav.nav-pills .nav-link.active:hover {
   width:100%;
   min-width:0;
 }
-
 /* shinycssloaders wrapper should span full row even before content arrives */
 .load-container{ display:block; width:100%; }
 .load-container > :not(.load-overlay){ width:100%; }
-
 /* Stable placeholder heights so empty areas don’t look collapsed */
 .shiny-plot-output,
 .plotly,
 .html-widget{ min-height:260px; }
-
 /* DataTables should size to content; do not reserve fixed vertical space. */
 .datatables,
 .dataTables_wrapper{ min-height:0; }
-
 /* Big panels: Doublet & QC viewer */
 #dbl_umap_plot,
 #dbl_confocal_plot,
@@ -998,17 +935,14 @@ body.app-dark-mode .app-tabs-wrap .nav.nav-pills .nav-link.active:hover {
   width:100%;
   min-height:520px;
 }
-
 /* Tables/widgets shouldn’t force horizontal scroll */
 .dataTables_wrapper,
 .datatables{ overflow-x:auto; }
 table.dataTable{ width:100%; }
-
 /* ---------- Global DataTable density ---------- */
 .dataTables_wrapper table.dataTable {
   table-layout: auto !important;
 }
-
 .dataTables_wrapper table.dataTable thead th {
   font-size: 0.84rem;
   font-weight: 600;
@@ -1019,7 +953,6 @@ table.dataTable{ width:100%; }
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-
 .dataTables_wrapper table.dataTable tbody td {
   font-size: 0.84rem;
   line-height: 1.2;
@@ -1029,7 +962,6 @@ table.dataTable{ width:100%; }
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-
 /* Override DT nowrap helpers so long tokens (including underscores) can wrap. */
 .dataTables_wrapper table.dataTable.nowrap th,
 .dataTables_wrapper table.dataTable.nowrap td,
@@ -1040,20 +972,34 @@ table.dataTable{ width:100%; }
   word-break: break-word !important;
 }
 
+/* Custom Global selection highlight and striped row separator styles for DT tables */
+.dataTables_wrapper table.dataTable tbody tr.selected>*,
+.dataTables_wrapper table.dataTable tbody tr.selected td {
+  box-shadow: inset 0 0 0 9999px #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+.dataTables_wrapper table.dataTable tbody tr.selected:hover>*,
+.dataTables_wrapper table.dataTable tbody tr.selected:hover td {
+  box-shadow: inset 0 0 0 9999px #2563eb !important;
+  color: #ffffff !important;
+}
+
+.dataTables_wrapper table.dataTable tbody tr:nth-child(even):not(.selected)>* {
+  box-shadow: inset 0 0 0 9999px #f7f7f7 !important;
+}
 .dataTables_wrapper .dataTables_info,
 .dataTables_wrapper .dataTables_length label,
 .dataTables_wrapper .dataTables_filter label,
 .dataTables_wrapper .dataTables_paginate {
   font-size: 0.82rem;
 }
-
 .dataTables_wrapper .dataTables_filter input,
 .dataTables_wrapper .dataTables_length select {
   font-size: 0.82rem;
   height: 30px;
   padding: 3px 6px;
 }
-
 /* Shared horizontal-scroll DataTable card contract (metadata/import previews). */
 .app-dt-horizontal-card{
   width: 100%;
@@ -1072,7 +1018,6 @@ table.dataTable{ width:100%; }
   overflow-wrap: normal !important;
   word-break: normal !important;
 }
-
 /* Keep left panels from visually collapsing */
 .well, .panel{ min-height:0; }
 /* ---------- Page title sizing ---------- */
@@ -1098,12 +1043,10 @@ table.dataTable{ width:100%; }
   text-align: center;
   margin-right: 0;
 }
-
 .page-header:has(h1 .fa),
 .page-header:has(h2 .fa) {
   --page-title-sub-indent: calc(1.18em + var(--page-title-icon-gap));
 }
-
 .page-header p {
   line-height: var(--page-title-sub-line-h);
   font-size: 0.95rem;
@@ -1111,14 +1054,12 @@ table.dataTable{ width:100%; }
   margin-left: var(--page-title-sub-indent, 0);
   color: #5a6472;
 }
-
 /* ---------- Card-page title system (global source of truth) ---------- */
 .app-page .card-page-header {
   padding: 0 0 0 var(--page-title-left-offset);
   margin-top: 2px;
   margin-bottom: 12px;
 }
-
 .card-page-title-row {
   display: flex;
   align-items: center;
@@ -1126,14 +1067,12 @@ table.dataTable{ width:100%; }
   gap: 10px;
   margin-bottom: 6px;
 }
-
 .card-page-title .fa {
   width: 1.18em;
   min-width: 1.18em;
   text-align: center;
   margin-right: 0;
 }
-
 .card-page-title {
   display: flex;
   align-items: center;
@@ -1142,13 +1081,11 @@ table.dataTable{ width:100%; }
   line-height: var(--page-title-line-h);
   letter-spacing: -0.01em;
 }
-
 .card-page-title-right {
   display: inline-flex;
   align-items: center;
   gap: 8px;
 }
-
 .card-page-title .fas,
 .card-page-title .far,
 .card-page-title .fab,
@@ -1161,21 +1098,17 @@ table.dataTable{ width:100%; }
   text-align: center;
   margin-right: 0;
 }
-
 .card-page-header-title {
   font-size: var(--page-title-size) !important;
   font-weight: 700 !important;
 }
-
 .card-page-card-title {
   font-size: 1rem !important;
   font-weight: 700 !important;
 }
-
 .card-page-header:has(.card-page-title .fa) {
   --card-page-title-sub-indent: calc(1.18em + var(--page-title-icon-gap));
 }
-
 .card-page-header:has(.card-page-title .fas),
 .card-page-header:has(.card-page-title .far),
 .card-page-header:has(.card-page-title .fab),
@@ -1185,7 +1118,6 @@ table.dataTable{ width:100%; }
 .card-page-header:has(.card-page-title svg.svg-inline--fa) {
   --card-page-title-sub-indent: calc(1.18em + var(--page-title-icon-gap));
 }
-
 .card-page-header .card-page-subtitle {
   font-size: 0.95rem;
   line-height: var(--page-title-sub-line-h);
@@ -1197,7 +1129,6 @@ h3 {
   font-size: 1.2rem;
   font-weight: 700;
 }
-
 /* ---------- Global page shell/card system ---------- */
 .app-page > .container-fluid{
   background: transparent;
@@ -1207,42 +1138,39 @@ h3 {
   margin-top: 0;
   box-shadow: none;
 }
-
 /* Plotting pages: no extra top inset so sticky left panels can sit flush to navbar. */
 .plotting-page > .container-fluid{
   padding-top: 0;
   padding-bottom: 0;
 }
-
 /* Plotting pages use .wl-side cards with 14px inner text inset. */
 .plotting-page{
   --page-title-left-offset: 14px;
 }
-
 /* Plotting pages share one global width model (no per-page exceptions). */
 .app-page.plotting-page > .container-fluid{
   max-width: none;
   margin-left: 0;
   margin-right: 0;
 }
-
 /* Keep active plotting tab pane top-anchored without overriding Bootstrap tab visibility. */
-.app-page.plotting-page .tab-pane.active.html-fill-container{
+.app-page.plotting-page .tab-pane.active.show.html-fill-container{
   display: flex !important;
   flex-direction: column !important;
   justify-content: flex-start !important;
   align-content: flex-start !important;
   align-items: stretch !important;
 }
-
+.app-page.plotting-page .tab-pane.active.html-fill-container:not(.show){
+  display: none !important;
+}
 /* In fill-tab flex panes, keep immediate content wrappers full-width (no shrink-to-content). */
-.app-page.plotting-page .tab-pane.active.html-fill-container > *{
+.app-page.plotting-page .tab-pane.active.show.html-fill-container > *{
   width: 100% !important;
   max-width: 100% !important;
   min-width: 0 !important;
   align-self: stretch !important;
 }
-
 /* Tabset wrappers on plotting pages must always occupy full available row width. */
 .app-page.plotting-page .tabbable,
 .app-page.plotting-page .tabbable > .tab-content,
@@ -1251,7 +1179,6 @@ h3 {
   max-width: 100%;
   min-width: 0;
 }
-
 .app-page .page-header,
 .app-page .header-row{
   background: transparent;
@@ -1261,7 +1188,6 @@ h3 {
   margin: 6px 0 10px 0;
   box-shadow: none;
 }
-
 /* Tighten title-to-first-content spacing globally without changing regular card rhythm. */
 .app-page .page-header + .card,
 .app-page .header-row + .card,
@@ -1269,7 +1195,6 @@ h3 {
 .app-page .header-row + .row .card {
   margin-top: 8px;
 }
-
 /* Align unboxed text blocks with boxed content text baseline */
 .app-page > .container-fluid > h3,
 .app-page > .container-fluid > h4,
@@ -1283,7 +1208,6 @@ h3 {
 .app-page .tab-pane > ol {
   margin-left: var(--page-title-left-offset);
 }
-
 /* Legacy titlePanel() support: keep plain title (no card) */
 .app-page > .container-fluid > .row > .col-sm-12 > h2{
   display: block;
@@ -1294,13 +1218,11 @@ h3 {
   margin: 6px 0 10px 0;
   box-shadow: none;
 }
-
 /* Use cards as section separators instead of long horizontal rules */
 .app-page hr{
   border-top-color: transparent;
   margin: 10px 0;
 }
-
 .app-page .well,
 .app-page .panel,
 .app-page .card{
@@ -1309,7 +1231,6 @@ h3 {
   border-radius: 12px;
   box-shadow: 0 1px 2px rgba(0,0,0,0.04);
 }
-
 /* Global ribbon (alert) system: consistent spacing + keep semantic colors. */
 .app-page .alert{
   margin: 6px 0 8px;
@@ -1326,14 +1247,12 @@ h3 {
   border-color: #dc3545;
   color: #ffffff;
 }
-
 /* Requested reusable emphasis styles */
 .app-page .focus_card_style{
   border-radius: 12px;
   border: 1px solid #bbf7d0;
   box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.24), 0 6px 14px rgba(34, 197, 94, 0.16);
 }
-
 .plotting-page .plotting-left-panel{
   height: auto;
   max-height: none;
@@ -1345,7 +1264,6 @@ h3 {
   align-self: stretch;
   margin-bottom: 0;
 }
-
 /* Shiny sidebarPanel() may inject form.well or div.well/panel wrappers.
    Neutralize that wrapper so only the inner .wl-side is the visible card. */
 .plotting-page .plotting-left-panel > form.well,
@@ -1357,7 +1275,6 @@ h3 {
   background: transparent;
   box-shadow: none;
 }
-
 /* Float the left panel when left side is taller than plot side. */
 .plotting-page.float-left-panel .plotting-left-panel{
   height: calc(var(--app-viewport-h) - var(--app-shell-top-h) - var(--footer-h) - (2 * var(--plotting-float-gap-y)));
@@ -1369,7 +1286,6 @@ h3 {
   top: 0;
   align-self: flex-start;
 }
-
 /* Float the plot area when plot side is taller than left side. */
 .plotting-page.float-plot-area .plot_area_card_style{
   height: calc(var(--app-viewport-h) - var(--app-shell-top-h) - var(--footer-h) - (2 * var(--plotting-float-gap-y)));
@@ -1380,12 +1296,10 @@ h3 {
   top: 0;
   align-self: flex-start;
 }
-
 /* Only the floating side should own the vertical scrollbar. */
 .plotting-page.float-left-panel .plot_area_card_style{
   overflow: visible;
 }
-
 .plotting-page.float-plot-area .plotting-left-panel{
   overflow-y: visible;
   overflow-x: visible;
@@ -1395,14 +1309,12 @@ h3 {
   margin-top: 0 !important;
   padding-top: 0 !important;
 }
-
 /* Left control rail: no border outline */
 .plotting-page .plotting-left-panel{
   border: 0 !important;
   box-shadow: none !important;
   background: transparent !important;
 }
-
 .plotting-page .plotting-left-panel .wl-side{
   background: var(--card);
   border: 0 !important;
@@ -1410,11 +1322,9 @@ h3 {
   padding: 12px 14px;
   box-shadow: 0 3px 10px rgba(15, 23, 42, 0.05) !important;
 }
-
 .plotting-page .plotting-left-panel .wl-side:last-child{
   margin-bottom: 0 !important;
 }
-
 @media (max-width: 991px){
   .plotting-page .plotting-left-panel{
     position: static;
@@ -1422,13 +1332,11 @@ h3 {
     align-self: stretch;
   }
 }
-
 .app-page .important_card_style{
   border-radius: 12px;
   border: 1px solid #fecaca;
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.24), 0 6px 14px rgba(239, 68, 68, 0.16);
 }
-
 /* Shared beta badge (yellow rounded square/pill) */
 .beta-badge{
   display: inline-flex;
@@ -1447,18 +1355,15 @@ h3 {
   line-height: 1.15;
   vertical-align: middle;
 }
-
 .beta-badge--new{
   border-color: #22c55e;
   background: #dcfce7;
   color: #166534;
 }
-
 .beta-badge .beta-badge__icon{
   font-size: 0.78em;
   line-height: 1;
 }
-
 .seurat5-badge{
   display: inline-flex;
   align-items: center;
@@ -1476,7 +1381,6 @@ h3 {
   line-height: 1.15;
   vertical-align: middle;
 }
-
 .alpha-badge{
   display: inline-flex;
   align-items: center;
@@ -1494,12 +1398,10 @@ h3 {
   line-height: 1.15;
   vertical-align: middle;
 }
-
 .alpha-badge .alpha-badge__icon{
   font-size: 0.78em;
   line-height: 1;
 }
-
 .deprecated-badge{
   display: inline-flex;
   align-items: center;
@@ -1517,12 +1419,10 @@ h3 {
   line-height: 1.15;
   vertical-align: middle;
 }
-
 .deprecated-badge .deprecated-badge__icon{
   font-size: 0.78em;
   line-height: 1;
 }
-
 .ui-structure-flag{
   display: inline-flex;
   align-items: center;
@@ -1537,14 +1437,12 @@ h3 {
   line-height: 1.15;
   vertical-align: middle;
 }
-
 /* Left control panels are structural, not emphasis targets. */
 .plotting-page .plotting-left-panel.focus_card_style,
 .plotting-page .plotting-left-panel.important_card_style{
   border: 1px solid var(--card-border);
   box-shadow: none;
 }
-
 /* Plot area card with no visual fill, fixed viewport height and scroll */
 .app-page .plot_area_card_style{
   background: transparent;
@@ -1557,7 +1455,6 @@ h3 {
   padding: 0;
   box-shadow: none;
 }
-
 /* Keep a clear gutter between left controls and inner plotting cards. */
 .plotting-page .plot_area_card_style{
   padding: 0 14px 14px 12px;
@@ -1565,13 +1462,11 @@ h3 {
   row-gap: 12px;
   align-content: start;
 }
-
 @media (max-width: 991px){
   .plotting-page .plot_area_card_style{
     padding: 0 0 12px 0;
   }
 }
-
 /* Keep legacy bootstrap boxes neutral inside restored plot area wrapper. */
 .plotting-page .plot_area_card_style .well,
 .plotting-page .plot_area_card_style .panel{
@@ -1579,7 +1474,6 @@ h3 {
   border: 0;
   box-shadow: none;
 }
-
 /* No nested visual boxing inside main plot cards. */
 .plotting-page .plot_area_card_style .wl-side .card,
 .plotting-page .plot_area_card_style .wl-side .well,
@@ -1590,7 +1484,6 @@ h3 {
   margin: 0;
   padding: 0;
 }
-
 /* Plot sections inside plotting area should be the visible cards. */
 .plotting-page .plot_area_card_style .wl-side{
   background: var(--card);
@@ -1600,7 +1493,6 @@ h3 {
   padding: 12px 14px;
   margin: 0;
 }
-
 /* Global containment: prevent inner plots/widgets from exceeding card width. */
 .app-page .wl-side,
 .app-page .card,
@@ -1611,19 +1503,16 @@ h3 {
   min-width: 0;
   max-width: 100%;
 }
-
 .plotting-page .plot_area_card_style > .wl-side > .row,
 .plotting-page .plot_area_card_style > .wl-side [class*='col-']{
   min-width: 0;
 }
-
 /* Grid-item safety: prevent anonymous wrappers (e.g. margin-top div around code card)
    from expanding the whole right panel width via long preformatted code lines. */
 .plotting-page .plot_area_card_style > *{
   min-width: 0;
   max-width: 100%;
 }
-
 .plotting-page .plot_area_card_style .shiny-plot-output,
 .plotting-page .plot_area_card_style .plotly,
 .plotting-page .plot_area_card_style .html-widget,
@@ -1636,7 +1525,6 @@ body.figure-studio-active .app-page .shiny-spinner-output-container{
   max-width: 100%;
   min-width: 0;
 }
-
 /* Advanced analysis full-width guard:
    prevent tab/row/card wrappers from collapsing plot cards below available plot area width. */
 .plotting-page .plot_area_card_style > .row,
@@ -1644,7 +1532,6 @@ body.figure-studio-active .app-page .shiny-spinner-output-container{
   width: 100%;
   max-width: 100%;
 }
-
 .plotting-page .plot_area_card_style > .row > .col-12,
 .plotting-page .plot_area_card_style > .row > .col-sm-12,
 .plotting-page .plot_area_card_style > .row > .col-md-12,
@@ -1654,18 +1541,15 @@ body.figure-studio-active .app-page .shiny-spinner-output-container{
   max-width: 100% !important;
   min-width: 0 !important;
 }
-
 .plotting-page .plot_area_card_style .card{
   width: 100%;
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
 }
-
 .plotting-page .plot_area_card_style > .wl-side:last-child{
   margin-bottom: 0;
 }
-
 /* Figure code card width guards */
 .wl-figure-code-card,
 .wl-figure-code-scroll,
@@ -1674,7 +1558,6 @@ body.figure-studio-active .app-page .shiny-spinner-output-container{
   max-width: 100%;
   min-width: 0;
 }
-
 /* Standard not-ready placeholder for plot cards across pages. */
 .plot-card-not-ready{
   width: 100%;
@@ -1689,7 +1572,6 @@ body.figure-studio-active .app-page .shiny-spinner-output-container{
   text-align: center;
   padding: 12px;
 }
-
 /* Figure Studio preview: keep rendered plot centered and scaled to fit card. */
 .figure-preview-stage{
   width: 100%;
@@ -1702,39 +1584,33 @@ body.figure-studio-active .app-page .shiny-spinner-output-container{
   overflow-x: hidden;
   overflow-y: auto;
 }
-
 .figure-preview-frame{
   transform-origin: center center;
   margin: 0 auto;
   will-change: transform;
 }
-
 .figure-preview-frame .figure-load-wrap{
   width: 100%;
   height: 100%;
 }
-
 .figure-preview-frame .shiny-plot-output{
   width: 100% !important;
   height: 100% !important;
 }
-
 /* Figure Studio desktop layout:
    keep left controls fixed-width while right preview takes remaining space. */
-@media (min-width: 992px){
+@media (min-width: 992px) and (orientation: landscape){
   body.figure-studio-active .plotting-page > .container-fluid > .row{
     display: flex;
     flex-wrap: nowrap;
     align-items: flex-start;
   }
-
   body.figure-studio-active .plotting-page .plotting-left-panel.col-sm-4{
     float: none;
     flex: 0 0 clamp(420px, 30vw, 520px);
     width: clamp(420px, 30vw, 520px);
     max-width: clamp(420px, 30vw, 520px);
   }
-
   body.figure-studio-active .plotting-page .plot_area_card_style.col-sm-8{
     float: none;
     flex: 1 1 auto;
@@ -1743,7 +1619,6 @@ body.figure-studio-active .app-page .shiny-spinner-output-container{
     min-width: 0;
   }
 }
-
 @media (max-width: 991px){
   .figure-preview-stage{
     min-height: 300px;
@@ -1751,13 +1626,11 @@ body.figure-studio-active .app-page .shiny-spinner-output-container{
     max-height: none;
   }
 }
-
 body.app-dark-mode .plotting-page .plot_area_card_style{
   background: transparent;
   border: 0;
   box-shadow: none;
 }
-
 body.app-dark-mode .app-page .card,
 body.app-dark-mode .app-page .wl-side,
 body.app-dark-mode .app-page .well,
@@ -1766,11 +1639,9 @@ body.app-dark-mode .app-page .panel{
   border-color: var(--card-border);
   color: var(--fg);
 }
-
 body.app-dark-mode .plotting-page .plotting-left-panel .wl-side{
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28) !important;
 }
-
 body.app-dark-mode .app-page .form-control,
 body.app-dark-mode .app-page .selectize-input,
 body.app-dark-mode .app-page .selectize-dropdown{
@@ -1778,18 +1649,15 @@ body.app-dark-mode .app-page .selectize-dropdown{
   border-color: var(--card-border);
   color: var(--fg);
 }
-
 /* QC + Analysis shared template contract */
 .plotting-page > .container-fluid > .row:first-child + p{
   padding-left: 10px;
   margin-top: -2px;
   margin-bottom: 10px;
 }
-
 .plotting-page .qc-subtitle{
   margin-top: 0;
 }
-
 /* Plotting page section titles: smaller but bold for visual consistency */
 .plotting-page .wl-side h4{
   font-size: 1.02rem;
@@ -1799,11 +1667,9 @@ body.app-dark-mode .app-page .selectize-dropdown{
   margin-bottom: 10px;
   color: #374151;
 }
-
 body.app-dark-mode .plotting-page .wl-side h4{
   color: #d1d5db;
 }
-
 /* Shared compact notes under controls/cards */
 .control-note{
   font-size: var(--control-note-font-size);
@@ -1812,20 +1678,16 @@ body.app-dark-mode .plotting-page .wl-side h4{
   margin-bottom: var(--control-note-margin-bottom);
   color: var(--muted);
 }
-
 /* Left-panel control spacing: tighten control->note without negative margins. */
 .plotting-page .plotting-left-panel .wl-side .shiny-input-container{
   margin-bottom: 4px;
 }
-
 .control-note p{
   margin: 0;
 }
-
 .control-note strong{
   font-weight: 700;
 }
-
 /* Global control stack rhythm: checkbox/help-note/button blocks in cards. */
 .app-control-stack{
   display: flex;
@@ -1847,12 +1709,10 @@ body.app-dark-mode .plotting-page .wl-side h4{
 .app-control-note{
   margin: 0 0 4px 0;
 }
-
 .cellchat-plot-card .control-note{
   margin-top: 2px;
   margin-bottom: 8px;
 }
-
 /* Official global note shape (from Workspace/RDS note contract). */
 .app-note-box{
   margin-top: 2px;
@@ -1865,7 +1725,6 @@ body.app-dark-mode .plotting-page .wl-side h4{
   line-height: 1.35;
   box-shadow: 0 1px 2px rgba(30, 64, 175, 0.08);
 }
-
 .app-secondary-status,
 .app-secondary-status p,
 .app-secondary-status .shiny-text-output{
@@ -1873,7 +1732,6 @@ body.app-dark-mode .plotting-page .wl-side h4{
   color: #6b7280 !important;
   line-height: 1.35;
 }
-
 /* Global accordion behavior contract (shared open/close transition). */
 .app-accordion > summary{
   list-style: none;
@@ -1894,7 +1752,6 @@ body.app-dark-mode .plotting-page .wl-side h4{
   opacity: 1;
   overflow: visible;
 }
-
 /* Global single-line clamp utility with native hover title support. */
 .app-text-clamp-1{
   display: inline-block;
@@ -1905,12 +1762,10 @@ body.app-dark-mode .plotting-page .wl-side h4{
   white-space: nowrap;
   vertical-align: bottom;
 }
-
 /* Recluster New shared global styling (no page-local CSS). */
 .recluster-new-page{
-  --recluster-plot-h: clamp(520px, calc(var(--app-viewport-h) - var(--app-shell-top-h) - var(--footer-h) - 320px), 1200px);
+  --recluster-plot-h: clamp(520px, calc(var(--app-viewport-h, 100vh) - var(--app-shell-top-h, 0px) - var(--footer-h, 0px) - 320px), 1200px);
 }
-
 .recluster-new-page #recluster_new_workspace_tabs + .tab-content{
   margin: 0;
   padding: 0;
@@ -1958,7 +1813,6 @@ body.app-dark-mode .plotting-page .wl-side h4{
   overflow: visible !important;
   align-self: stretch !important;
 }
-
 .recluster-new-page #recluster_new_tabs{
   display: flex;
   flex-wrap: nowrap;
@@ -2183,7 +2037,6 @@ body.app-dark-mode .plotting-page .wl-side h4{
 .recluster-new-page .recluster-new-violin-wrap .selectize-dropdown{
   font-size: 13px;
 }
-
 .recluster-new-page .recluster-new-meta-note.control-note{
   margin: 0 0 8px 0;
 }
@@ -2199,7 +2052,6 @@ body.app-dark-mode .plotting-page .wl-side h4{
   margin: 0;
   line-height: 1.45;
 }
-
 .recluster-new-page .recluster-new-metadata-bucket,
 .recluster-new-page .recluster-new-metadata-col{
   border: 0;
@@ -2353,7 +2205,6 @@ body.app-dark-mode .plotting-page .wl-side h4{
   padding: 0;
   cursor: pointer;
 }
-
 /* Ensure colourpicker popup is never clipped by accordion containers. */
 .sp-container{
   z-index: 2500 !important;
@@ -2407,7 +2258,6 @@ body.app-dark-mode .plotting-page .wl-side h4{
 .recluster-new-page .recluster-new-controls-wrap .btn{
   font-size: 12px !important;
 }
-
 /* ---------- Figure Studio canvas (theme-aware) ---------- */
 body.figure-studio-active {
   --studio-bg: var(--bg);
@@ -2420,7 +2270,6 @@ body.figure-studio-active {
   --studio-scroll-thumb: #a8a8a8;
   --studio-scroll-thumb-hover: #8e8e8e;
 }
-
 body.app-dark-mode.figure-studio-active {
   --studio-bg: #0f0f0f;
   --studio-panel: #1c1c1c;
@@ -2432,7 +2281,6 @@ body.app-dark-mode.figure-studio-active {
   --studio-scroll-thumb: #4d4f57;
   --studio-scroll-thumb-hover: #62646d;
 }
-
 body.figure-studio-active .bslib-page-fill > .bslib-sidebar-layout > .main,
 body.figure-studio-active .tab-content,
 body.figure-studio-active .tab-pane.active,
@@ -2442,32 +2290,27 @@ body.figure-studio-active .app-page > .container-fluid {
   background-image: none;
   color: var(--studio-fg);
 }
-
 /* Eliminate frame around Figure Studio canvas */
 body.figure-studio-active {
   background: var(--studio-bg) !important;
 }
-
 body.figure-studio-active .bslib-page-fill,
 body.figure-studio-active .bslib-page-fill > .bslib-sidebar-layout {
   background: var(--studio-bg) !important;
   margin: 0 !important;
   padding: 0 !important;
 }
-
 body.figure-studio-active .bslib-page-fill > .bslib-sidebar-layout > .main {
   background: var(--studio-bg) !important;
   margin: 0 !important;
   padding: 0 !important;
   border: 0 !important;
 }
-
 body.figure-studio-active .bslib-page-fill > .bslib-sidebar-layout > .main > .tab-content {
   background: var(--studio-bg) !important;
   margin: 0 !important;
   padding: 0 !important;
 }
-
 body.figure-studio-active .bslib-page-fill .container-fluid {
   width: 100% !important;
   max-width: var(--app-max-width) !important;
@@ -2477,26 +2320,22 @@ body.figure-studio-active .bslib-page-fill .container-fluid {
   padding-right: 15px !important;
   background: var(--studio-bg) !important;
 }
-
 body.figure-studio-active .tab-content {
   background: var(--studio-bg) !important;
   margin: 0 !important;
   padding: 0 !important;
   padding-top: 0 !important;
 }
-
 body.figure-studio-active .tab-pane.active {
   background: var(--studio-bg) !important;
   margin: 0 !important;
   padding: 0 !important;
   border: 0 !important;
 }
-
 body.figure-studio-active .app-page {
   margin: 0 !important;
   padding: 0 !important;
 }
-
 body.figure-studio-active .app-page > .container-fluid {
   background: var(--studio-bg) !important;
   margin-top: 0 !important;
@@ -2506,24 +2345,20 @@ body.figure-studio-active .app-page > .container-fluid {
   max-width: var(--app-max-width) !important;
   padding: var(--page-pad-top) var(--page-pad-x) var(--page-pad-bottom) !important;
 }
-
 body.figure-studio-active .footer,
 body.figure-studio-active .footer-inner {
   background: var(--studio-bg) !important;
   color: var(--studio-muted) !important;
   border-top-color: var(--studio-border) !important;
 }
-
 body.figure-studio-active .footer a,
 body.figure-studio-active .footer-inner a {
   color: var(--studio-muted) !important;
 }
-
 body.figure-studio-active .footer a:hover,
 body.figure-studio-active .footer-inner a:hover {
   color: var(--studio-fg) !important;
 }
-
 body.figure-studio-active .app-page .well,
 body.figure-studio-active .app-page .panel,
 body.figure-studio-active .app-page .card,
@@ -2534,7 +2369,6 @@ body.figure-studio-active .app-page .main-panel {
   color: var(--studio-fg);
   box-shadow: none;
 }
-
 /* Figure lab cards: shared styles (replaces page-inline hardcoded CSS). */
 body.figure-studio-active .app-page .lab-hero,
 body.figure-studio-active .app-page .poline-hero {
@@ -2545,19 +2379,16 @@ body.figure-studio-active .app-page .poline-hero {
   padding: 14px;
   margin-bottom: 12px;
 }
-
 body.figure-studio-active .app-page .lab-hero h3,
 body.figure-studio-active .app-page .lab-hero p,
 body.figure-studio-active .app-page .poline-hero h3,
 body.figure-studio-active .app-page .poline-hero p {
   color: var(--studio-fg) !important;
 }
-
 body.figure-studio-active .app-page .poline-credit,
 body.figure-studio-active .app-page .poline-credit a {
   color: var(--studio-muted) !important;
 }
-
 body.figure-studio-active .app-page .lab-card,
 body.figure-studio-active .app-page .poline-card {
   border: 1px solid var(--studio-border);
@@ -2568,47 +2399,39 @@ body.figure-studio-active .app-page .poline-card {
   margin-bottom: 12px;
   box-shadow: 0 1px 2px rgba(0,0,0,0.12);
 }
-
 body.figure-studio-active .app-page .lab-card h4,
 body.figure-studio-active .app-page .poline-card h4 {
   margin-top: 0;
   color: var(--studio-fg);
 }
-
 body.figure-studio-active .app-page .lab-controls .btn {
   margin-right: 6px;
   margin-bottom: 6px;
 }
-
 body.figure-studio-active .app-page .lab-swatch-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
 }
-
 body.figure-studio-active .app-page .poline-swatches {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
   gap: 8px;
   margin-top: 10px;
 }
-
 body.figure-studio-active .app-page .lab-chip,
 body.figure-studio-active .app-page .poline-chip {
   border-radius: 8px;
   border: 1px solid var(--studio-border);
 }
-
 body.figure-studio-active .app-page .lab-chip {
   width: 58px;
   height: 26px;
 }
-
 body.figure-studio-active .app-page .poline-chip {
   height: 28px;
 }
-
 body.figure-studio-active .app-page .lab-code,
 body.figure-studio-active .app-page .poline-code {
   max-height: 260px;
@@ -2621,20 +2444,17 @@ body.figure-studio-active .app-page .poline-code {
   font-family: Menlo, Consolas, monospace;
   font-size: 12px;
 }
-
 body.figure-studio-active .app-page .lab-muted-note,
 body.figure-studio-active .app-page .poline-muted {
   margin: 4px 0 8px 0;
   color: var(--studio-muted);
   font-size: 0.85rem;
 }
-
 body.app-dark-mode.figure-studio-active .app-page .motion-color-picker .mcp-shell,
 body.app-dark-mode.figure-studio-active .app-page .curve-color-picker .ccp-shell {
   background: radial-gradient(circle at 30% 20%, #16191f 0%, #0f1217 60%, #0a0d12 100%) !important;
   border-color: var(--studio-border) !important;
 }
-
 body.figure-studio-active .app-page p,
 body.figure-studio-active .app-page label,
 body.figure-studio-active .app-page .help-block,
@@ -2644,14 +2464,12 @@ body.figure-studio-active .app-page .checkbox,
 body.figure-studio-active .app-page em {
   color: var(--studio-fg);
 }
-
 /* Keep muted helper notes readable in Figure Studio dark mode. */
 body.app-dark-mode.figure-studio-active .app-page .text-muted,
 body.app-dark-mode.figure-studio-active .app-page .help-block.text-muted,
 body.app-dark-mode.figure-studio-active .app-page p.text-muted {
   color: var(--studio-muted) !important;
 }
-
 /* Do not leak Figure Studio text palette into generic app modals (Help/Admin/etc). */
 body.figure-studio-active .modal:not(.figure-modal-dark-dialog) .modal-title,
 body.figure-studio-active .modal:not(.figure-modal-dark-dialog) .modal-content,
@@ -2661,11 +2479,9 @@ body.figure-studio-active .modal:not(.figure-modal-dark-dialog) .modal-body labe
 body.figure-studio-active .modal:not(.figure-modal-dark-dialog) .modal-body .help-block {
   color: #1f2937 !important;
 }
-
 body.figure-studio-active .modal:not(.figure-modal-dark-dialog) .modal-body .text-muted {
   color: #6b7280 !important;
 }
-
 /* Keep global title sizing/spacing; only adjust figure title color. */
 body.figure-studio-active .app-page .page-header h1,
 body.figure-studio-active .app-page .page-header h2,
@@ -2675,11 +2491,9 @@ body.figure-studio-active .app-page > .container-fluid > .row > .col-sm-12 > h2,
 body.figure-studio-active .app-page > .container-fluid > h3 {
   color: var(--studio-fg);
 }
-
 body.figure-studio-active .app-page hr {
   border-top-color: var(--studio-border);
 }
-
 body.app-dark-mode.figure-studio-active .app-page .form-control,
 body.app-dark-mode.figure-studio-active .app-page .selectize-input,
 body.app-dark-mode.figure-studio-active .app-page .selectize-dropdown,
@@ -2690,7 +2504,6 @@ body.app-dark-mode.figure-studio-active .app-page .irs-grid-text {
   border-color: #3a3b40;
   color: var(--studio-fg);
 }
-
 body.app-dark-mode.figure-studio-active .app-page .btn,
 body.app-dark-mode.figure-studio-active .app-page .btn-default,
 body.app-dark-mode.figure-studio-active .app-page .btn-primary,
@@ -2700,7 +2513,6 @@ body.app-dark-mode.figure-studio-active .app-page .btn-success {
   border-color: #474950;
   color: #f3f4f6;
 }
-
 body.app-dark-mode.figure-studio-active .app-page .btn:hover,
 body.app-dark-mode.figure-studio-active .app-page .btn-default:hover,
 body.app-dark-mode.figure-studio-active .app-page .btn-primary:hover,
@@ -2710,7 +2522,6 @@ body.app-dark-mode.figure-studio-active .app-page .btn-success:hover {
   border-color: #5a5d66;
   color: #fafafa;
 }
-
 body.app-dark-mode.figure-studio-active .app-page .btn:focus,
 body.app-dark-mode.figure-studio-active .app-page .btn:focus-visible,
 body.app-dark-mode.figure-studio-active .app-page .btn.focus,
@@ -2723,7 +2534,6 @@ body.app-dark-mode.figure-studio-active .app-page .btn-outline-secondary:focus {
   outline: none;
   box-shadow: none !important;
 }
-
 body.app-dark-mode.figure-studio-active .app-page .form-control:focus,
 body.app-dark-mode.figure-studio-active .app-page .form-control:focus-visible,
 body.app-dark-mode.figure-studio-active .app-page .selectize-input.focus,
@@ -2733,14 +2543,12 @@ body.app-dark-mode.figure-studio-active .app-page .selectize-control.single .sel
   box-shadow: none !important;
   border-color: #575962;
 }
-
 body.figure-studio-active .tab-pane.active > .container-fluid,
 body.figure-studio-active .tab-pane.active .app-page > .container-fluid {
   max-width: none;
   margin-left: 0;
   margin-right: 0;
 }
-
 /* Smooth transition when entering/exiting Figure Studio dark mode. */
 .bslib-page-fill > .bslib-sidebar-layout > .main,
 .tab-content,
@@ -2754,7 +2562,6 @@ body.figure-studio-active .tab-pane.active .app-page > .container-fluid {
 .app-page .main-panel {
   transition: background-color 220ms ease, color 180ms ease, border-color 220ms ease;
 }
-
 @media (prefers-reduced-motion: reduce) {
   .bslib-page-fill > .bslib-sidebar-layout > .main,
   .tab-content,
@@ -2769,28 +2576,383 @@ body.figure-studio-active .tab-pane.active .app-page > .container-fluid {
     transition: none;
   }
 }
-
 /* Figure Studio scrollbar */
 body.figure-studio-active {
   scrollbar-width: thin;
   scrollbar-color: var(--studio-scroll-thumb) var(--studio-scroll-track);
 }
-
 body.figure-studio-active ::-webkit-scrollbar {
   width: 12px;
   height: 12px;
 }
-
 body.figure-studio-active ::-webkit-scrollbar-track {
   background: var(--studio-scroll-track);
 }
-
 body.figure-studio-active ::-webkit-scrollbar-thumb {
   background-color: var(--studio-scroll-thumb);
   border-radius: 8px;
   border: 2px solid var(--studio-scroll-track);
 }
-
 body.figure-studio-active ::-webkit-scrollbar-thumb:hover {
   background-color: var(--studio-scroll-thumb-hover);
+}
+/* ==========================================================================
+   Wan Lab - Portrait Orientation UI Optimizations
+   ========================================================================== */
+@media (max-width: 991.98px), (orientation: portrait) {
+  /* Stack plotting layout vertically (plots on top, settings below) */
+  .plotting-page .row:not(.analysis-header-row) {
+    display: flex !important;
+    flex-direction: column-reverse !important;
+  }
+  .plotting-page .plotting-left-panel,
+  .plotting-page .plot_area_card_style {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 0 0 100% !important;
+  }
+  /* Disable viewport height clamps and sticky positioning */
+  .plotting-page.float-left-panel .plotting-left-panel,
+  .plotting-page.float-plot-area .plot_area_card_style {
+    position: static !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  /* Parent scroll container top-offset & containment overrides */
+  .bslib-page-fill > .bslib-sidebar-layout > .main > .tab-content > .tab-pane.html-fill-item.html-fill-container:has(> .app-page.plotting-page) {
+    overflow-y: auto !important;
+  }
+  .app-page.plotting-page {
+    height: auto !important;
+    min-height: 100% !important;
+  }
+  /* ==========================================================================
+     Portrait left panel: flex-wrap multi-column layout.
+     Using flexbox (NOT css columns) so cards are NEVER split regardless of
+     how tall they are. Each .wl-side card is a flex item — indivisible.
+     flex: 1 1 280px → browser fills as many cards per row as fit (~3 at 1080px).
+     ========================================================================== */
+    .plotting-page .plotting-left-panel {
+     display: flex !important;
+     flex-direction: row !important;
+     flex-wrap: wrap !important;
+     align-items: flex-start !important;
+     gap: 30px !important;
+     /* neutralize any column-* that may bleed from desktop rules */
+     column-width: unset !important;
+     column-count: unset !important;
+     column-gap: unset !important;
+   }
+   .plotting-page #analysis_prep_left_col,
+   #analysis_prep_row.analysis-integration-locked > #analysis_prep_left_col {
+     display: grid !important;
+     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+     gap: 30px !important;
+     column-width: unset !important;
+     column-count: unset !important;
+     column-gap: unset !important;
+   }
+  /* Transparent well/panel shims must also be flex containers so cards inside flow correctly */
+  .plotting-page .plotting-left-panel > form.well,
+  .plotting-page .plotting-left-panel > .well,
+  .plotting-page .plotting-left-panel > .panel {
+    display: contents !important; /* make the shim invisible to flex layout — children become direct flex items */
+  }
+  /* Each card (including selectors): flex item, min 250px, grows to fill, never split */
+  .plotting-page .plotting-left-panel .wl-side,
+  .plotting-page .plotting-left-panel .analysis-object-selector-card-inline,
+  .plotting-page .plotting-left-panel .analysis-selector-overlay-wrap,
+  .plotting-page .plotting-left-panel > .shiny-panel-conditional {
+    flex: 1 1 calc(33.333% - 20px) !important;
+    min-width: 250px;
+    max-width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 0 !important; /* gap handles spacing */
+    width: auto !important;
+  }
+  #analysis_prep_left_col .wl-side,
+  #analysis_prep_left_col .analysis-object-selector-card-inline,
+  #analysis_prep_left_col > .shiny-panel-conditional {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: none !important;
+    margin-bottom: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .plotting-page .plotting-left-panel .analysis-selector-overlay-wrap .wl-side,
+  .plotting-page .plotting-left-panel .shiny-panel-conditional .wl-side,
+  .plotting-page .plotting-left-panel .shiny-panel-conditional .analysis-selector-overlay-wrap,
+  #analysis_prep_left_col .shiny-panel-conditional .wl-side,
+  #analysis_prep_left_col .shiny-panel-conditional .analysis-selector-overlay-wrap {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: none !important;
+  }
+
+  /* Force Step 2 (PCA Dims Card) to start in Column 2 ONLY if Step 1 (Integration or Normalization Card) is visible.
+     This avoids horizontal row gaps and keeps layout height to a minimum. */
+  #analysis_prep_left_col:has(#integration_block:not([style*="none"]), #normalization_block:not([style*="none"])) > .shiny-panel-conditional:has(#prep_dims_slider) {
+    break-before: column !important;
+  }
+  #analysis_prep_left_col:has(#integration_block:not([style*="none"]), #normalization_block:not([style*="none"])) > .shiny-panel-conditional:has(#to_data_browser_loupe_import_btn) {
+    break-before: column !important;
+  }
+  /* Height overrides to stretch plot outputs inside the 90vw card */
+  .plotting-page .plot_area_card_style {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  .plotting-page .plot_area_card_style > .wl-side,
+  .plotting-page .plot_area_card_style .analysis-load-wrap,
+  .plotting-page .plot_area_card_style .elbow-preview-box,
+  .plotting-page .plot_area_card_style .elbow-preview-shell {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+  }
+  .plotting-page .plot_area_card_style .shiny-plot-output,
+  .plotting-page .plot_area_card_style .plotly,
+  .plotting-page .plot_area_card_style .html-widget {
+    height: 100% !important;
+    flex: 1 1 auto !important;
+  }
+  /* Right Sidebar Overlay */
+  .bslib-sidebar-layout.sidebar-right {
+    position: relative !important;
+    grid-template-columns: 100% 0px !important;
+  }
+  .bslib-sidebar-layout.sidebar-right > .sidebar {
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 300px !important;
+    z-index: 1050 !important;
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15) !important;
+    background-color: #ffffff !important;
+    visibility: visible !important;
+    transform: translateX(0) !important;
+    transition: transform 0.2s ease, visibility 0.2s ease !important;
+  }
+  .bslib-sidebar-layout.sidebar-right.sidebar-collapsed > .sidebar {
+    transform: translateX(100%) !important;
+    visibility: hidden !important;
+    box-shadow: none !important;
+  }
+  /* Position toggle buttons in portrait mode */
+  .bslib-sidebar-layout.sidebar-right .collapse-toggle,
+  .bslib-sidebar-layout.sidebar-right .bslib-sidebar-toggle {
+    display: flex !important;
+    visibility: visible !important;
+    z-index: 1060 !important;
+  }
+  /* Direct child of layout, expanded state */
+  .bslib-sidebar-layout.sidebar-right:not(.sidebar-collapsed) > .collapse-toggle,
+  .bslib-sidebar-layout.sidebar-right:not(.sidebar-collapsed) > .bslib-sidebar-toggle {
+    position: absolute !important;
+    top: 8px !important;
+    right: 260px !important;
+    left: auto !important;
+  }
+  /* Direct child of layout, collapsed state */
+  .bslib-sidebar-layout.sidebar-right.sidebar-collapsed > .collapse-toggle,
+  .bslib-sidebar-layout.sidebar-right.sidebar-collapsed > .bslib-sidebar-toggle {
+    position: absolute !important;
+    top: 8px !important;
+    right: 8px !important;
+    left: auto !important;
+  }
+  /* Child of sidebar, expanded state */
+  .bslib-sidebar-layout.sidebar-right:not(.sidebar-collapsed) > .sidebar .collapse-toggle,
+  .bslib-sidebar-layout.sidebar-right:not(.sidebar-collapsed) > .sidebar .bslib-sidebar-toggle {
+    position: absolute !important;
+    top: 8px !important;
+    left: 8px !important;
+    right: auto !important;
+  }
+  /* Child of sidebar, collapsed state (fixed position to prevent sliding off-screen) */
+  .bslib-sidebar-layout.sidebar-right.sidebar-collapsed > .sidebar .collapse-toggle,
+  .bslib-sidebar-layout.sidebar-right.sidebar-collapsed > .sidebar .bslib-sidebar-toggle {
+    position: fixed !important;
+    top: 72px !important;
+    right: 8px !important;
+    left: auto !important;
+    z-index: 1100 !important;
+  }
+  .bslib-sidebar-layout.sidebar-right > .main {
+    margin-right: 0 !important;
+    width: 100% !important;
+  }
+  /* Welcome Page Column Stacking */
+  .welcome-page-wrap .row > [class*='col-'] {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 0 0 100% !important;
+  }
+  /* Portrait: keep title and selector in the same row, selector right-aligned */
+  .analysis-header-row.row {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 12px;
+  }
+  .analysis-header-row.row > .col-sm-8 {
+    flex: 1 1 auto !important;
+    width: auto !important;
+    max-width: none !important;
+    padding-right: 0;
+  }
+  .analysis-header-row.row > .col-sm-4 {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    max-width: 320px !important;
+    padding-left: 0;
+  }
+  .analysis-header-row .analysis-object-selector-wrap {
+    display: flex !important;
+    justify-content: flex-end !important;
+    margin-top: 0 !important;
+  }
+  .analysis-header-row .analysis-object-selector-card {
+    width: 100% !important;
+    min-width: 200px !important;
+  }
+  .analysis-header-row .analysis-object-selector-card-top .shiny-input-container {
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+  /* UMAP configuration panel horizontal wrapping logic inside the card */
+  .plotting-page .umap-config-panel .wl-side {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: flex-start !important;
+    gap: 30px !important;
+  }
+  .plotting-page .umap-config-panel .wl-side > h4 {
+    flex: 0 0 100% !important;
+    width: 100% !important;
+    margin-bottom: 12px !important;
+  }
+  .plotting-page .umap-config-panel .wl-side .shiny-panel-conditional {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    gap: 30px !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+  }
+  .plotting-page .umap-config-panel .wl-side .umap-config-col-item {
+    flex: 1 1 calc(33.333% - 20px) !important;
+    min-width: 250px !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+  .plotting-page .umap-config-panel .wl-side .umap-config-col-item p.text-muted {
+    margin-top: 4px !important;
+    margin-bottom: 0 !important;
+  }
+  .plotting-page .umap-config-panel .wl-side .actionButton,
+  .plotting-page .umap-config-panel .wl-side button,
+  .plotting-page .umap-config-panel .wl-side .btn {
+    flex: 0 0 auto !important;
+    align-self: flex-end !important;
+    margin-top: 10px !important;
+  }
+  /* Data Browser visualization controls grid wrap in portrait mode */
+  .plotting-page .recluster-new-controls-row .row {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    margin-left: -10px !important;
+    margin-right: -10px !important;
+    gap: 0 !important; /* Managed by bootstrap padding & margins */
+  }
+  .plotting-page .recluster-new-controls-row .row > [class*="col-"] {
+    flex: 1 1 calc(33.333% - 20px) !important;
+    width: auto !important;
+    max-width: 100% !important;
+    min-width: 250px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+    box-sizing: border-box !important;
+    margin-bottom: 12px !important;
+  }
+  /* Normalize inner shiny sliders and inputs height/margins within wrapping items */
+  .plotting-page .recluster-new-controls-row .recluster-new-controls-item {
+    margin-bottom: 0 !important;
+  }
+}
+/* Hide dynamically injected portrait resizer in Landscape desktop */
+@media (min-width: 992px) and (orientation: landscape) {
+  .app-resize-handle.wl-portrait-only-resizer {
+    display: none !important;
+  }
+
+  /* Desktop landscape: stretch plot card to fill height of the right panel and eliminate bottom white space */
+  .plotting-page.float-plot-area .plot_area_card_style,
+  .plotting-page.float-left-panel .plot_area_card_style {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  .plotting-page.float-plot-area .plot_area_card_style > .wl-side,
+  .plotting-page.float-left-panel .plot_area_card_style > .wl-side,
+  .plotting-page.float-plot-area .plot_area_card_style .wl-side,
+  .plotting-page.float-left-panel .plot_area_card_style .wl-side,
+  .plotting-page.float-plot-area .plot_area_card_style .analysis-selector-overlay-wrap,
+  .plotting-page.float-left-panel .plot_area_card_style .analysis-selector-overlay-wrap,
+  .plotting-page.float-plot-area .plot_area_card_style .analysis-load-wrap,
+  .plotting-page.float-left-panel .plot_area_card_style .analysis-load-wrap,
+  .plotting-page.float-plot-area .plot_area_card_style #prep_elbow_ui,
+  .plotting-page.float-left-panel .plot_area_card_style #prep_elbow_ui,
+  .plotting-page.float-plot-area .plot_area_card_style .elbow-preview-box,
+  .plotting-page.float-left-panel .plot_area_card_style .elbow-preview-box,
+  .plotting-page.float-plot-area .plot_area_card_style .elbow-preview-shell,
+  .plotting-page.float-left-panel .plot_area_card_style .elbow-preview-shell {
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    min-height: 0 !important;
+  }
+  /* Stretch conditional panels and row/col containers safely without overriding display: none */
+  .plotting-page.float-plot-area .plot_area_card_style .shiny-panel-conditional,
+  .plotting-page.float-left-panel .plot_area_card_style .shiny-panel-conditional {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+  .plotting-page.float-plot-area .plot_area_card_style .row,
+  .plotting-page.float-left-panel .plot_area_card_style .row {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    height: 100%;
+    min-height: 0;
+  }
+  .plotting-page.float-plot-area .plot_area_card_style [class*="col-"],
+  .plotting-page.float-left-panel .plot_area_card_style [class*="col-"] {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+  .plotting-page.float-plot-area .plot_area_card_style .shiny-plot-output,
+  .plotting-page.float-plot-area .plot_area_card_style .plotly,
+  .plotting-page.float-plot-area .plot_area_card_style .html-widget,
+  .plotting-page.float-left-panel .plot_area_card_style .shiny-plot-output,
+  .plotting-page.float-left-panel .plot_area_card_style .plotly,
+  .plotting-page.float-left-panel .plot_area_card_style .html-widget {
+    flex: 1 1 auto !important;
+    height: 100% !important;
+  }
 }
