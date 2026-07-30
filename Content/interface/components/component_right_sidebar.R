@@ -286,6 +286,34 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     registry_build_error <- reactiveVal("")
+    required_registry_helpers <- c(
+      "sidebar_registry_safe_object_row",
+      "sidebar_registry_fmt_size",
+      "sidebar_registry_fmt_time",
+      "sidebar_registry_default_meta_line_html",
+      "sidebar_registry_obj_cell_count",
+      "sidebar_registry_obj_assay_count",
+      "sidebar_registry_obj_sample_count",
+      "sidebar_registry_entry_umap_pca_dims"
+    )
+    missing_registry_helpers <- required_registry_helpers[
+      !vapply(required_registry_helpers, exists, logical(1), mode = "function", inherits = TRUE)
+    ]
+    if (length(missing_registry_helpers)) {
+      stop(
+        "Right-sidebar registry helpers were not loaded: ",
+        paste(missing_registry_helpers, collapse = ", ")
+      )
+    }
+    # Agent note: app.R sources right_sidebar_registry_helpers.R before this module.
+    # Keep registry display rules centralized there; duplicated local versions drifted.
+    .fmt_size <- sidebar_registry_fmt_size
+    .fmt_time <- sidebar_registry_fmt_time
+    .meta_line_html <- sidebar_registry_default_meta_line_html
+    .obj_cell_count <- sidebar_registry_obj_cell_count
+    .obj_assay_count <- sidebar_registry_obj_assay_count
+    .obj_sample_count <- sidebar_registry_obj_sample_count
+    .entry_umap_pca_dims <- sidebar_registry_entry_umap_pca_dims
     .sidebar_debug <- isTRUE(getOption("wanlab.sidebar_debug", FALSE)) ||
       identical(tolower(Sys.getenv("WANLAB_SIDEBAR_DEBUG", "false")), "true")
     .sidebar_dbg <- function(...) {
@@ -531,7 +559,6 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
       nms <- as.character(names(reg_objs %||% list()))
       nms <- nms[!is.na(nms) & nzchar(nms)]
       if (!length(nms)) return(.empty_registry())
-      safe_object_row <- get0("sidebar_registry_safe_object_row", mode = "function", inherits = TRUE)
       sample_sheet <- shared_data$full_sample_sheet
       sample_path_map <- character(0)
       if (!is.null(sample_sheet) && is.data.frame(sample_sheet) && nrow(sample_sheet) &&
@@ -539,59 +566,12 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
         sample_path_map <- stats::setNames(as.character(sample_sheet$path), as.character(sample_sheet$name))
       }
       rows <- lapply(nms, function(nm) {
-        entry <- reg_objs[[nm]]
-        if (is.function(safe_object_row)) {
-          return(safe_object_row(
-            name = nm,
-            entry = entry,
-            sample_path_map = sample_path_map,
-            remove_btn_html = .remove_btn_html,
-            meta_line_html = .meta_line_html
-          ))
-        }
-        obj <- if (is.list(entry) && !is.null(entry$obj)) entry$obj else entry
-        size_txt <- tryCatch(.fmt_size(as.numeric(utils::object.size(obj))), error = function(e) "Unknown size")
-        cells_n <- tryCatch(.obj_cell_count(obj), error = function(e) NA_real_)
-        cells_txt <- if (is.finite(cells_n)) paste0(format(cells_n, big.mark = ","), " cells") else "Cells: NA"
-        assays <- tryCatch(as.character(names(obj@assays)), error = function(e) character(0))
-        has_atac <- FALSE
-        if (length(assays)) {
-          low <- tolower(assays)
-          has_atac <- any(low %in% c("atac", "peaks", "chromatin")) || any(grepl("atac|peak|chromatin", low, perl = TRUE))
-          if (!isTRUE(has_atac)) {
-            cls <- unlist(lapply(assays, function(an) {
-              tolower(paste(tryCatch(class(obj[[an]]), error = function(e) character(0)), collapse = " "))
-            }), use.names = FALSE)
-            has_atac <- any(grepl("chromatinassay|atac", cls, perl = TRUE))
-          }
-        }
-        atac_txt <- paste0("ATAC: ", if (isTRUE(has_atac)) "Yes" else "No")
-        t_txt <- "Time: Unknown"
-        umap_dims <- .entry_umap_pca_dims(entry)
-        detail_txt <- if (is.finite(umap_dims) && !is.na(umap_dims)) {
-          paste0(t_txt, " | UMAP PCA dims: ", format(umap_dims, big.mark = ","))
-        } else {
-          t_txt
-        }
-        disp <- sprintf(
-          "<div class='sidebar-file-item sfi-seurat'>%s<div class='sfi-title' title='%s'><span class='sfi-title-text'>%s</span></div><div class='sfi-meta1'>%s</div><div class='sfi-meta2'>%s</div></div>",
-          .remove_btn_html(paste0("obj::", nm)),
-          htmltools::htmlEscape(nm),
-          htmltools::htmlEscape(nm),
-          .meta_line_html(paste("Seurat object", size_txt, cells_txt, atac_txt, sep = " | ")),
-          .meta_line_html(detail_txt)
-        )
-        data.frame(
+        sidebar_registry_safe_object_row(
           name = nm,
-          kind = "Seurat object",
-          status = "Ready",
-          key = paste0("obj::", nm),
-          object_name = nm,
-          size_text = size_txt,
-          type_text = "Seurat object",
-          time_text = t_txt,
-          display = disp,
-          stringsAsFactors = FALSE
+          entry = reg_objs[[nm]],
+          sample_path_map = sample_path_map,
+          remove_btn_html = .remove_btn_html,
+          meta_line_html = .meta_line_html
         )
       })
       do.call(rbind, rows)
@@ -662,25 +642,6 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
       invisible(changed)
     }
 
-    .fmt_size <- function(n) {
-      x <- suppressWarnings(as.numeric(n))
-      if (!is.finite(x) || x < 0) return("Unknown size")
-      u <- c("B", "KB", "MB", "GB", "TB")
-      i <- 1L
-      while (x >= 1024 && i < length(u)) {
-        x <- x / 1024
-        i <- i + 1L
-      }
-      if (i == 1L) sprintf("%d %s", round(x), u[i]) else sprintf("%.1f %s", x, u[i])
-    }
-
-    .fmt_time <- function(x) {
-      if (is.null(x) || !length(x)) return("Time: Unknown")
-      tt <- suppressWarnings(as.POSIXct(x, origin = "1970-01-01", tz = Sys.timezone()))
-      if (is.na(tt)) return("Time: Unknown")
-      paste0("Time: ", format(tt, "%Y-%m-%d %H:%M"))
-    }
-
     .js_quote <- function(x) {
       out <- as.character(x %||% "")
       out <- gsub("\\\\", "\\\\\\\\", out, perl = TRUE)
@@ -700,25 +661,6 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
       )
     }
 
-    .meta_line_html <- function(x) {
-      vals <- as.character(x %||% "")
-      if (!length(vals)) return(character(0))
-      vapply(vals, function(txt) {
-        txt <- as.character(txt %||% "")
-        if (!nzchar(txt)) return("")
-        parts <- trimws(strsplit(txt, "\\|", fixed = FALSE)[[1]])
-        parts <- parts[nzchar(parts)]
-        if (!length(parts)) return(htmltools::htmlEscape(txt))
-        esc_parts <- vapply(parts, htmltools::htmlEscape, character(1))
-        if (length(esc_parts) == 1L) return(esc_parts[[1]])
-        seg <- esc_parts[[1]]
-        for (i in 2:length(esc_parts)) {
-          seg <- paste0(seg, "<span class='sfi-meta-sep'> | </span><wbr>", esc_parts[[i]])
-        }
-        seg
-      }, character(1))
-    }
-
     .file_line_count <- function(path) {
       p <- as.character(path %||% "")
       if (!nzchar(p) || !file.exists(p) || dir.exists(p)) return(NA_real_)
@@ -731,50 +673,6 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
         total <- total + length(chunk)
       }
       as.numeric(total)
-    }
-
-    .obj_cell_count <- function(obj) {
-      # Prefer RNA assay; otherwise use first available assay.
-      assays <- tryCatch(as.character(names(obj@assays)), error = function(e) character(0))
-      if (!length(assays)) return(NA_real_)
-
-      target_assay <- if (any(tolower(assays) == "rna")) {
-        assays[[which(tolower(assays) == "rna")[1]]]
-      } else {
-        assays[[1]]
-      }
-
-      assay_cells <- tryCatch(colnames(obj[[target_assay]]), error = function(e) NULL)
-      if (is.null(assay_cells) || !length(assay_cells)) return(NA_real_)
-      as.numeric(length(unique(as.character(assay_cells))))
-    }
-
-    .obj_assay_count <- function(obj) {
-      n <- suppressWarnings(tryCatch(as.numeric(length(names(obj@assays))), error = function(e) NA_real_))
-      if (!is.finite(n) || is.na(n) || n < 0) return(NA_real_)
-      n
-    }
-
-    .obj_sample_count <- function(obj) {
-      md <- tryCatch(obj@meta.data, error = function(e) NULL)
-      if (is.null(md) || !is.data.frame(md) || !nrow(md)) return(NA_real_)
-      cand <- intersect(c("orig.ident", "sample", "sample_name"), colnames(md))
-      if (!length(cand)) return(NA_real_)
-      best <- 1
-      for (cc in cand) {
-        vals <- as.character(md[[cc]])
-        vals <- vals[!is.na(vals) & nzchar(vals)]
-        u <- length(unique(vals))
-        if (u > best) best <- u
-      }
-      as.numeric(best)
-    }
-    .entry_umap_pca_dims <- function(entry) {
-      dims_now <- suppressWarnings(as.integer(tryCatch(entry$prefs$confirmed_dims$value, error = function(e) NULL)))
-      if (!length(dims_now)) return(NA_integer_)
-      d <- dims_now[[1]]
-      if (!is.finite(d) || is.na(d) || d < 2L) return(NA_integer_)
-      as.integer(d)
     }
 
     .entry_vdj_payload <- function(entry, obj) {
@@ -842,74 +740,15 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
       }
 
       obj_names <- names(reg_objs %||% list())
-      safe_object_row <- get0("sidebar_registry_safe_object_row", mode = "function", inherits = TRUE)
       obj_df <- tryCatch({
         if (length(obj_names)) {
           obj_rows <- lapply(obj_names, function(nm) {
-            if (is.function(safe_object_row)) {
-              return(safe_object_row(
-                name = nm,
-                entry = reg_objs[[nm]],
-                sample_path_map = sample_path_map,
-                remove_btn_html = .remove_btn_html,
-                meta_line_html = .meta_line_html
-              ))
-            }
-
-            entry <- reg_objs[[nm]]
-            obj <- if (is.list(entry) && !is.null(entry$obj)) entry$obj else entry
-            meta <- if (is.list(entry) && !is.null(entry$meta)) entry$meta else NULL
-            stage <- as.character(meta$stage %||% "")
-            is_filtered <- grepl("_filtered$", nm, ignore.case = TRUE) || identical(stage, "filtered")
-            type_txt <- if (is_filtered) "Seurat object (filtered)" else "Seurat object"
-            size_txt <- tryCatch(.fmt_size(as.numeric(utils::object.size(obj))), error = function(e) "Unknown size")
-            cells_n <- .obj_cell_count(obj)
-            assays_n <- .obj_assay_count(obj)
-            samples_n <- .obj_sample_count(obj)
-            is_merged_like <- isTRUE(samples_n > 1) || grepl("integrat|merge", tolower(paste(nm, stage)), perl = TRUE)
-
-            cells_txt <- if (is.finite(cells_n)) paste0(format(cells_n, big.mark = ","), " cells") else "Cells: NA"
-            type_line <- paste(type_txt, size_txt, cells_txt, sep = " | ")
-
-            created <- meta$created %||% NA
-            if ((is.null(created) || is.na(created)) && !is.null(sample_path_map[[nm]]) && file.exists(sample_path_map[[nm]])) {
-              created <- file.info(sample_path_map[[nm]])$mtime
-            }
-            t_txt <- .fmt_time(created)
-            detail_txt <- if (is_merged_like) {
-              paste0(
-                "Assays: ",
-                if (is.finite(assays_n)) format(assays_n, big.mark = ",") else "NA",
-                " | Samples: ",
-                if (is.finite(samples_n)) format(samples_n, big.mark = ",") else "NA",
-                " | ", t_txt
-              )
-            } else {
-              t_txt
-            }
-            umap_dims <- .entry_umap_pca_dims(entry)
-            if (is.finite(umap_dims) && !is.na(umap_dims)) {
-              detail_txt <- paste0(detail_txt, " | UMAP PCA dims: ", format(umap_dims, big.mark = ","))
-            }
-            disp <- sprintf(
-              "<div class='sidebar-file-item sfi-seurat'>%s<div class='sfi-title' title='%s'><span class='sfi-title-text'>%s</span></div><div class='sfi-meta1'>%s</div><div class='sfi-meta2'>%s</div></div>",
-              .remove_btn_html(paste0("obj::", nm)),
-              htmltools::htmlEscape(nm), htmltools::htmlEscape(nm),
-              .meta_line_html(type_line),
-              .meta_line_html(detail_txt)
-            )
-            data.frame(
+            sidebar_registry_safe_object_row(
               name = nm,
-              kind = "Seurat object",
-              status = "Ready",
-              key = paste0("obj::", nm),
-              object_name = nm,
-              cell_count_text = cells_txt,
-              size_text = size_txt,
-              type_text = type_txt,
-              time_text = t_txt,
-              display = disp,
-              stringsAsFactors = FALSE
+              entry = reg_objs[[nm]],
+              sample_path_map = sample_path_map,
+              remove_btn_html = .remove_btn_html,
+              meta_line_html = .meta_line_html
             )
           })
           do.call(rbind, obj_rows)
