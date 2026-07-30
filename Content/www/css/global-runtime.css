@@ -1,0 +1,23 @@
+/* Global Plotly font override across all pages */
+      .js-plotly-plot,
+      .js-plotly-plot .plotly,
+      .js-plotly-plot .main-svg,
+      .js-plotly-plot text {
+        font-family: Arial, Helvetica, sans-serif !important;
+      }
+
+      /* Emergency recovery lock: freeze interactions while snapshot is being written. */
+      body.wl-emergency-lock,
+      body.wl-emergency-lock * {
+        cursor: wait !important;
+      }
+      body.wl-emergency-lock * {
+        pointer-events: none !important;
+      }
+      body.wl-emergency-lock #global_overlay,
+      body.wl-emergency-lock #global_overlay * {
+        pointer-events: auto !important;
+      }
+      body.wl-emergency-lock #global_overlay {
+        z-index: 10001 !important;
+      }
