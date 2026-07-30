@@ -296,6 +296,7 @@ wanlab_canonicalize_registry <- function(registry, sample_sheet = NULL) {
 .time_source("interface/analysis/analysis_umap_frequency_helpers.R")
 .time_source("interface/analysis/analysis_umap_plot_helpers.R")
 .time_source("interface/analysis/cellwhisperer_helpers.R")
+.time_source("interface/analysis/data_browser_helpers.R")
 .time_source("interface/analysis/page_analysis.R")
 .time_source("interface/analysis/page_recluster.R")
 .time_source("interface/analysis/page_data_browser_new.R")
