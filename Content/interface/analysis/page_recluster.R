@@ -1215,13 +1215,13 @@ recluster_server <- function(input, output, session, shared_data) {
     removeModal()
     
     # Create a new Seurat object containing only the selected cells
+    parent_name <- .scalar_chr(shared_data$active_object_name, default = "")
     subset_obj <- subset(seurat_obj, cells = selected_cells)
-    subset_obj <- .reset_subset_analysis_state(subset_obj)
+    subset_obj <- .reset_subset_analysis_state(subset_obj, source_object_name = parent_name)
     
     # --- Pass this subset object BACK to the Analysis page ---
     
     # Add the new object to our main list
-    parent_name <- .scalar_chr(shared_data$active_object_name, default = "")
     parent_entry <- if (nzchar(parent_name)) shared_data$all_seurat_objects[[parent_name]] else NULL
     subset_stage <- "recluster_subset"
     shared_data$all_seurat_objects[[new_name]] <- list(

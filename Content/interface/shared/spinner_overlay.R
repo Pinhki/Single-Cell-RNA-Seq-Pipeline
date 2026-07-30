@@ -144,7 +144,7 @@ overlay_deps <- function() {
             align-items: center;
             justify-content: center;
             background: rgba(2, 6, 23, 0.55);
-            backdrop-filter: blur(6px);
+            backdrop-filter: blur(6px) saturate(125%);
           }
           .so-card{
             --so-card-radius: 30px;

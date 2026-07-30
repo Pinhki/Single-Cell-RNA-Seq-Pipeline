@@ -1231,18 +1231,13 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
         ))
       }
 
-      sidebar_table <- .safe_select_cols(reg, c("object_name", "cell_count_text"), default = "")
-      sidebar_table$object_name <- as.character(sidebar_table$object_name %||% "")
-      fallback_names <- as.character(reg$name %||% "")
-      use_fallback <- !nzchar(sidebar_table$object_name) & nzchar(fallback_names)
-      sidebar_table$object_name[use_fallback] <- fallback_names[use_fallback]
-
+      sidebar_table <- .safe_select_cols(reg, c("display"), default = "")
       datatable(
         sidebar_table,
         rownames = FALSE,
         selection = "multiple",
         class = "compact hover sidebar-data-menu",
-        escape = TRUE,
+        escape = FALSE,
         options = list(
           dom = "t",
           paging = FALSE,
@@ -1250,13 +1245,11 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
           autoWidth = FALSE,
           ordering = FALSE,
           columnDefs = list(
-            list(width = "62%", targets = 0),
-            list(width = "38%", targets = 1),
-            list(className = "sidebar-file-object-name dt-nowrap", targets = 0),
-            list(className = "sidebar-file-cell-count dt-nowrap", targets = 1)
+            list(width = "100%", targets = 0),
+            list(className = "sidebar-file-card-cell", targets = 0)
           )
         ),
-        colnames = c("Object Name", "Cell Count")
+        colnames = c("")
       )
     }, server = FALSE)
 

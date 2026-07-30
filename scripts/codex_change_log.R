@@ -1,7 +1,30 @@
 #!/usr/bin/env Rscript
 
 args <- commandArgs(trailingOnly = TRUE)
-repo_root <- normalizePath(getwd(), mustWork = TRUE)
+
+run_capture <- function(cmd) {
+  tryCatch(system(cmd, intern = TRUE, ignore.stderr = TRUE), error = function(e) character())
+}
+
+cwd <- normalizePath(getwd(), mustWork = TRUE)
+git_root <- run_capture("git rev-parse --show-toplevel")
+if (!length(git_root) || !nzchar(git_root[[1]])) {
+  stop("Not inside a Git repository. Refusing to write project logs.", call. = FALSE)
+}
+repo_root <- normalizePath(git_root[[1]], mustWork = TRUE)
+
+if (!identical(cwd, repo_root)) {
+  stop(paste0(
+    "Project log must be run from repo root.\n",
+    "Current directory: ", cwd, "\n",
+    "Repo root: ", repo_root, "\n",
+    "Run: cd ", repo_root
+  ), call. = FALSE)
+}
+
+project_id <- basename(repo_root)
+project_root <- repo_root
+
 log_db_path <- file.path(repo_root, "docs", "project-index", "codex_change_log.sqlite")
 log_md_root <- file.path(repo_root, "docs", "project-index", "change-logs")
 sqlite_bin <- Sys.which("sqlite3")
@@ -26,6 +49,13 @@ if (!nzchar(sqlite_bin)) stop("sqlite3 CLI was not found.", call. = FALSE)
 sql_quote <- function(x) {
   if (is.null(x) || length(x) == 0 || is.na(x)) return("NULL")
   paste0("'", gsub("'", "''", as.character(x), fixed = TRUE), "'")
+}
+
+
+project_filter <- paste0("project_root = ", sql_quote(project_root))
+
+and_project <- function(where) {
+  paste0("(", where, ") AND ", project_filter)
 }
 
 sql_value <- function(x) {
@@ -88,6 +118,15 @@ run_sql <- function(sql, mode = "column") {
   if (length(out)) cat("\n")
 }
 
+query_sql <- function(sql, mode = "list") {
+  sql_file <- tempfile(fileext = ".sql")
+  writeLines(sql, sql_file, useBytes = TRUE)
+  out <- system2(sqlite_bin, c("-noheader", paste0("-", mode), log_db_path), stdin = sql_file, stdout = TRUE, stderr = TRUE)
+  status <- attr(out, "status")
+  if (!is.null(status) && status != 0) stop(paste(out, collapse = "\n"), call. = FALSE)
+  out
+}
+
 init_db <- function() {
   run_sql("
 CREATE TABLE IF NOT EXISTS codex_change_logs (
@@ -105,7 +144,9 @@ CREATE TABLE IF NOT EXISTS codex_change_logs (
   rationale TEXT,
   verification TEXT,
   related_ids TEXT,
-  tags TEXT
+  tags TEXT,
+  project_id TEXT,
+  project_root TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_codex_logs_page ON codex_change_logs(page);
 CREATE INDEX IF NOT EXISTS idx_codex_logs_function ON codex_change_logs(function_name);
@@ -113,6 +154,20 @@ CREATE INDEX IF NOT EXISTS idx_codex_logs_block ON codex_change_logs(code_block)
 CREATE INDEX IF NOT EXISTS idx_codex_logs_file ON codex_change_logs(file_path);
 CREATE INDEX IF NOT EXISTS idx_codex_logs_timestamp ON codex_change_logs(timestamp);
 ", mode = "list")
+
+  columns <- query_sql("SELECT name FROM pragma_table_info('codex_change_logs');")
+  if (!"project_id" %in% columns) {
+    run_sql("ALTER TABLE codex_change_logs ADD COLUMN project_id TEXT;", mode = "list")
+  }
+  if (!"project_root" %in% columns) {
+    run_sql("ALTER TABLE codex_change_logs ADD COLUMN project_root TEXT;", mode = "list")
+  }
+  run_sql(paste0(
+    "UPDATE codex_change_logs SET ",
+    "project_id = COALESCE(project_id, ", sql_quote(project_id), "), ",
+    "project_root = COALESCE(project_root, ", sql_quote(project_root), ") ",
+    "WHERE project_id IS NULL OR project_root IS NULL;"
+  ), mode = "list")
 }
 
 get_arg <- function(flag, default = NA_character_) {
@@ -149,6 +204,9 @@ if (cmd %in% c("help", "-h", "--help")) {
     related_ids = get_arg("--ids"),
     tags = get_arg("--tags")
   )
+  entry$project_id <- project_id
+  entry$project_root <- project_root
+
   vals <- c(
     sql_value(entry$timestamp),
     sql_value(entry$agent),
@@ -163,11 +221,13 @@ if (cmd %in% c("help", "-h", "--help")) {
     sql_value(entry$rationale),
     sql_value(entry$verification),
     sql_value(entry$related_ids),
-    sql_value(entry$tags)
+    sql_value(entry$tags),
+    sql_value(entry$project_id),
+    sql_value(entry$project_root)
   )
   run_sql(paste0("
 INSERT INTO codex_change_logs
-(timestamp, agent, page, function_name, code_block, file_path, start_line, end_line, change_type, summary, rationale, verification, related_ids, tags)
+(timestamp, agent, page, function_name, code_block, file_path, start_line, end_line, change_type, summary, rationale, verification, related_ids, tags, project_id, project_root)
 VALUES (", paste(vals, collapse = ","), ");
 SELECT last_insert_rowid() AS log_id;
 "))
@@ -176,7 +236,7 @@ SELECT last_insert_rowid() AS log_id;
   init_db()
   limit <- suppressWarnings(as.integer(ifelse(nzchar(term), term, "25")))
   if (is.na(limit) || limit <= 0) limit <- 25L
-  run_sql(paste0("SELECT log_id, timestamp, page, function_name, code_block, file_path, start_line, change_type, summary, verification FROM codex_change_logs ORDER BY timestamp DESC, log_id DESC LIMIT ", limit, ";"))
+  run_sql(paste0("SELECT log_id, timestamp, page, function_name, code_block, file_path, start_line, change_type, summary, verification FROM codex_change_logs WHERE ", project_filter, " ORDER BY timestamp DESC, log_id DESC LIMIT ", limit, ";"))
 } else if (cmd %in% c("page", "function", "block", "file", "search")) {
   init_db()
   if (!nzchar(term)) stop(paste(cmd, "requires a term."), call. = FALSE)
@@ -189,7 +249,7 @@ SELECT last_insert_rowid() AS log_id;
     file = paste0("file_path LIKE ", like),
     search = paste0("summary LIKE ", like, " OR rationale LIKE ", like, " OR verification LIKE ", like, " OR tags LIKE ", like, " OR page LIKE ", like, " OR function_name LIKE ", like, " OR code_block LIKE ", like, " OR file_path LIKE ", like)
   )
-  run_sql(paste0("SELECT log_id, timestamp, page, function_name, code_block, file_path, start_line, end_line, change_type, summary, rationale, verification, tags FROM codex_change_logs WHERE ", where, " ORDER BY timestamp DESC, log_id DESC LIMIT 100;"))
+  run_sql(paste0("SELECT log_id, timestamp, page, function_name, code_block, file_path, start_line, end_line, change_type, summary, rationale, verification, tags FROM codex_change_logs WHERE ", and_project(where), " ORDER BY timestamp DESC, log_id DESC LIMIT 100;"))
 } else {
   usage()
   stop(paste("Unknown command:", cmd), call. = FALSE)

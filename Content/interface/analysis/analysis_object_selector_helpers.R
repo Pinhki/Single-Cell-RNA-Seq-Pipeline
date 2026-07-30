@@ -131,16 +131,13 @@ analysis_preferred_loaded_object_name <- function(registry, focus_name = "", imp
   imported_chr <- analysis_selector_chr_values(imported_active_name)
   imported_chr <- if (length(imported_chr) && imported_chr[[1]] %in% registry_names) imported_chr[[1]] else ""
 
-  preferred_integrated <- analysis_preferred_integrated_name(
-    registry,
-    active_name = if (nzchar(focus_chr)) focus_chr else imported_chr
-  )
-  if (nzchar(preferred_integrated)) return(preferred_integrated)
-
+  # Agent note: Loading must preserve an explicit user object choice across
+  # pages. Without one, registry insertion order defines the newest object.
+  # Do not prioritize integrated objects here; it overrides valid user intent.
   if (nzchar(focus_chr)) return(focus_chr)
   if (nzchar(imported_chr)) return(imported_chr)
 
-  registry_names[[1]]
+  registry_names[[length(registry_names)]]
 }
 
 analysis_bootstrap_selection <- function(registry, active_name = "", current_selection = character(0), reintegration_enabled = FALSE) {

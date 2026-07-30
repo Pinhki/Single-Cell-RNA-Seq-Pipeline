@@ -315,6 +315,14 @@ data_browser_tab_content <- function(include_header = TRUE) {
         .db-layer-pair-card:last-child {
           margin-bottom: 0;
         }
+        /* Agent note: Portrait CSS forces plot outputs to height:100%; keep an
+           explicit parent height so Data Browser cards retain document flow. */
+        .db-plot-height-frame {
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          flex: 0 0 auto;
+        }
         #db_ready_gate .plot_area_card_style {
           overflow-x: hidden;
         }
@@ -1775,16 +1783,32 @@ data_browser_server <- function(input, output, session, shared_data) {
       layer1_card <- div(
         class = "db-layer-pair-card",
         tags$h5("Metadata layer 1", style = "margin-top:0;"),
-        plotOutput("db_plot_layer_1", width = "100%", height = paste0(h, "px")),
+        div(
+          class = "db-plot-height-frame",
+          style = paste0("height:", h, "px;"),
+          plotOutput("db_plot_layer_1", width = "100%", height = "100%")
+        ),
         tags$h5("Composition", style = "margin-top:8px;"),
-        plotly::plotlyOutput("db_quant_plot_1", width = "100%", height = paste0(qh, "px"))
+        div(
+          class = "db-plot-height-frame",
+          style = paste0("height:", qh, "px;"),
+          plotly::plotlyOutput("db_quant_plot_1", width = "100%", height = "100%")
+        )
       )
       layer2_card <- div(
         class = "db-layer-pair-card",
         tags$h5("Metadata layer 2", style = "margin-top:0;"),
-        plotOutput("db_plot_layer_2", width = "100%", height = paste0(h, "px")),
+        div(
+          class = "db-plot-height-frame",
+          style = paste0("height:", h, "px;"),
+          plotOutput("db_plot_layer_2", width = "100%", height = "100%")
+        ),
         tags$h5("Composition", style = "margin-top:8px;"),
-        plotly::plotlyOutput("db_quant_plot_2", width = "100%", height = paste0(qh, "px"))
+        div(
+          class = "db-plot-height-frame",
+          style = paste0("height:", qh, "px;"),
+          plotly::plotlyOutput("db_quant_plot_2", width = "100%", height = "100%")
+        )
       )
       return(
         div(
@@ -1801,7 +1825,11 @@ data_browser_server <- function(input, output, session, shared_data) {
       )
     }
     h <- .db_plot_height_px("db_plot_group", min_px = 620L)
-    plotOutput("db_plot_group", width = "100%", height = paste0(h, "px"))
+    div(
+      class = "db-plot-height-frame",
+      style = paste0("height:", h, "px;"),
+      plotOutput("db_plot_group", width = "100%", height = "100%")
+    )
   })
 
   output$db_quantification_card_ui <- renderUI({

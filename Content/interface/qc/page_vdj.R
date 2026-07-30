@@ -1766,6 +1766,10 @@ vdj_server <- function(input, output, session, shared_data) {
   .vdj_auto_import_attempted <- reactiveVal(character(0))
   .vdj_gene_sig <- reactiveVal("")
   .vdj_umap_sig <- reactiveVal("")
+  .vdj_feature_plot <- reactiveVal(NULL)
+  .vdj_feature_plot_sig <- reactiveVal("")
+  .vdj_confocal_plot <- reactiveVal(NULL)
+  .vdj_confocal_plot_sig <- reactiveVal("")
 
   observe({
     nm <- input$vdj_object_name %||% shared_data$active_object_name %||% ""
@@ -2147,10 +2151,26 @@ vdj_server <- function(input, output, session, shared_data) {
     df
   })
 
-  output$vdj_feature_umap_plot <- renderPlotly({
+  # Agent note: Keep Plotly outputs behind reactiveVal shields. Direct render
+  # dependencies recreate htmlwidgets during unrelated shared-state invalidations
+  # and make both VDJ plots flash.
+  observe({
     df <- .get_umap_df()
+    feat <- input$vdj_filter_feature %||% "tcr"
+    th <- as.numeric(input$vdj_clone_threshold %||% 2)
+    if (!is.finite(th)) th <- 2
+    nm <- input$vdj_object_name %||% shared_data$active_object_name %||% ""
+    sig <- paste(
+      nm, attr(df, "emb_name") %||% "", nrow(df %||% data.frame()),
+      feat, th,
+      sum(df$vdj_tcr_clone_size %||% 0, na.rm = TRUE),
+      sum(df$vdj_bcr_clone_size %||% 0, na.rm = TRUE),
+      sep = "|"
+    )
+    if (identical(.vdj_feature_plot_sig(), sig)) return(invisible(NULL))
+    .vdj_feature_plot_sig(sig)
     if (is.null(df) || !nrow(df)) {
-      return(
+      .vdj_feature_plot(
         plotly::plotly_empty(type = "scatter", mode = "markers") %>%
           layout(
             title = "VDJ clone overlay",
@@ -2161,10 +2181,9 @@ vdj_server <- function(input, output, session, shared_data) {
             ))
           )
       )
+      .vdj_log("feature plot refresh", sig)
+      return(invisible(NULL))
     }
-    feat <- input$vdj_filter_feature %||% "tcr"
-    th <- as.numeric(input$vdj_clone_threshold %||% 2)
-    if (!is.finite(th)) th <- 2
     val <- if (identical(feat, "bcr")) df$vdj_bcr_clone_size else df$vdj_tcr_clone_size
     ttl <- if (identical(feat, "bcr")) "BCR expanded clone size" else "TCR expanded clone size"
     is_pos <- is.finite(val) & (val >= th)
@@ -2196,20 +2215,40 @@ vdj_server <- function(input, output, session, shared_data) {
         showlegend = FALSE
       )
     }
-    p %>% layout(
+    .vdj_feature_plot(p %>% layout(
       title = ttl,
       xaxis = list(title = UI_TEXT$t_text_umap_1),
       yaxis = list(title = UI_TEXT$t_text_umap_2, scaleanchor = "x", scaleratio = 1),
       paper_bgcolor = "rgba(0,0,0,0)",
       plot_bgcolor = "rgba(0,0,0,0)"
-    )
+    ))
+    .vdj_log("feature plot refresh", sig)
   })
 
-  output$vdj_confocal_umap_plot <- renderPlotly({
+  output$vdj_feature_umap_plot <- renderPlotly({
+    .vdj_feature_plot()
+  })
+
+  observe({
     sobj <- .get_obj(); req(sobj)
     df <- .get_umap_df()
+    nm <- input$vdj_object_name %||% shared_data$active_object_name %||% ""
+    requested_genes <- c(
+      input$vdj_gene_r %||% "",
+      input$vdj_gene_g %||% "",
+      input$vdj_gene_b %||% ""
+    )
+    sig <- paste(
+      nm, attr(df, "emb_name") %||% "", nrow(df %||% data.frame()),
+      as.character(sobj@version), length(sobj@commands),
+      tryCatch(SeuratObject::DefaultAssay(sobj), error = function(e) ""),
+      paste(requested_genes, collapse = "|"),
+      sep = "|"
+    )
+    if (identical(.vdj_confocal_plot_sig(), sig)) return(invisible(NULL))
+    .vdj_confocal_plot_sig(sig)
     if (is.null(df) || !nrow(df)) {
-      return(
+      .vdj_confocal_plot(
         plotly::plotly_empty(type = "scatter", mode = "markers") %>%
           layout(
             title = "Confocal RGB UMAP",
@@ -2220,10 +2259,12 @@ vdj_server <- function(input, output, session, shared_data) {
             ))
           )
       )
+      .vdj_log("confocal plot refresh", sig)
+      return(invisible(NULL))
     }
     genes <- .feature_names(sobj)
     if (!length(genes)) {
-      return(
+      .vdj_confocal_plot(
         plotly::plotly_empty(type = "scatter", mode = "markers") %>%
           layout(
             title = "Confocal RGB UMAP",
@@ -2234,12 +2275,14 @@ vdj_server <- function(input, output, session, shared_data) {
             ))
           )
       )
+      .vdj_log("confocal plot refresh", sig)
+      return(invisible(NULL))
     }
     r <- .resolve_gene(input$vdj_gene_r, genes, NA_character_)
     g <- .resolve_gene(input$vdj_gene_g, genes, NA_character_)
     b <- .resolve_gene(input$vdj_gene_b, genes, NA_character_)
     if (any(!nzchar(c(r, g, b))) || any(is.na(c(r, g, b)))) {
-      return(
+      .vdj_confocal_plot(
         plotly::plotly_empty(type = "scatter", mode = "markers") %>%
           layout(
             title = "Confocal RGB UMAP",
@@ -2250,11 +2293,13 @@ vdj_server <- function(input, output, session, shared_data) {
             ))
           )
       )
+      .vdj_log("confocal plot refresh", sig)
+      return(invisible(NULL))
     }
 
     m <- .vdj_get_assay_data(sobj, layer = "data")
     if (is.null(m)) {
-      return(
+      .vdj_confocal_plot(
         plotly::plotly_empty(type = "scatter", mode = "markers") %>%
           layout(
             title = "Confocal RGB UMAP",
@@ -2265,10 +2310,12 @@ vdj_server <- function(input, output, session, shared_data) {
             ))
           )
       )
+      .vdj_log("confocal plot refresh", sig)
+      return(invisible(NULL))
     }
     miss <- setdiff(c(r, g, b), rownames(m))
     if (length(miss)) {
-      return(
+      .vdj_confocal_plot(
         plotly::plotly_empty(type = "scatter", mode = "markers") %>%
           layout(
             title = "Confocal RGB UMAP",
@@ -2279,10 +2326,12 @@ vdj_server <- function(input, output, session, shared_data) {
             ))
           )
       )
+      .vdj_log("confocal plot refresh", sig)
+      return(invisible(NULL))
     }
     cells_use <- intersect(df$cell, colnames(m))
     if (!length(cells_use)) {
-      return(
+      .vdj_confocal_plot(
         plotly::plotly_empty(type = "scatter", mode = "markers") %>%
           layout(
             title = "Confocal RGB UMAP",
@@ -2293,6 +2342,8 @@ vdj_server <- function(input, output, session, shared_data) {
             ))
           )
       )
+      .vdj_log("confocal plot refresh", sig)
+      return(invisible(NULL))
     }
     df <- df[match(cells_use, df$cell), , drop = FALSE]
     rv <- as.numeric(m[r, cells_use])
@@ -2300,9 +2351,10 @@ vdj_server <- function(input, output, session, shared_data) {
     bv <- as.numeric(m[b, cells_use])
     cols <- .vdj_rgb_hex(rv, gv, bv)
 
-    plot_ly(df, x = ~UMAP_1, y = ~UMAP_2, type = "scattergl", mode = "markers",
-            marker = list(size = 4, color = cols),
-            hoverinfo = "skip") %>%
+    .vdj_confocal_plot(
+      plot_ly(df, x = ~UMAP_1, y = ~UMAP_2, type = "scattergl", mode = "markers",
+              marker = list(size = 4, color = cols),
+              hoverinfo = "skip") %>%
       layout(
         title = sprintf("Confocal RGB: R=%s, G=%s, B=%s", r, g, b),
         xaxis = list(title = UI_TEXT$t_text_umap_1),
@@ -2310,6 +2362,12 @@ vdj_server <- function(input, output, session, shared_data) {
         paper_bgcolor = "rgba(0,0,0,0)",
         plot_bgcolor = "rgba(0,0,0,0)"
       )
+    )
+    .vdj_log("confocal plot refresh", sig)
+  })
+
+  output$vdj_confocal_umap_plot <- renderPlotly({
+    .vdj_confocal_plot()
   })
 
   observeEvent(input$vdj_apply_filter_btn, {

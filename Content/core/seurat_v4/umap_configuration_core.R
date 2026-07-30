@@ -42,19 +42,31 @@ core_analysis_tab_b_compute_plot <- function(sobj, params, persist = FALSE, prog
   if (!nzchar(color_by) || !(color_by %in% md_cols)) color_by <- NULL
   if (!nzchar(split_by) || identical(split_by, "__none__") || !(split_by %in% md_cols)) split_by <- NULL
   sobj_compute <- sobj
+  object_name <- .scalar_chr(params$object_name %||% "", default = "")
+  pca_reduction <- .scalar_chr(params$pca_reduction %||% "pca", default = "pca")
+  if (!nzchar(pca_reduction)) pca_reduction <- "pca"
 
-  if (!"pca" %in% tolower(names(sobj_compute@reductions))) {
+  if (!pca_reduction %in% names(sobj_compute@reductions)) {
+    if (!identical(pca_reduction, "pca")) {
+      stop(sprintf("Selected PCA reduction '%s' is unavailable in object '%s'.", pca_reduction, object_name))
+    }
     sobj_compute <- Seurat::RunPCA(sobj_compute, npcs = max(30L, dims), verbose = FALSE)
   }
-  pca_n <- suppressWarnings(as.integer(tryCatch(ncol(Seurat::Embeddings(sobj_compute, "pca")), error = function(e) NA_integer_)))
+  pca_n <- suppressWarnings(as.integer(tryCatch(ncol(Seurat::Embeddings(sobj_compute, pca_reduction)), error = function(e) NA_integer_)))
   if (!is.finite(pca_n) || is.na(pca_n) || pca_n < 2L) {
     stop("PCA embedding is missing or has fewer than 2 dimensions. Please run/generate PCA first.")
   }
   dims <- as.integer(max(2L, min(dims, pca_n)))
+  sobj_compute <- wanlab_set_reduction_provenance(
+    sobj_compute, pca_reduction, object_name, pca_reduction, pca_n
+  )
 
   .param_signature <- list(
+    object_name = object_name,
+    pca_reduction = pca_reduction,
     fmt = fmt,
     dims = dims,
+    components = 3L,
     seed = seed,
     umap_neighbors = as.integer(params$umap_neighbors %||% 30),
     umap_min_dist = as.numeric(params$umap_min_dist %||% 0.3),
@@ -72,11 +84,13 @@ core_analysis_tab_b_compute_plot <- function(sobj, params, persist = FALSE, prog
 
   umap_red_name <- if (isTRUE(persist)) sprintf("umap_pca_%d", dims) else "umap_cfg"
   tsne_red_name <- if (isTRUE(persist)) sprintf("tsne_pca_%d", dims) else "tsne_cfg"
-  .emit_progress(sprintf("Computing UMAP under PCA_%d...", dims), 20)
+  .emit_progress(sprintf("Computing UMAP_PCA_%d (3 components)...", dims), 20)
   if (!.same_signature(sobj_compute, umap_red_name, .param_signature)) {
     sobj_compute <- Seurat::RunUMAP(
       object = sobj_compute,
+      reduction = pca_reduction,
       dims = seq_len(dims),
+      n.components = 3L,
       reduction.name = umap_red_name,
       reduction.key = if (isTRUE(persist)) "UMAPPCA_" else "umapcfg_",
       seed.use = seed,
@@ -87,11 +101,16 @@ core_analysis_tab_b_compute_plot <- function(sobj, params, persist = FALSE, prog
     )
     sobj_compute@reductions[[umap_red_name]]@misc$cfg_signature <- .param_signature
   }
-  .emit_progress(sprintf("Computing tSNE under PCA_%d...", dims), 65)
+  sobj_compute <- wanlab_set_reduction_provenance(
+    sobj_compute, umap_red_name, object_name, pca_reduction, dims
+  )
+  .emit_progress(sprintf("Computing TSNE_PCA_%d (3 components)...", dims), 65)
   if (!.same_signature(sobj_compute, tsne_red_name, .param_signature)) {
     sobj_compute <- Seurat::RunTSNE(
       object = sobj_compute,
+      reduction = pca_reduction,
       dims = seq_len(dims),
+      dim.embed = 3L,
       reduction.name = tsne_red_name,
       reduction.key = if (isTRUE(persist)) "TSNEPCA_" else "tsnecfg_",
       seed.use = seed,
@@ -104,6 +123,9 @@ core_analysis_tab_b_compute_plot <- function(sobj, params, persist = FALSE, prog
     )
     sobj_compute@reductions[[tsne_red_name]]@misc$cfg_signature <- .param_signature
   }
+  sobj_compute <- wanlab_set_reduction_provenance(
+    sobj_compute, tsne_red_name, object_name, pca_reduction, dims
+  )
   .emit_progress(sprintf("Finalizing embeddings for PCA_%d...", dims), 95)
   red_name <- if (fmt == "TSNE") tsne_red_name else umap_red_name
 

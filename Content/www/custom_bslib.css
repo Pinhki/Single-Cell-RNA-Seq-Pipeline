@@ -4,19 +4,87 @@
 
 /* --- Global Corner System (single control point) --- */
 :root {
-  --wan-radius-sm: 8px;
-  --wan-radius-md: 10px;
-  --wan-radius-lg: 14px;
-  --wan-radius-btn: 10px;
-  --wan-radius-btn-lg: 12px;
-  --wan-corner-smoothing: 0.46;
-  --wan-corner-smoothing-soft: 0.34;
-  --wan-corner-smoothing-strong: 0.58;
-  --wan-corner-smoothing-btn: 0.38;
-  --wan-concentric-step: 3px;
-  --wan-radius-sm-inner: clamp(0px, calc(var(--wan-radius-sm) - var(--wan-concentric-step)), 999px);
-  --wan-radius-md-inner: clamp(0px, calc(var(--wan-radius-md) - var(--wan-concentric-step)), 999px);
-  --wan-radius-lg-inner: clamp(0px, calc(var(--wan-radius-lg) - var(--wan-concentric-step)), 999px);
+  /* Agent note: Preserve legacy selectors through aliases; shared components
+     should consume the canonical Pinhki corner tokens. */
+  --Pinhki-radius-sm: 8px;
+  --Pinhki-radius-md: 10px;
+  --Pinhki-radius-lg: 14px;
+  --Pinhki-radius-btn: 10px;
+  --Pinhki-radius-btn-lg: 12px;
+  --Pinhki-corner-smoothing: 0.46;
+  --Pinhki-corner-smoothing-soft: 0.34;
+  --Pinhki-corner-smoothing-strong: 0.58;
+  --Pinhki-corner-smoothing-btn: 0.38;
+  --Pinhki-concentric-step: 3px;
+  --Pinhki-radius-sm-inner: clamp(0px, calc(var(--Pinhki-radius-sm) - var(--Pinhki-concentric-step)), 999px);
+  --Pinhki-radius-md-inner: clamp(0px, calc(var(--Pinhki-radius-md) - var(--Pinhki-concentric-step)), 999px);
+  --Pinhki-radius-lg-inner: clamp(0px, calc(var(--Pinhki-radius-lg) - var(--Pinhki-concentric-step)), 999px);
+  --Pinhki-mac-window-radius: 18px;
+  --Pinhki-notification-edge-gap: 4px;
+  --Pinhki-mac-notification-corner: var(--Pinhki-mac-window-radius);
+  --Pinhki-notification-light-surface: 255, 255, 255;
+  --Pinhki-notification-dark-surface: 28, 28, 30;
+  --Pinhki-notification-light-border: rgba(128, 128, 128, 0.45);
+  --Pinhki-notification-dark-border: rgba(142, 142, 147, 0.6);
+  --Pinhki-notification-warning-surface: 255, 159, 10;
+  --Pinhki-notification-error-surface: 255, 69, 58;
+  --Pinhki-notification-alpha: 0.72;
+  --Pinhki-notification-semantic-alpha: 0.9;
+  --Pinhki-notification-blur: 6px;
+
+  --wan-radius-sm: var(--Pinhki-radius-sm);
+  --wan-radius-md: var(--Pinhki-radius-md);
+  --wan-radius-lg: var(--Pinhki-radius-lg);
+  --wan-radius-btn: var(--Pinhki-radius-btn);
+  --wan-radius-btn-lg: var(--Pinhki-radius-btn-lg);
+  --wan-corner-smoothing: var(--Pinhki-corner-smoothing);
+  --wan-corner-smoothing-soft: var(--Pinhki-corner-smoothing-soft);
+  --wan-corner-smoothing-strong: var(--Pinhki-corner-smoothing-strong);
+  --wan-corner-smoothing-btn: var(--Pinhki-corner-smoothing-btn);
+  --wan-concentric-step: var(--Pinhki-concentric-step);
+  --wan-radius-sm-inner: var(--Pinhki-radius-sm-inner);
+  --wan-radius-md-inner: var(--Pinhki-radius-md-inner);
+  --wan-radius-lg-inner: var(--Pinhki-radius-lg-inner);
+}
+
+/* Agent note: Keep ordinary macOS notifications neutral and translucent; retain
+   status hues with bold contrast-matched text for readable native-style alerts. */
+.Pinhki-platform-mac #shiny-notification-panel .shiny-notification {
+  border: 0 !important;
+  border-radius: var(--Pinhki-mac-notification-corner) !important;
+  overflow: hidden;
+  background-color: rgba(var(--Pinhki-notification-light-surface), var(--Pinhki-notification-alpha)) !important;
+  color: #1d1d1f;
+  -webkit-backdrop-filter: blur(var(--Pinhki-notification-blur)) saturate(125%);
+  backdrop-filter: blur(var(--Pinhki-notification-blur)) saturate(125%);
+}
+
+body:not(.app-dark-mode) .Pinhki-platform-mac #shiny-notification-panel .shiny-notification:not(.shiny-notification-warning):not(.shiny-notification-error) {
+  border: 0.5px solid var(--Pinhki-notification-light-border) !important;
+}
+
+body.app-dark-mode .Pinhki-platform-mac #shiny-notification-panel .shiny-notification {
+  background-color: rgba(var(--Pinhki-notification-dark-surface), var(--Pinhki-notification-alpha)) !important;
+  color: #f5f5f7;
+}
+
+body.app-dark-mode .Pinhki-platform-mac #shiny-notification-panel .shiny-notification:not(.shiny-notification-warning):not(.shiny-notification-error) {
+  border: 0.5px solid var(--Pinhki-notification-dark-border) !important;
+}
+
+.Pinhki-platform-mac #shiny-notification-panel .shiny-notification-warning,
+.Pinhki-platform-mac #shiny-notification-panel .shiny-notification-error {
+  color: #1d1d1f;
+  font-weight: 700;
+}
+
+.Pinhki-platform-mac #shiny-notification-panel .shiny-notification-warning {
+  background-color: rgba(var(--Pinhki-notification-warning-surface), var(--Pinhki-notification-semantic-alpha)) !important;
+}
+
+.Pinhki-platform-mac #shiny-notification-panel .shiny-notification-error {
+  background-color: rgba(var(--Pinhki-notification-error-surface), var(--Pinhki-notification-semantic-alpha)) !important;
+  color: #ffffff;
 }
 
 /* Apply a unified smooth corner aesthetic across the app */
@@ -43,6 +111,12 @@
   clip-path: none !important;
   -webkit-clip-path: none !important;
   --wan-corner-smoothing-local: var(--wan-corner-smoothing);
+}
+
+/* Agent note: Keep larger macOS-window corners platform-scoped; other platforms
+   retain the shared medium surface radius. */
+.Pinhki-platform-mac #shiny-modal .modal-content {
+  border-radius: var(--Pinhki-mac-window-radius) !important;
 }
 
 /* Small controls */
@@ -89,6 +163,7 @@
    Apply continuous superellipse corners anywhere the app already uses rounded rectangles. */
 @supports (corner-shape: superellipse(1.414)) {
   .wan-squircle,
+  .Pinhki-platform-mac #shiny-notification-panel .shiny-notification,
   .card,
   .btn,
   .form-control,

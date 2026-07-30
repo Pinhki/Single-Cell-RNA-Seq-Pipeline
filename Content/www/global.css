@@ -3,39 +3,72 @@
    ================================ */
 /* ---------- Design tokens ---------- */
 :root{
-  --nav-h: 56px;
+  /* Agent note: Pinhki names are canonical shared-style hooks; legacy app names
+     remain aliases so this migration cannot change current computed styling. */
+  --Pinhki-nav-h: 56px;
+  --Pinhki-footer-h: 40px;
+  --Pinhki-app-scale: 0.9;
+  --Pinhki-viewport-h: calc(100svh / var(--Pinhki-app-scale));
+  --Pinhki-viewport-w: calc(100vw / var(--Pinhki-app-scale));
+  --Pinhki-page-title-size: 1.38rem;
+  --Pinhki-page-title-line-h: 1.2;
+  --Pinhki-page-title-icon-gap: 8px;
+  --Pinhki-page-subtitle-line-h: 1.34;
+  --Pinhki-page-title-left-offset: 20px;
+  --Pinhki-page-pad-top: 4px;
+  --Pinhki-page-pad-x: 8px;
+  --Pinhki-page-pad-bottom: 22px;
+  --Pinhki-fg: #2a2a2a;
+  --Pinhki-muted: #6b7280;
+  --Pinhki-line: #e8e8e8;
+  --Pinhki-brand: #111827;
+  --Pinhki-brand-accent: #4f46e5;
+  --Pinhki-bg: #ffffff;
+  --Pinhki-bg-soft: #fafafa;
+  --Pinhki-card: #ffffff;
+  --Pinhki-card-border: transparent;
+  --Pinhki-pill: #eef2ff;
+  --Pinhki-app-max-width: 1600px;
+  --Pinhki-control-note-font-size: 0.82rem;
+  --Pinhki-control-note-line-height: 1.35;
+  --Pinhki-control-note-margin-top: 2px;
+  --Pinhki-control-note-margin-bottom: 6px;
+  --Pinhki-nav-chevron-size: 8px;
+  --Pinhki-nav-chevron-stroke: 2px;
+
+  --nav-h: var(--Pinhki-nav-h);
   --app-shell-top-h: 0px;
-  --footer-h: 40px;
+  --footer-h: var(--Pinhki-footer-h);
   --plotting-float-gap-y: 12px;
-  --app-scale: 0.9;
-  --app-viewport-h: calc(100svh / var(--app-scale));
-  --app-viewport-w: calc(100vw / var(--app-scale));
-  --page-title-size: 1.38rem;
-  --page-title-line-h: 1.2;
-  --page-title-icon-gap: 8px;
-  --page-title-sub-line-h: 1.34;
-  --page-title-left-offset: 20px;
-  --page-pad-top: 4px;
-  --page-pad-x: 8px;
-  --page-pad-bottom: 22px;
+  --app-scale: var(--Pinhki-app-scale);
+  --app-viewport-h: var(--Pinhki-viewport-h);
+  --app-viewport-w: var(--Pinhki-viewport-w);
+  --page-title-size: var(--Pinhki-page-title-size);
+  --page-title-line-h: var(--Pinhki-page-title-line-h);
+  --page-title-icon-gap: var(--Pinhki-page-title-icon-gap);
+  --page-title-sub-line-h: var(--Pinhki-page-subtitle-line-h);
+  --page-title-left-offset: var(--Pinhki-page-title-left-offset);
+  --page-pad-top: var(--Pinhki-page-pad-top);
+  --page-pad-x: var(--Pinhki-page-pad-x);
+  --page-pad-bottom: var(--Pinhki-page-pad-bottom);
   --plot-scroll-box-h: clamp(560px, calc(var(--app-viewport-h) - var(--app-shell-top-h) - var(--footer-h) - 180px), 980px);
-  --fg:#2a2a2a;
-  --muted:#6b7280;
-  --line:#e8e8e8;
-  --brand:#111827;
-  --brand-accent:#4f46e5;
-  --bg:#ffffff;
-  --bg-soft:#fafafa;
-  --card:#ffffff;
-  --card-border:transparent;
-  --pill:#eef2ff;
-  --app-max-width: 1600px;
-  --control-note-font-size: 0.74rem;
-  --control-note-line-height: 1.35;
-  --control-note-margin-top: 0;
-  --control-note-margin-bottom: 12px;
-  --wl-chevron-size: 8px;
-  --wl-chevron-stroke: 2px;
+  --fg: var(--Pinhki-fg);
+  --muted: var(--Pinhki-muted);
+  --line: var(--Pinhki-line);
+  --brand: var(--Pinhki-brand);
+  --brand-accent: var(--Pinhki-brand-accent);
+  --bg: var(--Pinhki-bg);
+  --bg-soft: var(--Pinhki-bg-soft);
+  --card: var(--Pinhki-card);
+  --card-border: var(--Pinhki-card-border);
+  --pill: var(--Pinhki-pill);
+  --app-max-width: var(--Pinhki-app-max-width);
+  --control-note-font-size: var(--Pinhki-control-note-font-size);
+  --control-note-line-height: var(--Pinhki-control-note-line-height);
+  --control-note-margin-top: var(--Pinhki-control-note-margin-top);
+  --control-note-margin-bottom: var(--Pinhki-control-note-margin-bottom);
+  --wl-chevron-size: var(--Pinhki-nav-chevron-size);
+  --wl-chevron-stroke: var(--Pinhki-nav-chevron-stroke);
 }
 .wl-chevron-right,
 .wl-chevron-right::after {
@@ -131,6 +164,18 @@ body{
   inset: 0 !important;
   width: var(--app-viewport-w) !important;
   height: var(--app-viewport-h) !important;
+}
+/* Agent note: Shiny's modalDialog does not add Bootstrap's centered-dialog modifier.
+   Limit flex centering to visible Bootstrap 3/4/5 states so hidden modals stay hidden. */
+#shiny-modal.modal.in,
+#shiny-modal.modal.show {
+  display: flex !important;
+  align-items: center;
+  min-height: var(--Pinhki-viewport-h);
+}
+#shiny-modal.modal.in .modal-dialog,
+#shiny-modal.modal.show .modal-dialog {
+  margin: 0 auto !important;
 }
 /* Brand */
 .brand-title{ color:#f3f4f6; font-weight:700; }
@@ -358,6 +403,14 @@ body{
 /* Let fill-layout main pane use full horizontal space (avoid inherited shell caps). */
 .bslib-page-fill > .bslib-sidebar-layout > .main{
   max-width: none;
+}
+@media (min-width: 992px) and (orientation: landscape){
+  /* Agent note: BSLib adds a wide outer gutter here. Remove only its horizontal
+     shell padding in landscape; page-level --page-pad-x remains the intended gutter. */
+  .bslib-page-fill .bslib-sidebar-layout > .main{
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
 }
 /* Plotting pages: remove any remaining tab-shell width clamp in bslib fill layouts. */
 .bslib-page-fill > .bslib-sidebar-layout > .main > .tab-content{
@@ -1153,19 +1206,17 @@ h3 {
   margin-left: 0;
   margin-right: 0;
 }
-/* Keep active plotting tab pane top-anchored without overriding Bootstrap tab visibility. */
-.app-page.plotting-page .tab-pane.active.show.html-fill-container{
+/* Agent note: Shiny marks the initial selected pane active before Bootstrap adds
+   show. Treat active as visible or nested Data Browser tabs render blank until click. */
+.app-page.plotting-page .tab-pane.active.html-fill-container{
   display: flex !important;
   flex-direction: column !important;
   justify-content: flex-start !important;
   align-content: flex-start !important;
   align-items: stretch !important;
 }
-.app-page.plotting-page .tab-pane.active.html-fill-container:not(.show){
-  display: none !important;
-}
 /* In fill-tab flex panes, keep immediate content wrappers full-width (no shrink-to-content). */
-.app-page.plotting-page .tab-pane.active.show.html-fill-container > *{
+.app-page.plotting-page .tab-pane.active.html-fill-container > *{
   width: 100% !important;
   max-width: 100% !important;
   min-width: 0 !important;
@@ -1777,8 +1828,10 @@ body.app-dark-mode .plotting-page .wl-side h4{
 }
 .recluster-new-page .recluster-new-main-row{
   display: flex;
-  flex: 1 1 auto;
-  min-height: 0;
+  /* Agent note: This row contains fixed-height plot content. It must grow from
+     descendants; allowing flex shrink collapses its box over following cards. */
+  flex: 0 0 auto;
+  min-height: min-content;
 }
 .recluster-new-page .recluster-new-curation-row{
   display: flex;
@@ -1796,13 +1849,17 @@ body.app-dark-mode .plotting-page .wl-side h4{
   min-height: 0;
 }
 .recluster-new-page .recluster-new-main-row .plot_area_card_style{
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
+  min-height: min-content;
 }
 .recluster-new-page .recluster-new-main-row .plot_area_card_style > .recluster-new-workflow-card{
-  display: flex;
-  flex-direction: column;
-  min-height: calc(var(--recluster-plot-h) + 170px);
+  /* Agent note: Controls open by default and have variable height. Use intrinsic
+     grid rows; fixed height estimates let UMAP overlap the following cards. */
+  display: grid;
+  grid-template-rows: auto auto var(--recluster-plot-h);
+  flex: 0 0 auto;
+  height: auto;
+  min-height: 0;
 }
 /* Recluster New must not inherit float-plot-area sticky height clamps. */
 .plotting-page.float-plot-area .recluster-new-page .plot_area_card_style{
@@ -2720,6 +2777,12 @@ body.figure-studio-active ::-webkit-scrollbar-thumb:hover {
     height: 100% !important;
     flex: 1 1 auto !important;
   }
+  /* Agent note: Data Browser lower plot card follows content height. Keep this
+     exception narrower than the direct .wl-side stretch rule needed by UMAP. */
+  .plotting-page .plot_area_card_style > .wl-side.recluster-new-lower-plot-card {
+    height: auto !important;
+    flex: 0 0 auto !important;
+  }
   /* Right Sidebar Overlay */
   .bslib-sidebar-layout.sidebar-right {
     position: relative !important;
@@ -2954,5 +3017,18 @@ body.figure-studio-active ::-webkit-scrollbar-thumb:hover {
   .plotting-page.float-left-panel .plot_area_card_style .html-widget {
     flex: 1 1 auto !important;
     height: 100% !important;
+  }
+}
+
+@media (min-width: 992px) and (orientation: landscape) {
+  /* Agent note: Generic landscape stretching must not claim Data Browser's
+     workflow card; its open controls plus fixed UMAP must determine card height. */
+  .plotting-page.float-plot-area .recluster-new-page .plot_area_card_style > .recluster-new-workflow-card,
+  .plotting-page.float-left-panel .recluster-new-page .plot_area_card_style > .recluster-new-workflow-card {
+    display: grid !important;
+    grid-template-rows: auto auto var(--recluster-plot-h);
+    flex: 0 0 auto !important;
+    height: auto !important;
+    min-height: 0 !important;
   }
 }

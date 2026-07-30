@@ -15,22 +15,27 @@ RDS_UI_TEXT <- list(
   ui_badge_samples = "Samples",
   ui_button_cancel = "Cancel",
   ui_btn_add_workspace = "Add to Workspace",
+  ui_btn_replace_workspace = "Replace Workspace",
   ui_btn_discard_imported_preview = "Discard Imported Preview",
-  ui_btn_download_all_datasets_rds = "Download All Datasets (.rds)",
-  ui_btn_download_selected_object_rds = "Download Selected Object Bundle (.rds)",
+  ui_btn_download_all_datasets_rds = "Compatible Workspace Bundle (.rds)",
+  ui_btn_download_all_datasets_qs2 = "High-Efficiency (40-70% less size) Workspace Bundle (.qs2)",
+  ui_btn_download_selected_object_rds = "Compatible Selected Object Bundle (.rds)",
+  ui_btn_download_selected_object_qs2 = "High-Efficiency (40-70% less size) Selected Object Bundle (.qs2)",
   ui_btn_download_structure_tree_txt = "Download Full Structure Tree (.txt)",
   ui_btn_download_selected_object_structure_tree_txt = "Download Selected Object Structure Tree (.txt)",
   ui_btn_copy_usage_code = "Copy Code",
   ui_btn_download_params_session_txt = "Download Analysis Parameters + Session Info (.txt)",
+  ui_btn_download_quarto_workspace_html = "Download Quarto Workspace Report (.html)",
   ui_btn_import_selected = "Import Selected",
   ui_label_object = "Object:",
   ui_label_fast_checkpoint = "Fast checkpoint (no compression, larger file)",
   ui_label_show_diagnostics = "Show diagnostics",
-  ui_label_upload_rds = "Upload (.rds):",
+  ui_label_upload_rds = "Upload (.rds or .qs2):",
   ui_text_active_environment = "Active environment: ",
   ui_text_all_tabs_enabled = "All tabs enabled",
   ui_text_analysis_date = "Analysis date: ",
   ui_text_before_adding_workspace = "Before adding to workspace",
+  ui_text_existing_workspace_import_choice = "Workspace already contains objects. Add imported objects to the current workspace, or replace the current workspace?",
   ui_text_bg_warning_text_dark = "bg-warning text-dark",
   ui_text_captured_package_versions = "Captured package versions: ",
   ui_text_choose_defaults_used_analysis_plotting = "Choose defaults used by analysis/plotting.",
@@ -46,7 +51,7 @@ RDS_UI_TEXT <- list(
   ui_text_error_no_datasets_export_stop = "No datasets available to export.",
   ui_text_error_no_seurat_objects_found = "No Seurat objects were found in this .rds.",
   ui_text_error_no_seurat_objects_import = "No Seurat objects to import.",
-  ui_text_error_rds_not_readable = "This file could not be read as RDS.",
+  ui_text_error_rds_not_readable = "This file could not be read as RDS or QS2.",
   ui_text_examples_columns_named_like_dbr_doublet = "Examples: columns named like 'dbr', 'doublet', 'whitelist', 'blacklist', 'keep', etc.",
   ui_text_export_time = "Export time: %s",
   ui_text_export_time_line = "Export time: %s",
@@ -81,6 +86,7 @@ RDS_UI_TEXT <- list(
   ui_text_overlay_preparing_rds_bundle = "Saving RDS snapshot — this may take a while because R serializes the full Seurat workspace in one pass, and large objects make disk write + serialization slower. Waiting is normal and worth it: this checkpoint is your safest protection against losing work.",
   ui_text_fast_checkpoint_help = "Uses compress = FALSE to save faster. File size will be larger than compressed RDS.",
   ui_text_overlay_preparing_rds_structure_report = "Preparing structure tree report for download...",
+  ui_text_overlay_preparing_quarto_report = "Preparing Quarto workspace report...",
   ui_text_meta_chip_cells = "Cells: %s",
   ui_text_meta_chip_meta_columns = "Meta columns: %s",
   ui_text_meta_chip_assays = "Assays: %s",
@@ -90,6 +96,10 @@ RDS_UI_TEXT <- list(
   ui_text_meta_chip_target_environment = "Target env: %s",
   ui_text_prepare_rds_bundle = "Preparing RDS ...",
   ui_text_prepare_rds_structure_report = "Preparing structure tree report ...",
+  ui_text_prepare_quarto_report = "Preparing Quarto report ...",
+  ui_text_quarto_cli_missing = "Quarto command line tool is not available in this runtime. Install Quarto CLI, then try again.",
+  ui_text_quarto_package_missing = "R package 'quarto' is not available in this runtime. Run app bootstrap/install flow, then try again.",
+  ui_text_qs2_package_missing = "R package 'qs2' is not available in this runtime. Run app bootstrap/install flow, then try again.",
   ui_text_reading_inspecting_rds = "Reading and inspecting .rds ...",
   ui_text_scanning_for_seurat = "Scanning for Seurat objects ...",
   ui_text_scan_stopped_early_partial = "Scan stopped early (safety limit). Showing partial results.",
@@ -932,7 +942,8 @@ rds_ui <- shiny::fluidPage(
                 checkboxInput("rds_export_fast_checkpoint", RDS_UI_TEXT$ui_label_fast_checkpoint, value = FALSE)
               ),
               div(class = "rds-muted app-control-note", RDS_UI_TEXT$ui_text_fast_checkpoint_help),
-              shinyjs::disabled(downloadButton("download_rds_btn", RDS_UI_TEXT$ui_btn_download_all_datasets_rds, class = "btn-primary")),
+              shinyjs::disabled(downloadButton("download_rds_btn", tagList(icon("check-circle"), " ", RDS_UI_TEXT$ui_btn_download_all_datasets_rds), class = "btn-primary")),
+              shinyjs::disabled(downloadButton("download_qs2_btn", tagList(icon("bolt"), " ", RDS_UI_TEXT$ui_btn_download_all_datasets_qs2), class = "btn-primary")),
               shinyjs::disabled(downloadButton("download_rds_structure_txt_btn", RDS_UI_TEXT$ui_btn_download_structure_tree_txt, class = "btn-secondary"))
             ),
             div(class = "rds-muted mt-2", RDS_UI_TEXT$ui_text_includes_object_wrappers_plots_preferences_current),
@@ -972,7 +983,7 @@ rds_ui <- shiny::fluidPage(
           icon_name = "file-import",
           class = "mb-3 rds-top-card rds-import-card",
           p(RDS_UI_TEXT$ui_text_import_saved_workspace_rds_single_seurat),
-          fileInput("import_rds_file", RDS_UI_TEXT$ui_label_upload_rds, accept = c(".rds", ".RDS")),
+          fileInput("import_rds_file", RDS_UI_TEXT$ui_label_upload_rds, accept = c(".rds", ".RDS", ".qs2", ".QS2")),
           div(
             class = "app-note-box rds-import-note",
             RDS_UI_TEXT$ui_text_import_wait_notice
@@ -997,8 +1008,9 @@ rds_ui <- shiny::fluidPage(
             ),
             div(class = "rds-muted app-control-note", RDS_UI_TEXT$ui_text_fast_checkpoint_help),
             uiOutput("rds_single_export_object_ui"),
-            downloadButton("download_single_object_rds_btn", RDS_UI_TEXT$ui_btn_download_selected_object_rds, class = "btn-secondary"),
-            downloadButton("download_single_object_structure_txt_btn", RDS_UI_TEXT$ui_btn_download_selected_object_structure_tree_txt, class = "btn-secondary")
+            shinyjs::disabled(downloadButton("download_single_object_rds_btn", tagList(icon("check-circle"), " ", RDS_UI_TEXT$ui_btn_download_selected_object_rds), class = "btn-secondary")),
+            shinyjs::disabled(downloadButton("download_single_object_qs2_btn", tagList(icon("bolt"), " ", RDS_UI_TEXT$ui_btn_download_selected_object_qs2), class = "btn-secondary")),
+            shinyjs::disabled(downloadButton("download_single_object_structure_txt_btn", RDS_UI_TEXT$ui_btn_download_selected_object_structure_tree_txt, class = "btn-secondary"))
           ),
           div(class = "rds-muted mt-2", RDS_UI_TEXT$ui_text_includes_object_wrappers_plots_preferences_current),
           div(
@@ -1031,7 +1043,11 @@ rds_ui <- shiny::fluidPage(
           icon_name = "file-alt",
           class = "mb-3",
           p(RDS_UI_TEXT$ui_text_includes_per_page_analysis_parameters_and_session),
-          downloadButton("download_params_session_txt_btn", RDS_UI_TEXT$ui_btn_download_params_session_txt, class = "btn-secondary")
+          div(
+            class = "app-control-stack",
+            downloadButton("download_params_session_txt_btn", RDS_UI_TEXT$ui_btn_download_params_session_txt, class = "btn-secondary"),
+            downloadButton("download_quarto_workspace_html_btn", RDS_UI_TEXT$ui_btn_download_quarto_workspace_html, class = "btn-secondary")
+          )
         )
       )
     ),
@@ -1193,12 +1209,20 @@ rds_server <- function(input, output, session,
     has_objs <- !is.null(shared_data$all_seurat_objects) && length(shared_data$all_seurat_objects) > 0
     if (has_objs) {
       shinyjs::enable("download_rds_btn")
+      shinyjs::enable("download_qs2_btn")
       shinyjs::enable("download_rds_structure_txt_btn")
+      shinyjs::enable("download_single_object_rds_btn")
+      shinyjs::enable("download_single_object_qs2_btn")
+      shinyjs::enable("download_single_object_structure_txt_btn")
       shinyjs::removeClass("rds_export_wrap", "disabled")
       shinyjs::hide("rds_export_empty_msg")
     } else {
       shinyjs::disable("download_rds_btn")
+      shinyjs::disable("download_qs2_btn")
       shinyjs::disable("download_rds_structure_txt_btn")
+      shinyjs::disable("download_single_object_rds_btn")
+      shinyjs::disable("download_single_object_qs2_btn")
+      shinyjs::disable("download_single_object_structure_txt_btn")
       shinyjs::addClass("rds_export_wrap", "disabled")
       shinyjs::show("rds_export_empty_msg")
     }
@@ -1237,6 +1261,23 @@ rds_server <- function(input, output, session,
       return(.scalar_chr(unname(pkgs[[pkg_name]]), default = NA_character_))
     }
     NA_character_
+  }
+  .qs2_available <- function() {
+    isTRUE(requireNamespace("qs2", quietly = TRUE))
+  }
+  .require_qs2 <- function() {
+    if (.qs2_available()) return(invisible(TRUE))
+    showNotification(RDS_UI_TEXT$ui_text_qs2_package_missing, type = "error")
+    stop(RDS_UI_TEXT$ui_text_qs2_package_missing)
+  }
+  .read_workspace_bundle_file <- function(path, name = "") {
+    ext <- tolower(tools::file_ext(as.character(name %||% "")))
+    if (!nzchar(ext)) ext <- tolower(tools::file_ext(as.character(path %||% "")))
+    if (identical(ext, "qs2")) {
+      .require_qs2()
+      return(qs2::qs_read(path, validate_checksum = TRUE))
+    }
+    readRDS(path)
   }
   .detect_seurat_object_version <- function(sobj) {
     vslot <- tryCatch(.scalar_chr(slot(sobj, "version"), default = NA_character_), error = function(e) NA_character_)
@@ -1474,6 +1515,9 @@ rds_server <- function(input, output, session,
   
   # ====== state for Review & Configure ======
   rds_pending <- reactiveVal(NULL)
+  # Agent note: Import mode is chosen before file parsing and carried into review; never infer replacement from later workspace state.
+  rds_import_mode <- reactiveVal("replace")
+  rds_queued_import_file <- reactiveVal(NULL)
   rds_selective_candidates <- reactiveVal(NULL)
   rds_missing_vdj_prompt_sig <- reactiveVal("")
   rds_vdj_relink_target_obj <- reactiveVal("")
@@ -1859,8 +1903,9 @@ rds_server <- function(input, output, session,
   }
   
   # --- Import handler ---
-  observeEvent(input$import_rds_file, {
-    file <- input$import_rds_file; req(file)
+  .process_rds_import <- function(file, import_mode) {
+    req(file, import_mode %in% c("add", "replace"))
+    rds_import_mode(import_mode)
     
     .show_overlay(RDS_UI_TEXT$ui_text_overlay_reading_rds_file)
     on.exit(.hide_overlay(), add = TRUE)
@@ -1869,9 +1914,19 @@ rds_server <- function(input, output, session,
     on.exit(removeNotification("rds_import_note"), add = TRUE)
     
     ok <- TRUE
-    obj <- tryCatch(readRDS(file$datapath), error = function(e){ ok <<- FALSE; NULL })
+    read_error <- NULL
+    obj <- tryCatch(
+      .read_workspace_bundle_file(file$datapath, name = file$name %||% ""),
+      error = function(e){
+        ok <<- FALSE
+        read_error <<- conditionMessage(e)
+        NULL
+      }
+    )
     if (!ok) {
-      showNotification(RDS_UI_TEXT$ui_text_error_file_not_read_as_rds, type = "error")
+      msg <- RDS_UI_TEXT$ui_text_error_file_not_read_as_rds
+      if (!is.null(read_error) && nzchar(read_error)) msg <- paste(msg, read_error)
+      showNotification(msg, type = "error")
       return()
     }
     
@@ -1973,6 +2028,49 @@ rds_server <- function(input, output, session,
       ),
       size = "l", easyClose = TRUE
     ))
+  }
+
+  observeEvent(input$import_rds_file, {
+    file <- input$import_rds_file
+    req(file)
+    existing <- shared_data$all_seurat_objects
+    if (!is.null(existing) && length(existing)) {
+      rds_queued_import_file(file)
+      showModal(modalDialog(
+        title = "Import into Existing Workspace",
+        tags$p(RDS_UI_TEXT$ui_text_existing_workspace_import_choice),
+        footer = tagList(
+          actionButton("rds_cancel_queued_import_btn", RDS_UI_TEXT$ui_button_cancel),
+          actionButton("rds_replace_workspace_import_btn", RDS_UI_TEXT$ui_btn_replace_workspace, class = "btn-danger"),
+          actionButton("rds_add_workspace_import_btn", RDS_UI_TEXT$ui_btn_add_workspace, class = "btn-primary")
+        ),
+        easyClose = FALSE
+      ))
+      return()
+    }
+    .process_rds_import(file, "replace")
+  })
+
+  observeEvent(input$rds_add_workspace_import_btn, {
+    file <- rds_queued_import_file()
+    req(file)
+    rds_queued_import_file(NULL)
+    removeModal()
+    .process_rds_import(file, "add")
+  })
+
+  observeEvent(input$rds_replace_workspace_import_btn, {
+    file <- rds_queued_import_file()
+    req(file)
+    rds_queued_import_file(NULL)
+    removeModal()
+    .process_rds_import(file, "replace")
+  })
+
+  observeEvent(input$rds_cancel_queued_import_btn, {
+    rds_queued_import_file(NULL)
+    removeModal()
+    shinyjs::reset("import_rds_file")
   })
   
   output$rds_selective_dt <- DT::renderDataTable({
@@ -2076,6 +2174,7 @@ rds_server <- function(input, output, session,
     rds_pending(list(
       objs = normalized,
       meta = meta,
+      import_mode = rds_import_mode(),
       analysis_params_by_page = imported_params %||% list(),
       session_info = imported_session_info %||% character(0),
       imported_tabular_files = .normalize_tabular_imports(imported_tabular_files),
@@ -3085,6 +3184,23 @@ rds_server <- function(input, output, session,
     }
     objs <- pend$objs[keep_names]
     nm <- names(objs)
+    import_mode <- pend$import_mode
+    req(import_mode %in% c("add", "replace"))
+    existing_objs <- shared_data$all_seurat_objects
+    if (identical(import_mode, "add") && !is.null(existing_objs) && length(existing_objs)) {
+      duplicate_names <- intersect(names(existing_objs), nm)
+      if (length(duplicate_names)) {
+        showModal(modalDialog(
+          title = "Cannot Add Duplicate Object Names",
+          tags$p("Rename these imported objects before adding them:"),
+          tags$ul(lapply(duplicate_names, tags$li)),
+          footer = modalButton("OK"),
+          easyClose = TRUE
+        ))
+        return(invisible(NULL))
+      }
+    }
+    previous_active_object <- as.character(shared_data$active_object_name %||% "")
     
     for (n in nm) {
       sobj <- objs[[n]]$obj
@@ -3176,16 +3292,25 @@ rds_server <- function(input, output, session,
     if (exists("wanlab_canonicalize_registry", mode = "function", inherits = TRUE)) {
       objs <- tryCatch(wanlab_canonicalize_registry(objs), error = function(e) objs)
     }
+    imported_names <- names(objs)
+    if (identical(import_mode, "add") && !is.null(existing_objs) && length(existing_objs)) {
+      objs <- c(existing_objs, objs)
+    }
+    nm <- names(objs)
     shared_data$all_seurat_objects <- objs
     shared_data$full_sample_sheet <- .build_sample_sheet_from_registry(objs)
     
-    focus <- rds_default_focus()
-    shared_data$active_object_name <- .resolve_rds_import_active_object_name(
-      object_names = nm,
-      focus = focus,
-      imported_active_name = pend$imported_active_object_name %||% "",
-      registry = objs
-    )
+    if (identical(import_mode, "add") && nzchar(previous_active_object) && previous_active_object %in% nm) {
+      shared_data$active_object_name <- previous_active_object
+    } else {
+      focus <- rds_default_focus()
+      shared_data$active_object_name <- .resolve_rds_import_active_object_name(
+        object_names = nm,
+        focus = focus,
+        imported_active_name = pend$imported_active_object_name %||% "",
+        registry = objs
+      )
+    }
     # Guarantee a valid active object right after import commit.
     active_nm <- as.character(shared_data$active_object_name %||% "")
     if (!nzchar(active_nm) || !(active_nm %in% nm)) {
@@ -3199,23 +3324,32 @@ rds_server <- function(input, output, session,
     
     shared_data$object_prefs <- lapply(nm, function(nm1) objs[[nm1]]$prefs)
     names(shared_data$object_prefs) <- nm
-    shared_data$analysis_params_by_page <- pend$analysis_params_by_page %||% list()
-    shared_data$imported_session_info <- pend$session_info %||% character(0)
-    shared_data$imported_tabular_files <- .normalize_tabular_imports(migrated_tabular)
     ann_layers <- .normalize_annotation_layers_import(pend$annotation_layers %||% list())
-    ann_layers <- ann_layers[nm]
+    ann_layers <- ann_layers[imported_names]
     ann_layers <- ann_layers[!vapply(ann_layers, function(bucket) is.null(bucket) || !length(bucket), logical(1))]
-    shared_data$annotation_layers <- ann_layers
     ann_active <- .normalize_active_annotation_layer_import(pend$active_annotation_layer %||% list())
     if (length(ann_active)) {
-      ann_active <- ann_active[nm]
+      ann_active <- ann_active[imported_names]
       valid <- vapply(names(ann_active), function(obj_name) {
         lyr <- ann_active[[obj_name]] %||% ""
         nzchar(lyr) && !is.null(ann_layers[[obj_name]]) && !is.null(ann_layers[[obj_name]][[lyr]])
       }, logical(1))
       ann_active <- ann_active[valid]
     }
-    shared_data$active_annotation_layer <- ann_active
+    if (identical(import_mode, "add")) {
+      current_tabular <- .normalize_tabular_imports(shared_data$imported_tabular_files %||% data.frame())
+      shared_data$imported_tabular_files <- .normalize_tabular_imports(rbind(current_tabular, migrated_tabular))
+      current_ann_layers <- .normalize_annotation_layers_import(shared_data$annotation_layers %||% list())
+      shared_data$annotation_layers <- c(current_ann_layers, ann_layers)
+      current_ann_active <- .normalize_active_annotation_layer_import(shared_data$active_annotation_layer %||% list())
+      shared_data$active_annotation_layer <- c(current_ann_active, ann_active)
+    } else {
+      shared_data$analysis_params_by_page <- pend$analysis_params_by_page %||% list()
+      shared_data$imported_session_info <- pend$session_info %||% character(0)
+      shared_data$imported_tabular_files <- .normalize_tabular_imports(migrated_tabular)
+      shared_data$annotation_layers <- ann_layers
+      shared_data$active_annotation_layer <- ann_active
+    }
     
     has_rna_filtered_name <- any(tolower(nm) == "rna_filtered")
     has_integrated_assay <- any(vapply(objs, function(entry) {
@@ -3587,6 +3721,34 @@ rds_server <- function(input, output, session,
     }
   )
 
+  output$download_qs2_btn <- downloadHandler(
+    filename = function() paste0("Seurat_Session_v", APP_VERSION, "_", format(Sys.time(), "%Y%m%d"), ".qs2"),
+    content = function(file) {
+      if (is.null(shared_data$all_seurat_objects) || !length(shared_data$all_seurat_objects)) {
+        showNotification(
+          RDS_UI_TEXT$ui_text_error_no_datasets_export,
+          type = "error"
+        )
+        stop(RDS_UI_TEXT$ui_text_error_no_datasets_export_stop)
+      }
+      .require_qs2()
+
+      .show_overlay(RDS_UI_TEXT$ui_text_overlay_preparing_rds_bundle)
+      on.exit(.hide_overlay(), add = TRUE)
+
+      showNotification(RDS_UI_TEXT$ui_text_prepare_rds_bundle, id = "qs2_save_note", type = "message")
+      on.exit(removeNotification("qs2_save_note"), add = TRUE)
+
+      qs2::qs_save(
+        .build_workspace_bundle_payload(
+          all_objects = shared_data$all_seurat_objects,
+          active_object_name = isolate(shared_data$active_object_name %||% NA_character_)
+        ),
+        file = file
+      )
+    }
+  )
+
   output$download_rds_structure_txt_btn <- downloadHandler(
     filename = function() paste0("Seurat_Session_Structure_Tree_v", APP_VERSION, "_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".txt"),
     content = function(file) {
@@ -3648,6 +3810,108 @@ rds_server <- function(input, output, session,
 
       lines <- c(lines, RDS_UI_TEXT$ui_text_header_session_info_current_runtime, capture.output(utils::sessionInfo()))
       writeLines(lines, con = file, useBytes = TRUE)
+    }
+  )
+
+  .rds_md_cell <- function(x) {
+    y <- as.character(x %||% "")
+    y <- gsub("\\|", "\\\\|", y)
+    y <- gsub("[\r\n]+", " ", y)
+    if (!length(y) || is.na(y[[1]]) || !nzchar(y[[1]])) "NA" else y[[1]]
+  }
+
+  .rds_quarto_report_lines <- function() {
+    objs <- .normalize_imported_list(isolate(shared_data$all_seurat_objects %||% list()))
+    params <- isolate(shared_data$analysis_params_by_page %||% list())
+    rows <- lapply(names(objs), function(nm) {
+      entry <- .normalize_imported_entry(objs[[nm]])
+      sobj <- if (is.list(entry)) entry$obj %||% NULL else NULL
+      if (is.null(sobj) || !inherits(sobj, "Seurat")) return(NULL)
+      sm <- .summarize_seurat(sobj)
+      data.frame(
+        Object = nm,
+        Cells = format(sm$n_cells, big.mark = ","),
+        Assays = paste(sm$assay_table$assay %||% character(0), collapse = ", "),
+        Reductions = paste(sm$reductions %||% character(0), collapse = ", "),
+        Stage = sm$stage %||% "unknown",
+        check.names = FALSE,
+        stringsAsFactors = FALSE
+      )
+    })
+    object_df <- do.call(rbind, rows[!vapply(rows, is.null, logical(1))])
+    table_lines <- if (is.null(object_df) || !nrow(object_df)) {
+      "No Seurat objects are currently registered."
+    } else {
+      header <- paste(names(object_df), collapse = " | ")
+      sep <- paste(rep("---", ncol(object_df)), collapse = " | ")
+      body <- apply(object_df, 1, function(row) paste(vapply(row, .rds_md_cell, character(1)), collapse = " | "))
+      c(paste0("| ", header, " |"), paste0("| ", sep, " |"), paste0("| ", body, " |"))
+    }
+    param_lines <- if (!length(params)) {
+      "No captured analysis parameters found."
+    } else {
+      unlist(lapply(sort(names(params)), function(pid) {
+        rec <- params[[pid]] %||% list()
+        page_params <- rec$last_used_params %||% rec
+        c(
+          paste0("### ", .rds_md_cell(pid)),
+          "",
+          "```r",
+          capture.output(str(page_params, max.level = 2, give.attr = FALSE)),
+          "```",
+          ""
+        )
+      }), use.names = FALSE)
+    }
+    c(
+      "---",
+      "title: \"Workspace Report\"",
+      "format: html",
+      "---",
+      "",
+      paste0("Pipeline version: ", APP_VERSION),
+      "",
+      paste0("Export time: ", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")),
+      "",
+      "## Objects",
+      "",
+      table_lines,
+      "",
+      "## Analysis Parameters",
+      "",
+      param_lines,
+      "",
+      "## Session Info",
+      "",
+      "```",
+      capture.output(utils::sessionInfo()),
+      "```"
+    )
+  }
+
+  output$download_quarto_workspace_html_btn <- downloadHandler(
+    filename = function() paste0("workspace_report_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".html"),
+    content = function(file) {
+      if (!requireNamespace("quarto", quietly = TRUE)) {
+        showNotification(RDS_UI_TEXT$ui_text_quarto_package_missing, type = "error")
+        stop(RDS_UI_TEXT$ui_text_quarto_package_missing)
+      }
+      if (!nzchar(Sys.which("quarto"))) {
+        showNotification(RDS_UI_TEXT$ui_text_quarto_cli_missing, type = "error")
+        stop(RDS_UI_TEXT$ui_text_quarto_cli_missing)
+      }
+      .show_overlay(RDS_UI_TEXT$ui_text_overlay_preparing_quarto_report)
+      on.exit(.hide_overlay(), add = TRUE)
+      showNotification(RDS_UI_TEXT$ui_text_prepare_quarto_report, id = "rds_quarto_note", type = "message")
+      on.exit(removeNotification("rds_quarto_note"), add = TRUE)
+      tmp_dir <- tempfile("rds_quarto_")
+      dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
+      qmd <- file.path(tmp_dir, "workspace_report.qmd")
+      html <- file.path(tmp_dir, "workspace_report.html")
+      writeLines(.rds_quarto_report_lines(), qmd, useBytes = TRUE)
+      quarto::quarto_render(qmd, output_file = basename(html), output_dir = tmp_dir, quiet = TRUE)
+      if (!file.exists(html)) stop("Quarto render completed but output HTML was not created.")
+      file.copy(html, file, overwrite = TRUE)
     }
   )
 
@@ -3756,6 +4020,47 @@ rds_server <- function(input, output, session,
         ),
         file = file,
         compress = !fast_checkpoint
+      )
+    }
+  )
+
+  output$download_single_object_qs2_btn <- downloadHandler(
+    filename = function() {
+      nm <- .current_single_export_name()
+      if (!nzchar(nm)) nm <- "selected_object"
+      nm_safe <- gsub("[^A-Za-z0-9_]+", "_", nm)
+      nm_safe <- gsub("^_+|_+$", "", nm_safe)
+      if (!nzchar(nm_safe)) nm_safe <- "selected_object"
+      paste0("Seurat_Object_Bundle_", nm_safe, "_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".qs2")
+    },
+    content = function(file) {
+      objs <- shared_data$all_seurat_objects %||% list()
+      .show_overlay(RDS_UI_TEXT$ui_text_overlay_preparing_rds_bundle)
+      on.exit(.hide_overlay(), add = TRUE)
+      showNotification(RDS_UI_TEXT$ui_text_prepare_rds_bundle, id = "qs2_single_save_note", type = "message")
+      on.exit(removeNotification("qs2_single_save_note"), add = TRUE)
+      if (!length(objs)) {
+        showNotification(RDS_UI_TEXT$ui_text_error_no_datasets_export, type = "error")
+        stop(RDS_UI_TEXT$ui_text_error_no_datasets_export_stop)
+      }
+      .require_qs2()
+      nm <- .current_single_export_name()
+      if (!nzchar(nm) || is.null(objs[[nm]])) {
+        showNotification(RDS_UI_TEXT$ui_text_select_at_least_one, type = "warning")
+        stop("No valid object selected.")
+      }
+      entry <- .normalize_imported_entry(objs[[nm]])
+      sobj <- if (is.list(entry)) entry$obj %||% NULL else NULL
+      if (is.null(entry) || is.null(sobj) || !inherits(sobj, "Seurat")) {
+        showNotification("Selected object is not a valid Seurat object.", type = "error")
+        stop("Selected object is not Seurat.")
+      }
+      qs2::qs_save(
+        .build_workspace_bundle_payload(
+          all_objects = setNames(list(entry), nm),
+          active_object_name = nm
+        ),
+        file = file
       )
     }
   )

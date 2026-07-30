@@ -14,7 +14,7 @@ metadata_policy_rules <- function() {
   list(
     protected_patterns = c(
       "^orig\\.ident$", "^sample$", "^condition$", "^batch$", "^donor$", "^patient$", "^library$", "^lane$",
-      "^nCount_", "^nFeature_",
+      "^ncount_", "^nfeature_", "^percent[._]mt$",
       "HTO", "hashtag", "hash\\.", "classification\\.global", "classification", "multiseq",
       "vdj", "clonotype", "clone", "cdr3", "(^|_)tcr($|_)", "(^|_)bcr($|_)", "^tra", "^trb", "^trd", "^trg", "^igh", "^igk", "^igl",
       "doublet", "singlet", "multiplet", "scdblfinder", "df\\.class", "df\\.score", "pann", "scrublet",
@@ -25,7 +25,8 @@ metadata_policy_rules <- function() {
       "spatial", "spot", "capture", "region", "tissue"
     ),
     non_protected_patterns = c(
-      "^seurat_clusters$", "annotation", "celltype", "predicted", "label", "pseudotime", "trajectory", "latent_time", "velocity",
+      "^seurat_clusters$", "^seurat_clusters_", "^umap[0-9]+_quick_", "^saved_group_",
+      "annotation", "celltype", "predicted", "label", "pseudotime", "trajectory", "latent_time", "velocity",
       "nichenet", "niches", "cellchat", "sctenifold", "monocle", "module", "score"
     )
   )

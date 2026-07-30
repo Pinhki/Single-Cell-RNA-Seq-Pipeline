@@ -4,6 +4,9 @@ wan_lab_navbar <- function(id, theme, welcome_ui, environment_ui, qc_ui, contami
                            cellchat_ui, scenic_ui, monocle2_ui, nichenet_ui, niches_ui, sctenifoldknk_ui, cellwhisperer_ui,
                            figure_umap_ui, figure_feature_ui, figure_dotplot_ui, figure_alluvial_ui, figure_cluster_alluvial_ui, figure_tcr_studio_ui, figure_pseudobulk_volcano_hidden_ui,
                            export_ui, export_vdj_safe_ui, multiome_export_check_ui, rds_ui, right_sidebar_ui, APP_VERSION) {
+  # Agent note: Cache-bust global CSS by file modification time. Shiny restarts must
+  # load layout fixes immediately; a stable URL can retain stale CSS across restarts.
+  global_css_version <- format(file.info(file.path("www", "global.css"))$mtime, "%Y%m%d%H%M%S")
   app_page <- function(x) div(class = "app-page", x)
   plotting_page <- function(x) div(class = "app-page plotting-page", x)
   .nav_spacer_safe <- function() {
@@ -31,7 +34,7 @@ wan_lab_navbar <- function(id, theme, welcome_ui, environment_ui, qc_ui, contami
     
     # Custom CSS inclusions
     header = tags$head(
-      tags$link(rel = "stylesheet", type = "text/css", href = "global.css"),
+      tags$link(rel = "stylesheet", type = "text/css", href = sprintf("global.css?v=%s", global_css_version)),
       tags$link(rel = "stylesheet", type = "text/css", href = "navbar.css?v=leftnav-action-label"),     # <-- New Navbar Style
       tags$link(rel = "stylesheet", type = "text/css", href = "custom_bslib.css"), # <-- Layout tweaks
       tags$script(HTML(

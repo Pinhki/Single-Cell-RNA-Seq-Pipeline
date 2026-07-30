@@ -94,7 +94,7 @@ wanlab_canonicalize_registry <- function(registry, sample_sheet = NULL) {
   out
 }
 
-.reset_subset_analysis_state <- function(sobj) {
+.reset_subset_analysis_state <- function(sobj, source_object_name = "") {
   if (is.null(sobj)) return(sobj)
 
   md <- tryCatch(sobj@meta.data, error = function(e) NULL)
@@ -152,14 +152,24 @@ wanlab_canonicalize_registry <- function(registry, sample_sheet = NULL) {
     if (!is.null(sobj@neighbors) && length(sobj@neighbors)) sobj@neighbors <- list()
   }, error = function(e) NULL)
 
-  # Drop analysis reductions inherited from the parent object.
-  tryCatch({
-    red_names <- names(sobj@reductions)
-    if (length(red_names)) {
-      keep_red <- red_names[!tolower(red_names) %in% c("pca", "umap", "tsne", "umap3d")]
-      sobj@reductions <- sobj@reductions[keep_red]
-    }
-  }, error = function(e) NULL)
+  source_object_name <- as.character(source_object_name %||% character())
+  source_object_name <- source_object_name[!is.na(source_object_name)]
+  source_object_name <- if (length(source_object_name)) source_object_name[[1]] else ""
+  if (nzchar(source_object_name)) {
+    # Agent note: Reclustering preserves parent projections for comparison, but
+    # names and provenance must bind them to their owner before child analysis.
+    sobj <- wanlab_suffix_inherited_reductions(sobj, source_object_name)
+  } else {
+    # QC filtering retains historical reset behavior; only reclustering supplies
+    # an owner and preserves parent reductions as comparison layers.
+    tryCatch({
+      reduction_names <- names(sobj@reductions)
+      drop_reductions <- reduction_names[
+        tolower(reduction_names) %in% c("pca", "umap", "tsne", "umap3d", "tsne3d")
+      ]
+      sobj@reductions <- sobj@reductions[setdiff(reduction_names, drop_reductions)]
+    }, error = function(e) NULL)
+  }
 
   # Clear matching command history so re-runs reflect the subset, not the parent.
   tryCatch({
@@ -207,6 +217,7 @@ wanlab_canonicalize_registry <- function(registry, sample_sheet = NULL) {
 .time_source("interface/shared/card_page_template.R")
 .time_source("interface/shared/plot_card_state_helpers.R")
 .time_source("interface/shared/gene_selectize_helpers.R")
+.time_source("interface/shared/object_selector.R")
 .time_source("interface/shared/code_block_helpers.R")
 .time_source("interface/shared/beta_badge_helpers.R")
 .time_source("interface/shared/beta_result_object_controls.R")
@@ -223,6 +234,8 @@ wanlab_canonicalize_registry <- function(registry, sample_sheet = NULL) {
 # Welcome / Setup
 .time_source("interface/welcome/page_welcome.R")
 .time_source("interface/setup/page_environment.R")
+# Canonical reduction ownership shared by app, UI adapters, and versioned cores.
+.time_source("core/reduction_provenance.R")
 # Independent beta analysis backend helpers
 .time_source("core/backends/cellchat_core.R")
 .time_source("core/backends/scenic_core.R")
@@ -334,6 +347,7 @@ ui <- tagList(
   tags$head(
     qc_busy_spinner_assets,
     wl_code_block_assets(),
+    tags$script(HTML("\n      (function() {\n        if (/Mac|iPhone|iPad|iPod/.test(navigator.platform || '')) {\n          document.documentElement.classList.add('Pinhki-platform-mac');\n        }\n      })();\n    ")),
     tags$script(HTML("
       (function() {
         var lastInteractionTime = 0;
@@ -537,8 +551,6 @@ ui <- tagList(
         // Active background poller running every 50ms to detect and reverse browser form-restoration value changes
         setInterval(function() {
           var guardedIds = [
-            'recluster_new_dataset_select', 
-            'active_object_name_input', 
             'active_object_name_input_inline', 
             'active_object_name_input_umap_inline', 
             'recluster_dataset_select'

@@ -157,6 +157,55 @@ library(harmony)
   as.character(feats)
 }
 
+.integration_dims <- function(object_list, feature_count, maximum = 30L) {
+  cell_counts <- vapply(object_list, ncol, integer(1))
+  rank_limit <- min(c(cell_counts, as.integer(feature_count))) - 1L
+  if (!is.finite(rank_limit) || rank_limit < 2L) {
+    stop(
+      "Integration requires at least three cells per group and three shared features; smallest group has ",
+      min(cell_counts), " cell(s)."
+    )
+  }
+  seq_len(min(as.integer(maximum), rank_limit))
+}
+
+.safe_pca_npcs <- function(seurat_obj, feature_count, maximum = 50L) {
+  rank_limit <- min(ncol(seurat_obj), as.integer(feature_count)) - 1L
+  if (!is.finite(rank_limit) || rank_limit < 2L) {
+    stop("PCA requires at least three cells and three usable features.")
+  }
+  min(as.integer(maximum), rank_limit)
+}
+
+.integration_k_weight <- function(anchorset, default = 100L) {
+  anchors <- tryCatch(anchorset@anchors, error = function(e) NULL)
+  required <- c("cell1", "cell2", "dataset1", "dataset2")
+  if (is.null(anchors) || !is.data.frame(anchors) || !all(required %in% colnames(anchors))) {
+    stop("Integration anchors are missing dataset-pair metadata required to choose k.weight safely.")
+  }
+  if (!nrow(anchors)) stop("Integration found no usable anchors between selected groups.")
+
+  pair_id <- paste(anchors$dataset1, anchors$dataset2, sep = ":")
+  pair_anchor_cells <- vapply(split(anchors, pair_id), function(pair) {
+    min(length(unique(pair$cell1)), length(unique(pair$cell2)))
+  }, integer(1))
+  min_pair_anchor_cells <- min(pair_anchor_cells)
+  if (!is.finite(min_pair_anchor_cells) || min_pair_anchor_cells < 2L) {
+    stop("Integration found fewer than two unique anchor cells for at least one dataset pair.")
+  }
+
+  # Agent note: Seurat weights unique anchor cells, not anchor rows. Duplicate
+  # anchor rows can otherwise overstate capacity and reproduce idx replacement
+  # errors even after k.weight is bounded by the raw anchor-row count.
+  selected <- min(as.integer(default), min_pair_anchor_cells - 1L)
+  message(
+    "  - Anchor-cell capacity by dataset pair: ",
+    paste(names(pair_anchor_cells), pair_anchor_cells, sep = "=", collapse = ", "),
+    "; selected k.weight=", selected
+  )
+  selected
+}
+
 run_integration <- function(seurat_obj, method, integrate_by, barcode_suffix = list(enabled = FALSE, delimiter = "_")) {
   
   message(paste("--- Starting data integration using method:", method, "---"))
@@ -181,22 +230,49 @@ run_integration <- function(seurat_obj, method, integrate_by, barcode_suffix = l
   
   # The SCT workflow is different and must be handled first.
   if (method == "SCT") {
+    if (!("RNA" %in% Assays(seurat_obj))) {
+      stop("SCT integration requires an RNA assay containing source counts.")
+    }
+    # Agent note: Re-integration may receive an object whose DefaultAssay is
+    # integrated. SCT must always restart from RNA counts, never corrected data.
+    DefaultAssay(seurat_obj) <- "RNA"
     
     message("  - Splitting object by sample for SCTransform...")
     obj_list <- SplitObject(seurat_obj, split.by = integrate_by)
     
     message("  - Performing SCTransform on each sample...")
-    obj_list <- lapply(X = obj_list, FUN = SCTransform, verbose = FALSE)
+    obj_list <- lapply(X = obj_list, FUN = function(x) {
+      DefaultAssay(x) <- "RNA"
+      SCTransform(x, assay = "RNA", verbose = FALSE)
+    })
     
     message("  - Selecting integration features and preparing anchors...")
     integ_features <- SelectIntegrationFeatures(object.list = obj_list, nfeatures = 3000)
     obj_list <- PrepSCTIntegration(object.list = obj_list, anchor.features = integ_features)
+    integration_dims <- .integration_dims(obj_list, length(integ_features))
     
     message("  - Finding integration anchors...")
-    integ_anchors <- FindIntegrationAnchors(object.list = obj_list, normalization.method = "SCT", anchor.features = integ_features)
+    integ_anchors <- FindIntegrationAnchors(
+      object.list = obj_list,
+      normalization.method = "SCT",
+      anchor.features = integ_features,
+      dims = integration_dims
+    )
     
     message("  - Integrating data...")
-    seurat_integrated <- IntegrateData(anchorset = integ_anchors, normalization.method = "SCT")
+    k_weight <- .integration_k_weight(integ_anchors)
+    message("  - Using integration k.weight: ", k_weight)
+    seurat_integrated <- tryCatch(
+      IntegrateData(
+        anchorset = integ_anchors,
+        normalization.method = "SCT",
+        dims = integration_dims,
+        k.weight = k_weight
+      ),
+      error = function(e) {
+        stop("IntegrateData failed with adaptive k.weight=", k_weight, ": ", conditionMessage(e))
+      }
+    )
     
     # Set the default assay to the new 'integrated' assay for downstream steps
     DefaultAssay(seurat_integrated) <- "integrated"
@@ -220,11 +296,17 @@ run_integration <- function(seurat_obj, method, integrate_by, barcode_suffix = l
       
       message("  - Selecting integration features...")
       integ_features <- SelectIntegrationFeatures(object.list = obj_list)
+      integration_dims <- .integration_dims(obj_list, length(integ_features))
       if (method == "RPCA") {
         message("  - Running per-sample scaling/PCA required by RPCA anchors...")
         obj_list <- lapply(X = obj_list, FUN = function(x) {
           x <- ScaleData(x, features = integ_features, verbose = FALSE)
-          x <- RunPCA(x, features = integ_features, npcs = 50, verbose = FALSE)
+          x <- RunPCA(
+            x,
+            features = integ_features,
+            npcs = max(integration_dims),
+            verbose = FALSE
+          )
           x
         })
       }
@@ -235,11 +317,23 @@ run_integration <- function(seurat_obj, method, integrate_by, barcode_suffix = l
       integ_anchors <- FindIntegrationAnchors(
         object.list = obj_list,
         anchor.features = integ_features,
-        reduction = reduction_method
+        reduction = reduction_method,
+        dims = integration_dims
       )
       
       message("  - Integrating data...")
-      seurat_integrated <- IntegrateData(anchorset = integ_anchors)
+      k_weight <- .integration_k_weight(integ_anchors)
+      message("  - Using integration k.weight: ", k_weight)
+      seurat_integrated <- tryCatch(
+        IntegrateData(
+          anchorset = integ_anchors,
+          dims = integration_dims,
+          k.weight = k_weight
+        ),
+        error = function(e) {
+          stop("IntegrateData failed with adaptive k.weight=", k_weight, ": ", conditionMessage(e))
+        }
+      )
       
       DefaultAssay(seurat_integrated) <- "integrated"
       
@@ -253,7 +347,8 @@ run_integration <- function(seurat_obj, method, integrate_by, barcode_suffix = l
       h_feats <- .integration_pca_features(seurat_obj, max_features = 3000L)
       if (!length(h_feats)) stop("No features available for Harmony PCA.")
       seurat_obj <- ScaleData(seurat_obj, features = h_feats, verbose = FALSE)
-      seurat_obj <- RunPCA(seurat_obj, features = h_feats, npcs = 50, verbose = FALSE)
+      harmony_npcs <- .safe_pca_npcs(seurat_obj, length(h_feats))
+      seurat_obj <- RunPCA(seurat_obj, features = h_feats, npcs = harmony_npcs, verbose = FALSE)
       
       message("  - Running Harmony algorithm...")
       # Run Harmony on the selected integration grouping variable.
@@ -274,7 +369,13 @@ run_integration <- function(seurat_obj, method, integrate_by, barcode_suffix = l
     pca_feats <- .integration_pca_features(seurat_integrated, max_features = 3000L)
     if (!length(pca_feats)) stop("No features available for post-integration PCA.")
     seurat_integrated <- ScaleData(seurat_integrated, features = pca_feats, verbose = FALSE)
-    seurat_integrated <- RunPCA(seurat_integrated, features = pca_feats, npcs = 50, verbose = FALSE)
+    post_npcs <- .safe_pca_npcs(seurat_integrated, length(pca_feats))
+    seurat_integrated <- RunPCA(
+      seurat_integrated,
+      features = pca_feats,
+      npcs = post_npcs,
+      verbose = FALSE
+    )
   }
   
   message("--- Integration complete! ---")

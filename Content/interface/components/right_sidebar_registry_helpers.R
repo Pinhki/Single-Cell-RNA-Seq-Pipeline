@@ -127,7 +127,7 @@ sidebar_registry_object_row <- function(name,
 
   cells_txt <- if (is.finite(cells_n)) paste0(format(cells_n, big.mark = ","), " cells") else "Cells: NA"
   atac_txt <- paste0("ATAC: ", if (isTRUE(has_atac)) "Yes" else "No")
-  type_line <- paste(type_txt, size_txt, cells_txt, atac_txt, sep = " | ")
+  type_line <- paste(type_txt, size_txt, atac_txt, sep = " | ")
 
   created <- meta$created %||% NA
   sample_path <- tryCatch(as.character(sample_path_map[[nm]] %||% ""), error = function(e) "")
@@ -168,9 +168,10 @@ sidebar_registry_object_row <- function(name,
   }
 
   disp <- sprintf(
-    "<div class='sidebar-file-item sfi-seurat'>%s<div class='sfi-title' title='%s'><span class='sfi-title-text'>%s</span></div><div class='sfi-meta1'>%s</div><div class='sfi-meta2'>%s</div></div>",
+    "<div class='sidebar-file-item sfi-seurat'>%s<div class='sfi-header'><div class='sfi-title' title='%s'><span class='sfi-title-text'>%s</span></div><div class='sfi-cell-count'>%s</div></div><div class='sfi-meta1'>%s</div><div class='sfi-meta2'>%s</div></div>",
     remove_btn_html(paste0("obj::", nm)),
     htmltools::htmlEscape(nm), htmltools::htmlEscape(nm),
+    htmltools::htmlEscape(cells_txt),
     meta_line_html(type_line),
     meta_line_html(detail_txt)
   )
@@ -209,7 +210,7 @@ sidebar_registry_safe_object_row <- function(name,
       meta_line <- tryCatch(meta_line_html("Seurat object | Unknown size | Cells: NA"), error = function(err) "Seurat object | Unknown size | Cells: NA")
       detail_line <- tryCatch(meta_line_html("Summary unavailable"), error = function(err) "Summary unavailable")
       disp <- sprintf(
-        "<div class='sidebar-file-item sfi-seurat'>%s<div class='sfi-title' title='%s'><span class='sfi-title-text'>%s</span></div><div class='sfi-meta1'>%s</div><div class='sfi-meta2'>%s</div></div>",
+        "<div class='sidebar-file-item sfi-seurat'>%s<div class='sfi-header'><div class='sfi-title' title='%s'><span class='sfi-title-text'>%s</span></div><div class='sfi-cell-count'>Cells: NA</div></div><div class='sfi-meta1'>%s</div><div class='sfi-meta2'>%s</div></div>",
         remove_btn,
         htmltools::htmlEscape(nm), htmltools::htmlEscape(nm),
         meta_line,
