@@ -283,6 +283,7 @@ import_modal_content <- function(ns) {
 }
 
 right_sidebar_server <- function(id, shared_data, parent_session) {
+  registry_helper_env <- environment(right_sidebar_server)
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     registry_build_error <- reactiveVal("")
@@ -297,7 +298,13 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
       "sidebar_registry_entry_umap_pca_dims"
     )
     missing_registry_helpers <- required_registry_helpers[
-      !vapply(required_registry_helpers, exists, logical(1), mode = "function", inherits = TRUE)
+      !vapply(
+        required_registry_helpers,
+        function(helper_name) {
+          exists(helper_name, envir = registry_helper_env, mode = "function", inherits = TRUE)
+        },
+        logical(1)
+      )
     ]
     if (length(missing_registry_helpers)) {
       stop(
@@ -306,7 +313,8 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
       )
     }
     # Agent note: app.R sources right_sidebar_registry_helpers.R before this module.
-    # Keep registry display rules centralized there; duplicated local versions drifted.
+    # Validate against this function's lexical environment; exists() without envir can
+    # inspect Shiny's module call frame and falsely report every loaded helper missing.
     .fmt_size <- sidebar_registry_fmt_size
     .fmt_time <- sidebar_registry_fmt_time
     .meta_line_html <- sidebar_registry_default_meta_line_html
