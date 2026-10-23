@@ -1,10 +1,6 @@
-# Wan Lab scRNA-seq Pipeline
+# scRNA-seq Pipeline
 
 R Shiny application for single-cell RNA sequencing analysis. The current source declares version 0.5.2. It provides separate Seurat 4 and Seurat 5 environments, data import, quality control, integration, interactive data browsing, downstream analysis, and workspace recovery.
-
-![Archived scRNA welcome screen](docs/images/welcome-2026-06-11.png)
-
-This welcome-screen screenshot is from the existing UI archive dated 2026-06-11. It does not establish the appearance of the current build.
 
 ## Workflow
 
@@ -48,4 +44,4 @@ Sequencing matrices, analysis outputs, saved R sessions, credentials and local r
 
 ## License
 
-Original project code is licensed under the [GNU General Public License version 3](LICENSE) (`GPL-3.0-only`). Third-party components retain their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Copyright Pinhki. Original project code is licensed under the [GNU General Public License version 3](LICENSE) (`GPL-3.0-only`). Third-party components retain their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

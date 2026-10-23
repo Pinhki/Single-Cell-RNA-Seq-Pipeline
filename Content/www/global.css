@@ -1,5 +1,5 @@
 /* ================================
-   Wan Lab – Unified UI Styles (clean, no !important)
+   scRNA-seq – Unified UI Styles (clean, no !important)
    ================================ */
 /* ---------- Design tokens ---------- */
 :root{
@@ -2721,7 +2721,7 @@ body.figure-studio-active ::-webkit-scrollbar-thumb:hover {
   background-color: var(--studio-scroll-thumb-hover);
 }
 /* ==========================================================================
-   Wan Lab - Portrait Orientation UI Optimizations
+   scRNA-seq - Portrait Orientation UI Optimizations
    ========================================================================== */
 @media (max-width: 991.98px), (orientation: portrait) {
   /* Stack plotting layout vertically (plots on top, settings below) */

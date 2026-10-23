@@ -129,9 +129,9 @@
 <body>
   <nav class="navbar navbar-default navbar-static-top">
     <div class="container-fluid">
-      <a class="navbar-brand" href="#" aria-label="Wan Lab Single Cell title" style="text-decoration:none !important;">
+      <a class="navbar-brand" href="#" aria-label="Single Cell title" style="text-decoration:none !important;">
         <span class="navbar-title-responsive">
-          <span class="navbar-title-main" style="text-decoration:none !important;">Wan Lab Single Cell</span>
+          <span class="navbar-title-main" style="text-decoration:none !important;">Single Cell</span>
           <span class="navbar-title-ver" style="text-decoration:none !important;">Installer</span>
         </span>
       </a>
@@ -188,12 +188,11 @@
 
     <div class="footer">
       <div class="footer-inner">
-        <span>Wan Lab Single Cell Pipeline Installer</span>
+        <span>Single Cell Pipeline Installer</span>
         <span> • </span>
-        <span>© 2025 Wan Lab</span>
+        <span>© 2025 Pinhki</span>
         <span> • </span>
-        <a href="https://sites.wustl.edu/wanlab/" target="_blank" rel="noopener">Lab Website</a>
-        <span> • </span>
+<span> • </span>
         <span class="footer-policy">Original code is licensed under GNU GPL v3. Third-party components retain their own licenses.</span>
         <span> • </span>
         <a href="mailto:rongzhen@wustl.edu" target="_blank" rel="noopener">Contact Developer</a>
@@ -263,7 +262,7 @@
         const navVer = document.querySelector(".navbar-title-ver");
         if (navVer) navVer.textContent = `${state.app_version || "Installer"}`;
         const footVer = document.querySelector(".footer-inner span");
-        if (footVer) footVer.textContent = `Wan Lab Single Cell Pipeline ${state.app_version || "Installer"}`;
+        if (footVer) footVer.textContent = `Single Cell Pipeline ${state.app_version || "Installer"}`;
 
         const rowsNode = document.getElementById("rows");
         preserveScroll(rowsNode, () => {

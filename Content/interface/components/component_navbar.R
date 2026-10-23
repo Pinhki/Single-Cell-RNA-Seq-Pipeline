@@ -26,7 +26,7 @@ wan_lab_navbar <- function(id, theme, welcome_ui, environment_ui, qc_ui, contami
   page_navbar(
     title = div(
       class = "wl-navbar-brand-title",
-      span("Wan Lab Single Cell", class = "wl-navbar-brand-main"),
+      span("Single Cell", class = "wl-navbar-brand-main"),
       span(sprintf("v%s", APP_VERSION), class = "wl-navbar-brand-version")
     ),
     id = id,

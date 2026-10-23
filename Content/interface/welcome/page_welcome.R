@@ -1,6 +1,6 @@
 WELCOME_UI_TEXT <- list(
   # Hero block
-  ui_text_pipeline_name = "WAN LAB scRNA-SEQ PIPELINE",
+  ui_text_pipeline_name = "scRNA-SEQ PIPELINE",
   ui_title_main = "Welcome! Let's Explore, Tune, and Make the Most of Single-Cell Datasets!",
   ui_text_main_description = "Run a full <strong>single-cell RNA-seq workflow</strong> with a structured GUI for <strong>environment setup</strong>, <strong>QC</strong>, <strong>analysis</strong>, <strong>visualization</strong>, and <strong>export</strong>. No more waiting days to hear back from <strong>bioinformaticians</strong> for a single parameter change. Take <strong>routine tuning</strong> into your own hands, and keep tighter control of <strong>boundary-sensitive data</strong> without the stress of losing <strong>rare populations</strong> or over-enriching them. Let bioinformaticians focus where they matter most: <strong>advanced analysis</strong> and <strong>figure refinement</strong>. Bring in <strong>public datasets</strong>, adjust them with confidence, and <strong>integrate them whenever inspiration strikes</strong>.",
   ui_text_main_hint = "Start by selecting an analysis environment, then import your data and proceed step-by-step through the pipeline.",

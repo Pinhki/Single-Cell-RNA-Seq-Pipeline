@@ -5,11 +5,9 @@ wan_lab_footer <- function(APP_VERSION = NA_character_) {
     tags$head(tags$link(rel = "stylesheet", type = "text/css", href = "footer.css")),
     div(class = "footer",
       div(class = "footer-inner",
-        span(sprintf("Wan Lab Single Cell Pipeline v%s", app_version_label)),
+        span(sprintf("Single Cell Pipeline v%s", app_version_label)),
         span(" • "),
-        span("© 2025 Wan Lab"),
-        span(" • "),
-        tags$a(href = "https://sites.wustl.edu/wanlab/", "Lab Website", target = "_blank"),
+        span("© 2025 Pinhki"),
         span(" • "),
         span(
           class = "footer-policy",
