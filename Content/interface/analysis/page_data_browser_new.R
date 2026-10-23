@@ -1,8 +1,37 @@
 # R/page_data_browser_new_ui.R
+# State-sync contract: read docs/agents/interface/ANALYSIS_STATE_SYNC_CONTRACT.md
+# before changing Data Browser observers, object transitions, or update inputs.
+# Persistable state belongs to the active Seurat object's @misc; UI inputs are views.
 
 # DATA BROWSER COLOR PALETTE KNOB
 # Options: "Default Seurat", or any key from all_palettes (e.g. "My Lab Palette 1", "Brewer: Set2", etc.)
 DATA_BROWSER_DEFAULT_PALETTE <- "Default Seurat"
+
+# Agent note: Keep Data Browser rename and palette controls on one Bootstrap
+# SVG icon source so their small toolbar glyphs remain visually consistent.
+.recluster_new_bootstrap_icon <- function(name, class = "recluster-new-bootstrap-icon") {
+  if (identical(name, "palette")) {
+    return(tags$svg(
+      class = class,
+      viewBox = "0 0 16 16",
+      fill = "currentColor",
+      `aria-hidden` = "true",
+      tags$path(d = "M8 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3m4 3a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3M5.5 7a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0m.5 6a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3"),
+      tags$path(d = "M16 8c0 3.15-1.866 2.585-3.567 2.07C11.42 9.763 10.465 9.473 10 10c-.603.683-.475 1.819-.351 2.92C9.826 14.495 9.996 16 8 16a8 8 0 1 1 8-8m-8 7c.611 0 .654-.171.655-.176.078-.146.124-.464.07-1.119-.014-.168-.037-.37-.061-.591-.052-.464-.112-1.005-.118-1.462-.01-.707.083-1.61.704-2.314.369-.417.845-.578 1.272-.618.404-.038.812.026 1.16.104.343.077.702.186 1.025.284l.028.008c.346.105.658.199.953.266.653.148.904.083.991.024C14.717 9.38 15 9.161 15 8a7 7 0 1 0-7 7")
+    ))
+  }
+  if (identical(name, "input-cursor-text")) {
+    return(tags$svg(
+      class = class,
+      viewBox = "0 0 16 16",
+      fill = "currentColor",
+      `aria-hidden` = "true",
+      tags$path(d = "M5 2a.5.5 0 0 1 .5-.5c.862 0 1.573.287 2.06.566.174.099.321.198.44.286.119-.088.266-.187.44-.286A4.17 4.17 0 0 1 10.5 1.5a.5.5 0 0 1 0 1c-.638 0-1.177.213-1.564.434a3.5 3.5 0 0 0-.436.294V7.5H9a.5.5 0 0 1 0 1h-.5v4.272c.1.08.248.187.436.294.387.221.926.434 1.564.434a.5.5 0 0 1 0 1 4.17 4.17 0 0 1-2.06-.566A5 5 0 0 1 8 13.65a5 5 0 0 1-.44.285 4.17 4.17 0 0 1-2.06.566.5.5 0 0 1 0-1c.638-.107 1.177-.214 1.564-.434.188-.107.335-.214.436-.294V8.5H7a.5.5 0 0 1 0-1h.5V3.228a3.5 3.5 0 0 0-.436-.294A3.17 3.17 0 0 0 5.5 2.5.5.5 0 0 1 5 2m2.648 10.645"),
+      tags$path(d = "M10 5h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4v1h4a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-4zM6 5V4H2a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h4v-1H2a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z")
+    ))
+  }
+  stop(sprintf("Unsupported Data Browser icon: %s", name))
+}
 
 RECLUSTER_NEW_UI_TEXT <- list(
   t_title = "Data Browser",
@@ -14,6 +43,17 @@ RECLUSTER_NEW_UI_TEXT <- list(
   t_title_population_selection = "Population Selection",
   t_title_metadata_filters = "Metadata Filters",
   t_btn_metadata_customize_colors = "Customize colors",
+  t_btn_metadata_rename = "Rename",
+  t_btn_metadata_save_rename = "Save rename",
+  t_btn_metadata_undo_rename = "Undo rename",
+  t_text_metadata_rename_empty = "Enter a new metadata label.",
+  t_text_metadata_rename_ascii = "Use ASCII characters for metadata labels.",
+  t_text_metadata_rename_duplicate = "That metadata label already exists in this column.",
+  t_text_metadata_rename_invalid = "Metadata label or column is no longer valid.",
+  t_text_metadata_rename_saved = "Renamed '%s' to '%s' in %s.",
+  t_text_metadata_rename_no_undo = "No metadata rename is available to undo.",
+  t_text_metadata_rename_wrong_object = "Open the dataset where the last rename was made before undo.",
+  t_text_metadata_rename_undone = "Restored the previous labels in %s.",
   t_title_metadata_customize_colors = "Customize colors",
   t_label_metadata_population_colors = "Population colors",
   t_btn_metadata_apply_colors = "Apply colors",
@@ -38,11 +78,11 @@ RECLUSTER_NEW_UI_TEXT <- list(
   t_text_expr_range_all = "range all",
   t_text_expr_group_summary_empty = "0 genes, 0 cells",
   t_title_advanced_manual = "Advanced Manual Selection",
-  t_text_advanced_manual = "Use lasso + save group, or import barcodes. Saved groups remain independent toggles.",
-  t_title_recluster = "Create Recluster Subset",
+  t_text_advanced_manual = "Import cell barcodes for manual selection. Lasso selection is managed in the separate Lasso Selection card.",
+  t_title_recluster = "Create New Object",
   t_btn_save_selection_group = "Save Current Population as Group",
-  t_btn_recluster = "Re-cluster Selected Cells",
-  t_btn_create_subset = "Create and Analyze Subset",
+  t_btn_recluster = "Create New Object from Checked Population",
+  t_btn_create_subset = "Create New Object",
   t_btn_delete = "Delete",
   t_label_new_group_name = "New Group Name",
   t_label_import_cell_barcodes = "Import Cell Barcodes (.txt/.csv/.tsv):",
@@ -78,19 +118,21 @@ RECLUSTER_NEW_UI_TEXT <- list(
   t_btn_apply_import = "Apply matched metadata",
   t_text_import_resolution = "Edit 'chosen_cell' and set decision to accept/resolved for ambiguous rows.",
   t_text_no_groups = "No groups created yet.",
-  t_text_name_subset = "Name New Subset",
-  t_label_name_subset = "Enter a name for this new subset:",
+  t_text_name_subset = "Name New Object",
+  t_label_name_subset = "Enter a name for this new object:",
   t_label_name_subset_placeholder = "e.g., CD4_T_Cells",
+  t_text_subset_note = "This creates a new object only. It does not automatically run re-integration or re-clustering. You may need to run those steps afterward.",
   t_label_suffix_for_metadata = "Suffix for non-protected metadata columns",
   t_label_unknown_keep_unsuffixed = "Unknown metadata columns to keep unsuffixed",
   t_text_suffix_help = "Protected sample-carried metadata keeps original names. Non-protected metadata will be suffixed.",
   t_text_name_conflict = "Object name already exists. Choose a different name.",
   t_text_suffix_conflict = "Metadata rename collision after suffixing. Change the suffix and retry.",
-  t_text_creating_subset = "Creating subset object for analysis...",
+  t_text_preparing_subset = "Preparing object creation...",
+  t_text_creating_subset = "Creating new object for analysis...",
   t_title_umap = "UMAP Plot",
   t_title_scatter = "Gene Scatter Plot",
   t_title_interactive_umap = "Interactive UMAP",
-  t_text_umap_note = "Selected cells use larger violet fill. In expression selection, the active gene uses a bright orange outline.",
+  t_text_umap_note = "Saved-group cells use larger cyan fill. Lasso, expression, and advanced manual selections use larger violet fill. In expression selection, the active gene uses a bright orange outline. Normal plot dots keep current metadata or gene expression colors.",
   t_title_controls = "Visualization Controls",
   t_label_color_umap = "Color UMAP by:",
   t_label_umap_reduction = "Embedding reduction:",
@@ -130,8 +172,8 @@ RECLUSTER_NEW_UI_TEXT <- list(
   t_bucket_categorical = "Categorical Metadata",
   t_bucket_continuous = "Continuous / Consecutive Numeric Metadata",
   t_text_no_metadata = "No metadata columns available for filtering.",
-  t_text_selected_total = "Total unique cells selected:",
-  t_text_selected_barcodes = "Cells selected from manual barcode imports:",
+  t_text_selected_total = "Cells selected for new object:",
+  t_text_selected_barcodes = "Cells selected manually:",
   t_text_selection_source = "Active metadata filter column:",
   t_text_selection_none = "(none)",
   t_text_group_enabled = "Include",
@@ -280,11 +322,11 @@ recluster_new_rule_browser_panel <- function(ui_text, mount_mode = c("separate_t
         ),
         uiOutput("recluster_new_rule_plot_body_ui")
       ),
-      div(
-        class = "wl-side recluster-new-lower-plot-card",
-        h5(ui_text$t_title_rule_stacked),
-        recluster_new_with_busy_spinner(plotlyOutput("recluster_new_rule_stacked_plot", height = "360px"), spinner = "other")
-      )
+        div(
+          class = "wl-side recluster-new-lower-plot-card",
+          h5(ui_text$t_title_rule_stacked),
+          recluster_new_with_busy_spinner(plotlyOutput("recluster_new_rule_stacked_plot", height = "420px"), spinner = "other")
+        )
     )
   )
 }
@@ -350,7 +392,7 @@ recluster_new_ui <- fluidPage(
         }
         .recluster-new-viz-fold > summary {
           margin: 8px 0 12px;
-          font-size: 16px;
+          font-size: 11px;
         }
         .recluster-new-viz-fold[open] > summary {
           margin-bottom: 12px;
@@ -429,7 +471,13 @@ recluster_new_ui <- fluidPage(
           display: flex;
           flex-direction: column;
           justify-content: flex-end;
-          max-width: 360px;
+          width: 100%;
+          /* Neighboring Data Browser controls resolve to a 300px content box
+             in this responsive left panel. Keep the radio wrapper on that
+             same contract; percentage width alone expands its flex column. */
+          max-width: 300px;
+          min-width: 0;
+          box-sizing: border-box;
           min-height: 62px;
         }
         .recluster-new-display-toggle .control-label {
@@ -440,12 +488,16 @@ recluster_new_ui <- fluidPage(
         }
         .recluster-new-display-toggle .form-group {
           margin-bottom: 0;
+          width: 100%;
+          max-width: 300px;
+          box-sizing: border-box;
         }
         .recluster-new-display-toggle .shiny-options-group {
           position: relative;
           display: inline-flex;
           align-items: center;
           width: 100%;
+          max-width: 100%;
           min-height: 34px;
           padding: 3px;
           border-radius: 999px;
@@ -640,6 +692,12 @@ recluster_new_ui <- fluidPage(
           box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.72),
                       0 4px 14px rgba(124, 58, 237, 0.28) !important;
         }
+        /* Agent note: Saved-group selection uses cyan so its card cannot be
+           confused with violet expression/lasso/manual selection cards. */
+        #recluster_new_saved_groups_card.is-cyan-highlight-source {
+          box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.72),
+                      0 4px 14px rgba(6, 182, 212, 0.28) !important;
+        }
         .recluster-new-level-color-swatch {
           cursor: pointer;
         }
@@ -682,7 +740,7 @@ recluster_new_ui <- fluidPage(
           border: 0;
           background: transparent;
           text-align: left;
-          font-size: 15px;
+          font-size: 12px;
           line-height: 1.2;
           font-weight: 700;
           color: #333333;
@@ -785,8 +843,8 @@ recluster_new_ui <- fluidPage(
           display: flex;
           align-items: center;
           gap: 8px;
-          min-height: 34px;
-          margin: 4px 0;
+          min-height: 38px;
+          margin: 5px 0;
         }
         .recluster-new-group-toggle {
           flex: 1 1 auto;
@@ -801,27 +859,37 @@ recluster_new_ui <- fluidPage(
         .recluster-new-group-toggle label {
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 8px;
           margin: 0;
           min-width: 0;
+          font-size: 16px;
+          font-weight: 600;
         }
         .recluster-new-group-toggle input[type='checkbox'] {
           margin-top: 0;
+          width: 18px;
+          height: 18px;
+          flex: 0 0 18px;
+        }
+        #recluster_new_saved_groups_card .recluster-new-group-toggle input[type='checkbox'] {
+          accent-color: #06b6d4;
         }
         .recluster-new-group-meta {
           color: #6b7280;
-          font-weight: 600;
+          font-size: 10px;
+          font-weight: 700;
         }
         .recluster-new-saved-group-delete.btn {
           flex: 0 0 auto;
-          width: 28px;
-          height: 28px;
-          min-width: 28px;
+          width: 22px;
+          height: 22px;
+          min-width: 22px;
+          min-height: 22px;
           padding: 0;
-          border: 0;
-          border-radius: 7px;
-          background: #dc2626;
-          color: #ffffff;
+          border: 1px solid rgba(220, 38, 38, 0.62);
+          border-radius: 5px;
+          background: transparent;
+          color: rgba(220, 38, 38, 0.62);
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -830,8 +898,9 @@ recluster_new_ui <- fluidPage(
         }
         .recluster-new-saved-group-delete.btn:hover,
         .recluster-new-saved-group-delete.btn:focus {
-          background: #b91c1c;
-          color: #ffffff;
+          border-color: rgba(185, 28, 28, 0.72);
+          background: rgba(254, 226, 226, 0.65);
+          color: rgba(185, 28, 28, 0.72);
         }
         .recluster-new-saved-group-delete .action-icon + .action-label {
           margin-left: 0;
@@ -843,11 +912,15 @@ recluster_new_ui <- fluidPage(
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          width: 1em;
+          height: 1em;
+          flex: 0 0 auto;
           line-height: 1;
         }
         .recluster-new-saved-group-delete .fa,
         .recluster-new-saved-group-delete .fas {
-          color: #ffffff;
+          color: rgba(220, 38, 38, 0.62);
+          font-size: 9px;
           margin: 0;
           line-height: 1;
         }
@@ -876,11 +949,6 @@ recluster_new_ui <- fluidPage(
           display: flex;
           align-items: center;
           gap: 4px;
-        }
-        .recluster-new-expr-gene-clear {
-          color: #c2410c;
-          border-color: rgba(249, 115, 22, 0.42);
-          background: #ffffff;
         }
         .recluster-new-expr-gene-check .checkbox {
           margin: 0;
@@ -964,6 +1032,71 @@ recluster_new_ui <- fluidPage(
           margin-top: 10px;
           padding-top: 8px;
           border-top: 1px solid #eeeeee;
+          width: 100%;
+        }
+        .recluster-new-expr-range .form-group,
+        .recluster-new-expr-range .irs,
+        .recluster-new-expr-range .recluster-new-expr-distribution,
+        .recluster-new-expr-range .recluster-new-expr-distribution .html-widget,
+        .recluster-new-expr-range .recluster-new-expr-distribution .plotly {
+          width: 100% !important;
+          max-width: 100%;
+          min-width: 0;
+          margin-left: 0 !important;
+          margin-right: 0 !important;
+          padding-left: 0 !important;
+          padding-right: 0 !important;
+        }
+        .recluster-new-expr-range {
+          overflow: visible !important;
+        }
+        .recluster-new-expr-distribution {
+          display: block !important;
+          flex: 0 0 148px !important;
+          height: 148px !important;
+          min-height: 0 !important;
+          max-height: 148px !important;
+          margin: 0 0 2px;
+          overflow: hidden !important;
+        }
+        /* global.css reserves 260px for generic Plotly outputs. This compact
+           QC-style distribution owns a taller bounded box so its density,
+           dots, and upper-right title cannot be clipped by the generic rule. */
+        .recluster-new-expr-range .shiny-plot-output,
+        .recluster-new-expr-range .recluster-new-expr-distribution .html-widget,
+        .recluster-new-expr-range .recluster-new-expr-distribution .plotly,
+        .recluster-new-expr-range .recluster-new-expr-distribution .js-plotly-plot {
+          display: block !important;
+          flex: 0 0 148px !important;
+          height: 148px !important;
+          min-height: 0 !important;
+          max-height: 148px !important;
+          overflow: hidden !important;
+        }
+        .recluster-new-expr-range .irs-grid-text {
+          font-size: 10px !important;
+          white-space: nowrap;
+        }
+        /* Keep distribution paper and Ion.RangeSlider track on one exact
+           content box. Bootstrap/widget horizontal padding must not create a
+           few-pixel drift inside the narrow left panel. */
+        .recluster-new-expr-range .shiny-plot-output,
+        .recluster-new-expr-range .recluster-new-expr-distribution .html-widget,
+        .recluster-new-expr-range .recluster-new-expr-distribution .plotly,
+        .recluster-new-expr-range .irs {
+          box-sizing: border-box;
+        }
+        /* Keep widget geometry stable. Plotly measures this box when binding;
+           changing its CSS width afterward leaves a stale SVG and clips the
+           right endpoint. Numeric alignment belongs in Plotly layout margins. */
+        .recluster-new-expr-range .recluster-new-expr-distribution {
+          width: 100% !important;
+          margin-left: 0 !important;
+          margin-right: 0 !important;
+        }
+        .recluster-new-expr-range .irs,
+        .recluster-new-expr-range .irs-grid {
+          overflow: visible !important;
         }
         .recluster-new-expr-range-hint {
           margin-top: 4px;
@@ -1164,6 +1297,22 @@ recluster_new_ui <- fluidPage(
               )
             ),
             div(
+              id = "recluster_new_lasso_selection_card",
+              class = "wl-side",
+              tags$details(
+                class = "recluster-new-fold",
+                open = NA,
+                tags$summary("Lasso Selection"),
+                div(class = "app-secondary-status", textOutput("recluster_new_lasso_selection_count")),
+                actionButton(
+                  "recluster_new_clear_lasso_btn",
+                  "Clear Lasso Selection",
+                  icon = icon("times"),
+                  class = "btn btn-default btn-sm"
+                )
+              )
+            ),
+            div(
               id = "recluster_new_advanced_manual_card",
               class = "wl-side",
               tags$details(
@@ -1179,7 +1328,8 @@ recluster_new_ui <- fluidPage(
               )
             ),
             div(
-              class = "wl-side",
+              id = "recluster_new_saved_groups_card",
+              class = "wl-side recluster-new-saved-groups-card",
               tags$details(
                 class = "recluster-new-fold",
                 open = NA,
@@ -1196,17 +1346,188 @@ recluster_new_ui <- fluidPage(
                 ),
                 div(class = "app-secondary-status", uiOutput("recluster_new_cell_groups_ui")),
                 div(style = "height:10px;"),
-                actionButton("recluster_new_run_btn", RECLUSTER_NEW_UI_TEXT$t_btn_recluster, icon = icon("sync-alt"), class = "btn-success")
+                actionButton("recluster_new_run_btn", RECLUSTER_NEW_UI_TEXT$t_btn_recluster, icon = icon("plus"), class = "btn-success")
               )
             )
           ),
           column(
             width = 9,
             class = "plot_area_card_style",
+            # Agent note: Button feedback starts in capture phase because a
+            # server overlay message cannot paint until the current observer
+            # yields. Keep each client start paired with a server terminal
+            # state; do not replace that pair with a timer or idle heuristic.
+            tags$script(HTML(sprintf(
+              "(function () {
+                if (window.__reclusterNewCreateFeedbackBound) return;
+                window.__reclusterNewCreateFeedbackBound = true;
+                var state = window.__reclusterNewCreateFeedbackState || {
+                  opening: false,
+                  creating: false
+                };
+                window.__reclusterNewCreateFeedbackState = state;
+                var openingLabel = %s;
+                var creatingLabel = %s;
+                function traceCreateFeedback(eventName, details) {
+                  if (typeof window.__reclusterNewDataBrowserTrace === 'function') {
+                    window.__reclusterNewDataBrowserTrace(eventName, details || {});
+                  }
+                }
+                function buttonFor(id) {
+                  return document.getElementById(id);
+                }
+                function rememberButton(button) {
+                  if (!button) return;
+                  if (!Object.prototype.hasOwnProperty.call(button, '__reclusterNewOriginalHtml')) {
+                    button.__reclusterNewOriginalHtml = button.innerHTML;
+                  }
+                }
+                function setButtonBusy(id, busy, label) {
+                  var button = buttonFor(id);
+                  if (!button) return;
+                  if (busy) {
+                    rememberButton(button);
+                    button.disabled = true;
+                    button.setAttribute('aria-busy', 'true');
+                    button.setAttribute('aria-disabled', 'true');
+                    button.setAttribute('data-recluster-create-pending', 'true');
+                    var labelNode = button.querySelector('.action-label');
+                    if (labelNode) labelNode.textContent = label;
+                    else button.textContent = label;
+                    return;
+                  }
+                  if (Object.prototype.hasOwnProperty.call(button, '__reclusterNewOriginalHtml')) {
+                    button.innerHTML = button.__reclusterNewOriginalHtml;
+                  }
+                  button.disabled = false;
+                  button.removeAttribute('aria-busy');
+                  button.removeAttribute('aria-disabled');
+                  button.removeAttribute('data-recluster-create-pending');
+                }
+                function showCreateOverlay(text) {
+                  if (window.WLSpinnerOverlay && typeof window.WLSpinnerOverlay.show === 'function') {
+                    window.WLSpinnerOverlay.show({
+                      id: 'global_overlay',
+                      text: text,
+                      lightweight: true,
+                      lock: true
+                    });
+                    return;
+                  }
+                  if (window.console && typeof window.console.warn === 'function') {
+                    window.console.warn('[DATA_BROWSER_TRACE] Create-object overlay API is not ready.');
+                  }
+                }
+                function hideCreateOverlay() {
+                  if (window.WLSpinnerOverlay && typeof window.WLSpinnerOverlay.hide === 'function') {
+                    window.WLSpinnerOverlay.hide({id: 'global_overlay'});
+                  }
+                }
+                function startOpening(event) {
+                  if (state.opening) {
+                    event.preventDefault();
+                    if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+                    traceCreateFeedback('create_object_duplicate_click', {button_id: 'recluster_new_run_btn', phase: 'opening'});
+                    return false;
+                  }
+                  state.opening = true;
+                  setButtonBusy('recluster_new_run_btn', true, openingLabel);
+                  traceCreateFeedback('create_object_click', {button_id: 'recluster_new_run_btn', phase: 'opening'});
+                  showCreateOverlay(openingLabel);
+                  return true;
+                }
+                function startCreating(event) {
+                  if (state.creating) {
+                    event.preventDefault();
+                    if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+                    traceCreateFeedback('create_object_duplicate_click', {button_id: 'recluster_new_confirm_btn', phase: 'creating'});
+                    return false;
+                  }
+                  state.creating = true;
+                  setButtonBusy('recluster_new_confirm_btn', true, creatingLabel);
+                  traceCreateFeedback('create_object_click', {button_id: 'recluster_new_confirm_btn', phase: 'creating'});
+                  showCreateOverlay(creatingLabel);
+                  return true;
+                }
+                function finishOpening() {
+                  state.opening = false;
+                  setButtonBusy('recluster_new_run_btn', false, openingLabel);
+                  hideCreateOverlay();
+                  traceCreateFeedback('create_object_terminal', {button_id: 'recluster_new_run_btn', phase: 'opening'});
+                }
+                function finishCreating() {
+                  state.creating = false;
+                  setButtonBusy('recluster_new_confirm_btn', false, creatingLabel);
+                  hideCreateOverlay();
+                  traceCreateFeedback('create_object_terminal', {button_id: 'recluster_new_confirm_btn', phase: 'creating'});
+                }
+                function handleServerState(payload) {
+                  var serverState = String(payload && payload.state || '').toLowerCase();
+                  if (serverState === 'open_finished') finishOpening();
+                  if (serverState === 'create_finished') finishCreating();
+                }
+                function bindStateHandler() {
+                  if (!window.Shiny || typeof window.Shiny.addCustomMessageHandler !== 'function') return;
+                  if (window.__reclusterNewCreateFeedbackHandlerBound) return;
+                  window.Shiny.addCustomMessageHandler('recluster-new-create-feedback', handleServerState);
+                  window.__reclusterNewCreateFeedbackHandlerBound = true;
+                }
+                bindStateHandler();
+                document.addEventListener('shiny:connected', bindStateHandler, true);
+                document.addEventListener('click', function (event) {
+                  var target = event && event.target;
+                  var confirmButton = target && target.closest ? target.closest('#recluster_new_confirm_btn') : null;
+                  if (confirmButton) {
+                    startCreating(event);
+                    return;
+                  }
+                  var openingButton = target && target.closest ? target.closest('#recluster_new_run_btn') : null;
+                  if (openingButton) startOpening(event);
+                }, true);
+              })();",
+              jsonlite::toJSON(RECLUSTER_NEW_UI_TEXT$t_text_preparing_subset, auto_unbox = TRUE),
+              jsonlite::toJSON(RECLUSTER_NEW_UI_TEXT$t_text_creating_subset, auto_unbox = TRUE)
+            ))),
             tags$script(HTML("
                 (function () {
                   if (window.__reclusterNewTabMirrorBound) return;
                   window.__reclusterNewTabMirrorBound = true;
+                  function publishTabValue(id, value) {
+                    if (!id || !value || !window.Shiny || !window.Shiny.setInputValue) return false;
+                    var root = document.getElementById(id);
+                    if (!root) return false;
+                    // One completed DOM transition owns one Shiny input
+                    // publication. Internal Shiny input state can lag during
+                    // rebind; polling it here creates duplicate input storms.
+                    if (root.__reclusterNewLastPublishedTab === value) return false;
+                    root.__reclusterNewLastPublishedTab = value;
+                    Shiny.setInputValue(id, value, { priority: 'event' });
+                    return true;
+                  }
+                  var reclusterNewTabRootSelector = 'ul#recluster_new_tabs, ul#recluster_new_expr_tabs, ul#recluster_new_rule_plot_tabs';
+                  function reclusterNewCurrentTabValue(root) {
+                    if (!root) return '';
+                    var node = root.querySelector('li.active [data-value], [data-value].active, [data-value][aria-selected=\"true\"]');
+                    return node ? (node.getAttribute('data-value') || '') : '';
+                  }
+                  function syncReclusterNewTabRoot(root) {
+                    var val = reclusterNewCurrentTabValue(root);
+                    if (!root || !root.id || !val) return;
+                    publishTabValue(root.id, val);
+                  }
+                  function syncReclusterNewTabsForTarget(target) {
+                    if (!target || !target.matches || !target.matches(reclusterNewTabRootSelector)) return;
+                    syncReclusterNewTabRoot(target);
+                  }
+                  function syncAllReclusterNewTabs() {
+                    if (!document.querySelectorAll) return;
+                    Array.prototype.forEach.call(
+                      document.querySelectorAll(reclusterNewTabRootSelector),
+                      function (root) {
+                        syncReclusterNewTabRoot(root);
+                      }
+                    );
+                  }
                   function pushTabValue(ev) {
                     if (!window.Shiny || !window.Shiny.setInputValue) return;
                     var node = ev.target && ev.target.closest && ev.target.closest('#recluster_new_tabs [data-value], #recluster_new_expr_tabs [data-value], #recluster_new_rule_plot_tabs [data-value]');
@@ -1214,45 +1535,488 @@ recluster_new_ui <- fluidPage(
                     var root = node.closest('ul');
                     var val = node.getAttribute('data-value') || '';
                     if (!root || !root.id || !val) return;
-                    var cur = window.Shiny.shinyapp && window.Shiny.shinyapp.$inputValues ? window.Shiny.shinyapp.$inputValues[root.id] : null;
-                    if (cur === val) return;
-                    Shiny.setInputValue(root.id, val, { priority: 'event' });
-                    if (root.id === 'recluster_new_tabs') {
-                      Shiny.setInputValue('recluster_new_tabs_click', val, { priority: 'event' });
-                    } else if (root.id === 'recluster_new_expr_tabs') {
-                      Shiny.setInputValue('recluster_new_expr_tabs_click', val, { priority: 'event' });
-                    } else if (root.id === 'recluster_new_rule_plot_tabs') {
-                      Shiny.setInputValue('recluster_new_rule_plot_tabs_click', val, { priority: 'event' });
-                    }
+                    publishTabValue(root.id, val);
                   }
-                  document.addEventListener('click', pushTabValue, true);
                   document.addEventListener('shown.bs.tab', pushTabValue, true);
-                  if (window.Shiny && window.Shiny.addCustomMessageHandler && !window.__reclusterNewSetTabBound) {
-                    window.__reclusterNewSetTabBound = true;
-                    window.Shiny.addCustomMessageHandler('recluster-new-set-tab', function (msg) {
-                      if (!msg || !msg.id || !msg.value) return;
-                      var root = document.getElementById(msg.id);
-                      if (!root) return;
-                      var selector = '[data-value=\"' + String(msg.value).replace(/\"/g, '\\\\\"') + '\"]';
-                      var node = root.matches && root.matches(selector) ? root : root.querySelector(selector);
-                      if (!node) return;
-                      if (window.bootstrap && window.bootstrap.Tab) {
-                        window.bootstrap.Tab.getOrCreateInstance(node).show();
-                      } else if (window.jQuery && window.jQuery.fn && window.jQuery.fn.tab) {
-                        window.jQuery(node).tab('show');
-                      } else {
-                        node.click();
+                  document.addEventListener('shiny:value', function (ev) {
+                    syncReclusterNewTabsForTarget(ev.target);
+                  }, true);
+                  document.addEventListener('shiny:bound', function (ev) {
+                    syncReclusterNewTabsForTarget(ev.target);
+                  }, true);
+                  document.addEventListener('shiny:connected', function () {
+                    syncAllReclusterNewTabs();
+                  }, true);
+                  if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', syncAllReclusterNewTabs, { once: true });
+                  } else {
+                    syncAllReclusterNewTabs();
+                  }
+                  if (window.jQuery) {
+                    window.jQuery(document)
+                      .off('shown.bs.tab.reclusterNewTabMirror')
+                      .on('shown.bs.tab.reclusterNewTabMirror', '#recluster_new_tabs [data-value], #recluster_new_expr_tabs [data-value], #recluster_new_rule_plot_tabs [data-value]', pushTabValue);
+                  }
+                  function reclusterNewCurrentObjectContext() {
+                    var roots = document.querySelectorAll('[data-recluster-object-context]');
+                    var selected = null;
+                    var selectedRevision = -Infinity;
+                    for (var i = 0; i < roots.length; i++) {
+                      var revisionText = roots[i].getAttribute('data-recluster-object-context-revision');
+                      var revision = revisionText === null || revisionText === '' ? NaN : Number(revisionText);
+                      if (!selected || (isFinite(revision) && revision >= selectedRevision)) {
+                        selected = roots[i];
+                        selectedRevision = isFinite(revision) ? revision : selectedRevision;
                       }
-                      if (window.Shiny && window.Shiny.setInputValue) {
-                        window.Shiny.setInputValue(msg.id, msg.value, { priority: 'event' });
-                        window.Shiny.setInputValue(msg.id + '_click', msg.value, { priority: 'event' });
+                    }
+                    if (!selected) return {object: '', context_revision: null};
+                    var selectedRevisionText = selected.getAttribute('data-recluster-object-context-revision');
+                    return {
+                      object: selected.getAttribute('data-recluster-object-context') || '',
+                      context_revision: selectedRevisionText === null || selectedRevisionText === '' ? null : Number(selectedRevisionText)
+                    };
+                  }
+                  // Agent note: Keep this trace narrow and bounded. It must expose
+                  // browser/Shiny event provenance for delayed saved-group changes
+                  // without adding another state writer or a DOM polling loop.
+                  if (!window.__reclusterNewDataBrowserTrace) {
+                    var dbTraceState = window.__reclusterNewDataBrowserTraceState || {
+                      enabled: true,
+                      maxEvents: 500,
+                      events: []
+                    };
+                    window.__reclusterNewDataBrowserTraceState = dbTraceState;
+                    window.__reclusterNewDataBrowserTrace = function (eventName, details) {
+                      if (dbTraceState.enabled !== true) return;
+                      var context = reclusterNewCurrentObjectContext();
+                      var entry = {
+                        timestamp: new Date().toISOString(),
+                        event: eventName || '',
+                        page: 'data_browser_new',
+                        object: context.object || '',
+                        context_revision: context.context_revision
+                      };
+                      if (details && typeof details === 'object') {
+                        Object.keys(details).forEach(function (key) {
+                          entry[key] = details[key];
+                        });
+                      }
+                      dbTraceState.events.push(entry);
+                      if (dbTraceState.events.length > dbTraceState.maxEvents) {
+                        dbTraceState.events.splice(0, dbTraceState.events.length - dbTraceState.maxEvents);
+                      }
+                      if (window.console && typeof window.console.info === 'function') {
+                        window.console.info('[DATA_BROWSER_TRACE]', entry);
+                      }
+                    };
+                    window.__reclusterNewDataBrowserTraceDump = function () {
+                      return dbTraceState.events.slice();
+                    };
+                  }
+                  var reclusterNewTrace = window.__reclusterNewDataBrowserTrace;
+                  if (!window.__reclusterNewDataBrowserTraceListenersBound) {
+                    window.__reclusterNewDataBrowserTraceListenersBound = true;
+                    var dbTraceOutputPattern = /^recluster_new_(cell_groups_ui|umap_plot|scatter_plot|violin_plot|rule_stacked_plot|rule_scatter_plot|rule_umap_plot|expr_active_distribution|tcr_dist_plot)$/;
+                    var traceDataBrowserLifecycleEvent = function (ev) {
+                      var target = ev && ev.target;
+                      var id = target && target.id ? target.id : '';
+                      var isBusyEvent = ev.type === 'shiny:busy' || ev.type === 'shiny:idle';
+                      var pagePresent = !!document.querySelector('.recluster-new-page');
+                      if (isBusyEvent && !pagePresent) return;
+                      if (!isBusyEvent && !dbTraceOutputPattern.test(id)) return;
+                      reclusterNewTrace('lifecycle_' + ev.type.replace(':', '_'), {
+                        target_id: id,
+                        recalculating: !!(target && target.classList && target.classList.contains('recalculating')),
+                        saved_group_count: document.querySelectorAll('input[type=checkbox][id^=recluster_new_group_enabled__]').length,
+                        page_present: pagePresent
+                      });
+                    };
+                    ['shiny:value', 'shiny:bound', 'shiny:recalculating', 'shiny:recalculated', 'shiny:busy', 'shiny:idle'].forEach(function (eventName) {
+                      document.addEventListener(eventName, traceDataBrowserLifecycleEvent, true);
+                    });
+                    document.addEventListener('shiny:inputchanged', function (ev) {
+                      var detail = ev && ev.detail ? ev.detail : {};
+                      var inputName = detail.name || (ev && ev.name) || '';
+                      if (inputName !== 'recluster_new_saved_group_toggle_event') return;
+                      reclusterNewTrace('inputchanged_saved_group_toggle', {
+                        input_name: inputName,
+                        value: detail.value === undefined ? null : detail.value
+                      });
+                    }, true);
+                  }
+                  if (!window.__reclusterNewDataBrowserTraceReady) {
+                    window.__reclusterNewDataBrowserTraceReady = true;
+                    reclusterNewTrace('trace_ready', {
+                      saved_group_selector: 'input[type=checkbox][id^=recluster_new_group_enabled__]',
+                      output_scope: 'recluster_new_*plot and recluster_new_cell_groups_ui'
+                    });
+                  }
+                  if (!window.__reclusterNewSavedGroupCheckboxGuardBound) {
+                    window.__reclusterNewSavedGroupCheckboxGuardBound = true;
+                    var savedGroupCheckboxSelector = 'input[type=checkbox][id^=recluster_new_group_enabled__]';
+                    var physicalSavedGroupChanges = window.__reclusterNewPhysicalSavedGroupChanges || new WeakSet();
+                    window.__reclusterNewPhysicalSavedGroupChanges = physicalSavedGroupChanges;
+                    var savedGroupCheckboxDiag = window.__reclusterNewSavedGroupCheckboxDiag || {
+                      allowed: 0,
+                      sanitized: 0,
+                      server_updates: 0,
+                      last: null
+                    };
+                    window.__reclusterNewSavedGroupCheckboxDiag = savedGroupCheckboxDiag;
+                    function traceSavedGroupCheckbox(eventName, node, details) {
+                      var payload = {
+                        input_id: node && node.id ? node.id : '',
+                        checked: node ? !!node.checked : null,
+                        default_checked: node ? !!node.defaultChecked : null,
+                        canonical: node ? savedGroupCanonicalEnabled(node) : null
+                      };
+                      if (details && typeof details === 'object') {
+                        Object.keys(details).forEach(function (key) {
+                          payload[key] = details[key];
+                        });
+                      }
+                      reclusterNewTrace(eventName, payload);
+                    }
+                    function savedGroupCheckboxFromTarget(target) {
+                      if (!target) return null;
+                      if (target.matches && target.matches(savedGroupCheckboxSelector)) return target;
+                      var toggle = target.closest && target.closest('.recluster-new-group-toggle');
+                      return toggle ? toggle.querySelector(savedGroupCheckboxSelector) : null;
+                    }
+                    function savedGroupCheckboxWrapper(node) {
+                      return node && node.closest
+                        ? node.closest('[data-recluster-saved-group-canonical-enabled]')
+                        : null;
+                    }
+                    function hardenSavedGroupCheckbox(node) {
+                      if (!node || !node.setAttribute) return;
+                      node.setAttribute('autocomplete', 'off');
+                      node.setAttribute('data-wl-autofill-guard', 'true');
+                      if (node.form) node.form.setAttribute('autocomplete', 'off');
+                    }
+                    function savedGroupCanonicalEnabled(node) {
+                      var wrapper = savedGroupCheckboxWrapper(node);
+                      if (!wrapper) return null;
+                      return wrapper.getAttribute('data-recluster-saved-group-canonical-enabled') === '1';
+                    }
+                    function recordSavedGroupCheckboxDiagnostic(reason, node) {
+                      traceSavedGroupCheckbox(reason || 'saved_group_diagnostic', node);
+                      if (!window.__WANLAB_DB_DIAG_MODE) return;
+                      savedGroupCheckboxDiag.last = {
+                        reason: reason || '',
+                        id: node && node.id ? node.id : '',
+                        checked: !!(node && node.checked),
+                        canonical: savedGroupCanonicalEnabled(node)
+                      };
+                    }
+                    function markPhysicalSavedGroupChange(ev) {
+                      if (!ev.isTrusted) return;
+                      if (ev.type === 'mousedown' && ev.button !== 0) return;
+                      if (ev.type === 'keydown' && ev.key !== ' ' && ev.key !== 'Spacebar' && ev.key !== 'Enter') return;
+                      var node = savedGroupCheckboxFromTarget(ev.target);
+                      if (node) {
+                        physicalSavedGroupChanges.add(node);
+                        traceSavedGroupCheckbox('physical_intent_marked', node, {
+                          source_event: ev.type,
+                          key: ev.key || '',
+                          trusted: !!ev.isTrusted
+                        });
+                      }
+                    }
+                    document.addEventListener('mousedown', markPhysicalSavedGroupChange, true);
+                    document.addEventListener('keydown', markPhysicalSavedGroupChange, true);
+                    document.addEventListener('touchstart', markPhysicalSavedGroupChange, true);
+                    function sanitizeSavedGroupCheckboxes(root, reason) {
+                      var nodes = [];
+                      if (root && root.matches && root.matches(savedGroupCheckboxSelector)) nodes.push(root);
+                      if (root && root.querySelectorAll) {
+                        Array.prototype.forEach.call(root.querySelectorAll(savedGroupCheckboxSelector), function (node) {
+                          nodes.push(node);
+                        });
+                      }
+                      nodes.forEach(hardenSavedGroupCheckbox);
+                      if (nodes.length) {
+                        traceSavedGroupCheckbox('saved_group_dom_scan', null, {
+                          reason: reason || '',
+                          node_count: nodes.length,
+                          states: nodes.map(function (node) {
+                            return {
+                              id: node.id || '',
+                              checked: !!node.checked,
+                              default_checked: !!node.defaultChecked,
+                              canonical: savedGroupCanonicalEnabled(node)
+                            };
+                          })
+                        });
+                      }
+                      nodes.forEach(function (node) {
+                        if (savedGroupCanonicalEnabled(node) !== false || physicalSavedGroupChanges.has(node)) return;
+                        if (!node.checked) return;
+                        node.checked = false;
+                        node.defaultChecked = false;
+                        savedGroupCheckboxDiag.sanitized += 1;
+                        recordSavedGroupCheckboxDiagnostic(reason || 'sanitize', node);
+                      });
+                    }
+                    document.addEventListener('change', function (ev) {
+                      var node = savedGroupCheckboxFromTarget(ev.target);
+                      if (!node) return;
+                      var isPhysical = physicalSavedGroupChanges.has(node);
+                      traceSavedGroupCheckbox('native_change_seen', node, {
+                        physical: isPhysical,
+                        trusted: !!ev.isTrusted
+                      });
+                      if (isPhysical) {
+                        physicalSavedGroupChanges.delete(node);
+                        var physicalWrapper = savedGroupCheckboxWrapper(node);
+                        if (physicalWrapper) {
+                          physicalWrapper.setAttribute(
+                            'data-recluster-saved-group-canonical-enabled',
+                            node.checked ? '1' : '0'
+                          );
+                        }
+                        savedGroupCheckboxDiag.allowed += 1;
+                        recordSavedGroupCheckboxDiagnostic('physical_change', node);
+                        if (window.Shiny && window.Shiny.setInputValue) {
+                          var physicalContext = reclusterNewCurrentObjectContext();
+                          window.Shiny.setInputValue('recluster_new_saved_group_toggle_event', {
+                            id: node.id,
+                            enabled: !!node.checked,
+                            object: physicalContext.object,
+                            context_revision: physicalContext.context_revision,
+                            nonce: Date.now()
+                          }, {priority: 'event'});
+                          traceSavedGroupCheckbox('custom_toggle_sent', node, {
+                            object: physicalContext.object,
+                            context_revision: physicalContext.context_revision,
+                            enabled: !!node.checked
+                          });
+                        }
+                        ev.preventDefault();
+                        ev.stopImmediatePropagation();
+                        ev.stopPropagation();
+                        return;
+                      }
+                      if (savedGroupCanonicalEnabled(node) !== false || !node.checked) {
+                        traceSavedGroupCheckbox('native_change_ignored', node, {
+                          reason: savedGroupCanonicalEnabled(node) !== false ? 'canonical_enabled' : 'unchecked'
+                        });
+                        return;
+                      }
+                      node.checked = false;
+                      node.defaultChecked = false;
+                      ev.preventDefault();
+                      ev.stopImmediatePropagation();
+                      ev.stopPropagation();
+                      savedGroupCheckboxDiag.sanitized += 1;
+                      recordSavedGroupCheckboxDiagnostic('blocked_restoration_change', node);
+                    }, true);
+                    function applySavedGroupServerUpdate(ev) {
+                      var message = ev && (ev.message || ev.detail && (ev.detail.message || ev.detail));
+                      if (!message || !message.id || message.value === undefined) return;
+                      var node = document.getElementById(message.id);
+                      if (!node || !node.matches || !node.matches(savedGroupCheckboxSelector)) return;
+                      traceSavedGroupCheckbox('server_update_seen', node, {
+                        message_value: message.value
+                      });
+                      var wrapper = savedGroupCheckboxWrapper(node);
+                      if (wrapper) {
+                        var enabled = message.value === true || message.value === 1 ||
+                          message.value === 'true' || message.value === '1';
+                        wrapper.setAttribute(
+                          'data-recluster-saved-group-canonical-enabled',
+                          enabled ? '1' : '0'
+                        );
+                      }
+                      physicalSavedGroupChanges.delete(node);
+                      savedGroupCheckboxDiag.server_updates += 1;
+                      recordSavedGroupCheckboxDiagnostic('server_update', node);
+                      sanitizeSavedGroupCheckboxes(node, 'server_update');
+                    }
+                    document.addEventListener('shiny:updateinput', applySavedGroupServerUpdate, true);
+                    document.addEventListener('shiny:value', function (ev) {
+                      sanitizeSavedGroupCheckboxes(ev.target, 'shiny_value');
+                    }, true);
+                    document.addEventListener('shiny:bound', function (ev) {
+                      sanitizeSavedGroupCheckboxes(ev.target, 'shiny_bound');
+                    }, true);
+                    if (window.jQuery) {
+                      window.jQuery(document)
+                        .off('shiny:updateinput.reclusterNewSavedGroupGuard')
+                        .on('shiny:updateinput.reclusterNewSavedGroupGuard', applySavedGroupServerUpdate);
+                    }
+                    sanitizeSavedGroupCheckboxes(document, 'initial');
+                    reclusterNewTrace('saved_group_guard_bound', null, {
+                      selector: savedGroupCheckboxSelector
+                    });
+                  }
+                  document.addEventListener('shiny:bound', function (ev) {
+                    var node = ev.target;
+                    if (!node || !node.id || !window.Shiny || !window.Shiny.setInputValue) return;
+                    if (!/^recluster_new_(gene_expr_select_[1-3]|scatter_gene_[xy]|rule_gene_expr_select_1|rule_scatter_gene_[xy]|expr_add_gene__.+)$/.test(node.id)) return;
+                    var boundContext = reclusterNewCurrentObjectContext();
+                    var boundRevision = boundContext.context_revision === null || boundContext.context_revision === undefined
+                      ? ''
+                      : String(boundContext.context_revision);
+                    var boundKey = String(boundContext.object || '') + '::' + boundRevision;
+                    // Selectize updates can rebind the same node. Publish only
+                    // once per node/context; replacement nodes still publish.
+                    if (node.__reclusterNewGeneSelectizeBoundKey === boundKey) return;
+                    node.__reclusterNewGeneSelectizeBoundKey = boundKey;
+                    Shiny.setInputValue('recluster_new_gene_selectize_bound', {
+                      id: node.id,
+                      object: boundContext.object,
+                      context_revision: boundContext.context_revision,
+                      key: boundKey
+                    }, {priority: 'event'});
+                  }, true);
+                  function formatExpressionRangeTicks(node) {
+                    if (!node || node.id !== 'recluster_new_expr_active_range' || !window.jQuery) return;
+                    var host = window.jQuery(node).closest('.form-group').find('.irs').first();
+                    if (!host.length) return;
+                    var slider = window.jQuery(node).data('ionRangeSlider');
+                    var options = slider && slider.options ? slider.options : {};
+                    var minValue = Number(options.min);
+                    var maxValue = Number(options.max);
+                    var hasFiniteDomain = isFinite(minValue) && isFinite(maxValue) && maxValue > minValue;
+                    // Handle labels already show selected bounds. Ion's gray
+                    // domain labels duplicate them and expose display-only
+                    // negative padding as if it were a selectable threshold.
+                    host.find('.irs-min, .irs-max').css({ visibility: 'hidden' });
+                    var ticks = host.find('.irs-grid-text');
+                    var zeroGridTick = null;
+                    var zeroGridNumeric = -Infinity;
+                    ticks.each(function () {
+                      var tick = window.jQuery(this);
+                      var storedRaw = tick.attr('data-recluster-new-raw-value');
+                      var raw = String(storedRaw === undefined ? tick.text() : storedRaw).replace(/,/g, '').trim();
+                      if (!raw.length) return;
+                      if (storedRaw === undefined) tick.attr('data-recluster-new-raw-value', raw);
+                      var numeric = Number(raw);
+                      if (!isFinite(numeric)) return;
+                      // Negative display padding belongs to chart breathing
+                      // room. Keep first visible numeric tick at zero.
+                      if (numeric < 0) {
+                        tick.text('').css({ visibility: 'hidden' });
+                        if (numeric > zeroGridNumeric) {
+                          zeroGridNumeric = numeric;
+                          zeroGridTick = tick;
+                        }
+                      } else {
+                        tick.text(numeric.toFixed(2)).css({ visibility: 'visible' });
                       }
                     });
+                    // Endpoint handle labels already show the exact bounds;
+                    // suppress duplicate grid text at the right edge so it
+                    // cannot collide with or overflow past the handle.
+                    if (ticks.length > 1) {
+                      window.jQuery(ticks[ticks.length - 1]).text('').css({ visibility: 'hidden' });
+                    }
+                    var fromHandle = host.find('.irs-handle.from').first();
+                    var toHandle = host.find('.irs-handle.to').first();
+                    var handleParent = fromHandle.parent();
+                    host.find('.recluster-new-expr-zero-tick').remove();
+                    if (hasFiniteDomain && minValue < 0 && maxValue > 0) {
+                      var fromValue = Number(slider && slider.result ? slider.result.from : NaN);
+                      var toValue = Number(slider && slider.result ? slider.result.to : NaN);
+                      if (!fromHandle.length || !toHandle.length || !handleParent.length ||
+                          !isFinite(fromValue) || !isFinite(toValue) || toValue <= fromValue) return;
+                      // Ion maps values between actual handle centers, not the
+                      // full .irs-grid width. Interpolate in that same physical
+                      // coordinate system so zero aligns with Plotly x = 0.
+                      var fromCenter = fromHandle.position().left + fromHandle.outerWidth() / 2;
+                      var toCenter = toHandle.position().left + toHandle.outerWidth() / 2;
+                      var zeroLeft = fromCenter + ((0 - fromValue) / (toValue - fromValue)) * (toCenter - fromCenter);
+                      var grid = host.find('.irs-grid').first();
+                      if (!grid.length || !zeroGridTick || !zeroGridTick.length) return;
+                      var zeroGridLeft = zeroLeft - grid.position().left;
+                      zeroGridTick.text('0.00').css({
+                        left: zeroGridLeft + 'px',
+                        marginLeft: -(zeroGridTick.outerWidth() / 2) + 'px',
+                        visibility: 'visible',
+                        transform: 'none',
+                        textAlign: 'center'
+                      });
+                      var zeroGridIndex = ticks.index(zeroGridTick);
+                      grid.find('.irs-grid-pol:not(.small)').eq(zeroGridIndex).css({ left: zeroGridLeft + 'px' });
+                    }
+                  }
+                  function configureExpressionRangeDisplay(node) {
+                    if (!node || node.id !== 'recluster_new_expr_active_range' || !window.jQuery) return;
+                    var slider = window.jQuery(node).data('ionRangeSlider');
+                    if (!slider || !slider.options || typeof slider.drawHandles !== 'function') return;
+                    // Display-only settings. Keep full-precision slider values in
+                    // Shiny state; never round thresholds or emit another input.
+                    slider.options.prettify_enabled = true;
+                    slider.options.prettify = function (value) {
+                      var numeric = Number(value);
+                      return isFinite(numeric) ? numeric.toFixed(2) : String(value);
+                    };
+                    // IonRangeSlider shifts endpoint labels inside the track while
+                    // preserving their handle values when force_edges is enabled.
+                    slider.options.force_edges = true;
+                    if (!slider.__reclusterNewCutoffSyncBound) {
+                      slider.__reclusterNewCutoffSyncBound = true;
+                      var previousOnChange = slider.options.onChange;
+                      slider.options.onChange = function (data) {
+                        if (typeof previousOnChange === 'function') previousOnChange(data);
+                        var root = document.getElementById('recluster_new_expr_active_distribution');
+                        var plot = root && root.classList.contains('js-plotly-plot')
+                          ? root
+                          : root && root.querySelector('.js-plotly-plot');
+                        if (!plot || !window.Plotly || !plot.layout || !Array.isArray(plot.layout.shapes)) return;
+                        var update = {};
+                        plot.layout.shapes.forEach(function (shape, index) {
+                          if (shape.name === 'expr-lower-cutoff') {
+                            update['shapes[' + index + '].x0'] = Number(data.from);
+                            update['shapes[' + index + '].x1'] = Number(data.from);
+                          } else if (shape.name === 'expr-upper-cutoff') {
+                            update['shapes[' + index + '].x0'] = Number(data.to);
+                            update['shapes[' + index + '].x1'] = Number(data.to);
+                          }
+                        });
+                        if (Object.keys(update).length) window.Plotly.relayout(plot, update);
+                      };
+                    }
+                    slider.force_redraw = true;
+                    slider.drawHandles();
+                    formatExpressionRangeTicks(node);
+                  }
+                  document.addEventListener('shiny:bound', function (ev) {
+                    configureExpressionRangeDisplay(ev.target);
+                  }, true);
+                  if (window.jQuery) {
+                    window.jQuery(document)
+                      .off('shiny:bound.reclusterNewExprRangeDisplay')
+                      .on('shiny:bound.reclusterNewExprRangeDisplay', function (ev) {
+                        configureExpressionRangeDisplay(ev.target);
+                      });
+                    window.jQuery(document)
+                      .off('shiny:updateinput.reclusterNewExprRangeDisplay')
+                      .on('shiny:updateinput.reclusterNewExprRangeDisplay', function (ev) {
+                        var id = ev.message && ev.message.id;
+                        if (id === 'recluster_new_expr_active_range') {
+                          formatExpressionRangeTicks(document.getElementById(id));
+                        }
+                      });
+                  }
+                  function reclusterNewObjectContextMatches(objectName, contextRevision) {
+                    if (!objectName) return false;
+                    var expectedRevision = contextRevision === undefined || contextRevision === null
+                      ? null
+                      : String(contextRevision);
+                    var roots = document.querySelectorAll('[data-recluster-object-context]');
+                    for (var i = 0; i < roots.length; i++) {
+                      if (roots[i].getAttribute('data-recluster-object-context') !== String(objectName)) continue;
+                      if (expectedRevision === null || roots[i].getAttribute('data-recluster-object-context-revision') === expectedRevision) return true;
+                    }
+                    return false;
                   }
                   if (window.Shiny && window.Shiny.addCustomMessageHandler && !window.__reclusterNewToggleClassBound) {
                     window.__reclusterNewToggleClassBound = true;
                     window.Shiny.addCustomMessageHandler('recluster-new-toggle-class', function (msg) {
                       if (!msg || !msg.id || !msg.className) return;
+                      if (!reclusterNewObjectContextMatches(msg.object, msg.context_revision)) return;
                       var node = document.getElementById(msg.id);
                       if (!node) return;
                       node.classList.toggle(msg.className, !!msg.enabled);
@@ -1260,46 +2024,55 @@ recluster_new_ui <- fluidPage(
                   }
                   if (!window.__reclusterNewHoverLevel) {
                     window.__reclusterNewHoverLevel = (function () {
-                      window.__reclusterNewHoverTimer = null;
                       window.__reclusterNewHoverLastKey = '';
-                      return function (col, level) {
-                        var key = String(col || '') + '\\u001f' + String(level || '');
-                        if (!col || !level || key === window.__reclusterNewHoverLastKey) return;
-                        if (window.__reclusterNewHoverTimer) window.clearTimeout(window.__reclusterNewHoverTimer);
-                        window.__reclusterNewHoverTimer = window.setTimeout(function () {
-                          window.__reclusterNewHoverLastKey = key;
-                          window.__reclusterNewHoverTimer = null;
-                          if (window.Shiny && window.Shiny.setInputValue) {
-                            window.Shiny.setInputValue('recluster_new_meta_level_highlight', {
-                              col: col,
-                              level: level,
-                              nonce: Date.now()
-                            }, {priority: 'event'});
-                          }
-                        }, 1000);
+                      window.__reclusterNewHoverObject = '';
+                      window.__reclusterNewHoverRevision = null;
+                      return function (col, level, objectName, contextRevision) {
+                        var key = String(objectName || '') + '\\u001f' + String(contextRevision == null ? '' : contextRevision) + '\\u001f' + String(col || '') + '\\u001f' + String(level || '');
+                        if (!col || !level || !objectName || key === window.__reclusterNewHoverLastKey) return;
+                        window.__reclusterNewHoverLastKey = key;
+                        window.__reclusterNewHoverObject = objectName;
+                        window.__reclusterNewHoverRevision = contextRevision;
+                        if (window.Shiny && window.Shiny.setInputValue) {
+                          window.Shiny.setInputValue('recluster_new_meta_level_highlight', {
+                            col: col,
+                            level: level,
+                            object: objectName,
+                            context_revision: contextRevision,
+                            nonce: Date.now()
+                          }, {priority: 'event'});
+                        }
                       };
                     })();
                   }
                   if (!window.__reclusterNewClearHoverLevel) {
                     window.__reclusterNewClearHoverLevel = function () {
-                      if (window.__reclusterNewHoverTimer) {
-                        window.clearTimeout(window.__reclusterNewHoverTimer);
-                        window.__reclusterNewHoverTimer = null;
-                      }
                       window.__reclusterNewHoverLastKey = '';
                       if (window.Shiny && window.Shiny.setInputValue) {
                         window.Shiny.setInputValue('recluster_new_meta_level_highlight_clear', {
+                          object: window.__reclusterNewHoverObject || '',
+                          context_revision: window.__reclusterNewHoverRevision,
                           nonce: Date.now()
                         }, {priority: 'event'});
                       }
+                      window.__reclusterNewHoverObject = '';
+                      window.__reclusterNewHoverRevision = null;
                     };
                   }
                   if (!window.__reclusterNewExprSelectionBound) {
                     window.__reclusterNewExprSelectionBound = true;
-                    window.__reclusterNewExprRangeDragging = false;
                     function shinySet(id, value) {
                       if (!id || !window.Shiny || !window.Shiny.setInputValue) return;
                       window.Shiny.setInputValue(id, value, {priority: 'event'});
+                    }
+                    function currentReclusterObjectContext() {
+                      var context = reclusterNewCurrentObjectContext();
+                      var contextKey = String(context.object || '') + '\\u001f' + String(context.context_revision == null ? '' : context.context_revision);
+                      if (window.__reclusterNewExpressionContextKey !== contextKey) {
+                        window.__reclusterNewExpressionExpectedOpen = {};
+                        window.__reclusterNewExpressionContextKey = contextKey;
+                      }
+                      return context;
                     }
                     function exprRangeInput() {
                       return document.getElementById('recluster_new_expr_active_range');
@@ -1313,21 +2086,13 @@ recluster_new_ui <- fluidPage(
                     function commitExprRange() {
                       var vals = parseExprRangeValue(exprRangeInput());
                       if (!vals) return;
-                      shinySet('recluster_new_expr_active_range_commit', vals);
-                    }
-                    function isExprRangeEventTarget(target) {
-                      return !!(target && target.closest && target.closest('#recluster_new_expr_active_range, .recluster-new-expr-range .irs, .recluster-new-expr-range .irs-bar, .recluster-new-expr-range .irs-handle, .recluster-new-expr-range .irs-slider'));
-                    }
-                    function startExprRangeDrag(ev) {
-                      if (!isExprRangeEventTarget(ev.target)) return;
-                      window.__reclusterNewExprRangeDragging = true;
-                      shinySet('recluster_new_expr_slider_dragging', true);
-                    }
-                    function endExprRangeDrag() {
-                      if (!window.__reclusterNewExprRangeDragging) return;
-                      window.__reclusterNewExprRangeDragging = false;
-                      shinySet('recluster_new_expr_slider_dragging', false);
-                      commitExprRange();
+                      var context = currentReclusterObjectContext();
+                      shinySet('recluster_new_expr_active_range_commit', {
+                        range: vals,
+                        object: context.object,
+                        context_revision: context.context_revision,
+                        nonce: Date.now()
+                      });
                     }
                     document.addEventListener('pointerdown', function (ev) {
                       if (!ev.target || !ev.target.closest) return;
@@ -1346,7 +2111,12 @@ recluster_new_ui <- fluidPage(
                       if (renameCancelBtn) {
                         ev.preventDefault();
                         ev.stopPropagation();
-                        shinySet('recluster_new_expr_group_name_cancel', { nonce: Date.now() });
+                        var cancelContext = currentReclusterObjectContext();
+                        shinySet('recluster_new_expr_group_name_cancel', {
+                          object: cancelContext.object,
+                          context_revision: cancelContext.context_revision,
+                          nonce: Date.now()
+                        });
                         return;
                       }
                       var renameSaveBtn = ev.target && ev.target.closest && ev.target.closest('#recluster_new_expr_group_name_save');
@@ -1354,8 +2124,11 @@ recluster_new_ui <- fluidPage(
                         ev.preventDefault();
                         ev.stopPropagation();
                         var renameNameInput = document.getElementById('recluster_new_expr_group_name_edit');
+                        var saveContext = currentReclusterObjectContext();
                         shinySet('recluster_new_expr_group_name_save', {
                           name: renameNameInput ? renameNameInput.value : '',
+                          object: saveContext.object,
+                          context_revision: saveContext.context_revision,
                           nonce: Date.now()
                         });
                         return;
@@ -1369,21 +2142,34 @@ recluster_new_ui <- fluidPage(
                         shinySet(deleteBtn.id, Date.now());
                         return;
                       }
+                      var geneDeleteBtn = ev.target && ev.target.closest && ev.target.closest('button[id^=\"recluster_new_expr_gene_delete__\"]');
+                      if (geneDeleteBtn) {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        // Agent note: Gene rows are rendered inside a dynamic
+                        // output. Use one stable input for every delete click;
+                        // never depend on a per-gene Shiny observer surviving
+                        // a UI replacement.
+                        var deleteContext = currentReclusterObjectContext();
+                        shinySet('recluster_new_expr_gene_delete_event', {
+                          group_id: geneDeleteBtn.getAttribute('data-expr-delete-group-id') || '',
+                          gene_id: geneDeleteBtn.getAttribute('data-expr-delete-gene-id') || '',
+                          object: deleteContext.object,
+                          context_revision: deleteContext.context_revision,
+                          nonce: Date.now()
+                        });
+                        return;
+                      }
                       var renameBtn = ev.target && ev.target.closest && ev.target.closest('.recluster-new-expr-group-rename');
                       if (renameBtn) {
                         ev.preventDefault();
                         ev.stopPropagation();
                         shinySet('recluster_new_expr_group_rename', {
                           group_id: renameBtn.getAttribute('data-expr-rename-group-id') || '',
+                          object: currentReclusterObjectContext().object,
+                          context_revision: currentReclusterObjectContext().context_revision,
                           nonce: Date.now()
                         });
-                        return;
-                      }
-                      var clearGeneBtn = ev.target && ev.target.closest && ev.target.closest('.recluster-new-expr-gene-clear[data-expr-active-id]');
-                      if (clearGeneBtn) {
-                        ev.preventDefault();
-                        ev.stopPropagation();
-                        shinySet(clearGeneBtn.getAttribute('data-expr-active-id'), Date.now());
                         return;
                       }
                       var row = ev.target && ev.target.closest && ev.target.closest('.recluster-new-expr-gene-row[data-expr-active-id]');
@@ -1391,82 +2177,255 @@ recluster_new_ui <- fluidPage(
                       if (ev.target.closest('button, input, label, .checkbox, .selectize-control, .selectize-dropdown')) return;
                       shinySet(row.getAttribute('data-expr-active-id'), Date.now());
                     }, true);
+                    window.__reclusterNewExpressionExpectedOpen = window.__reclusterNewExpressionExpectedOpen || {};
+                    // Agent note: Native details toggle events are trusted even
+                    // when Chrome restores or rebuilds a dynamic details node.
+                    // Keep canonical open state owned by physical summary
+                    // gestures only; a server-rendered details node must never
+                    // publish its restored `open` attribute back to Shiny.
+                    var physicalDetailsToggle = window.__reclusterNewPhysicalDetailsToggle || {
+                      node: null,
+                      beforeOpen: null
+                    };
+                    window.__reclusterNewPhysicalDetailsToggle = physicalDetailsToggle;
+                    function detailsFromPhysicalTarget(target) {
+                      if (!target || !target.closest) return null;
+                      var summary = target.closest('summary');
+                      var details = summary && summary.parentElement;
+                      if (!details || details.tagName !== 'DETAILS') return null;
+                      if (!details.matches('.recluster-new-expr-group[data-expr-group-id], .recluster-new-metadata-col[data-metadata-open-column], .recluster-new-metadata-bucket[data-metadata-open-bucket], .recluster-new-fold[data-basic-open-id]')) return null;
+                      return details;
+                    }
+                    function markPhysicalDetailsToggle(ev) {
+                      if (!ev.isTrusted) return;
+                      var details = detailsFromPhysicalTarget(ev.target);
+                      if (!details) return;
+                      if (ev.type === 'mousedown' && ev.button !== 0) return;
+                      if (ev.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
+                      physicalDetailsToggle.node = details;
+                      physicalDetailsToggle.beforeOpen = !!details.open;
+                    }
+                    document.addEventListener('mousedown', markPhysicalDetailsToggle, true);
+                    document.addEventListener('keydown', markPhysicalDetailsToggle, true);
+                    document.addEventListener('touchstart', markPhysicalDetailsToggle, true);
+                    function consumePhysicalDetailsToggle(details) {
+                      var wasPhysical = physicalDetailsToggle.node === details &&
+                        physicalDetailsToggle.beforeOpen !== !!details.open;
+                      if (physicalDetailsToggle.node === details) {
+                        physicalDetailsToggle.node = null;
+                        physicalDetailsToggle.beforeOpen = null;
+                      }
+                      return wasPhysical;
+                    }
+                    function recordDetailsToggleDiagnostic(kind, accepted, reason) {
+                      if (!window.__WANLAB_DB_DIAG_MODE) return;
+                      var diag = window.__reclusterNewDetailsToggleDiag || {
+                        total: 0,
+                        accepted: 0,
+                        ignored: 0,
+                        last: null
+                      };
+                      diag.total += 1;
+                      diag[accepted ? 'accepted' : 'ignored'] += 1;
+                      diag.last = {
+                        kind: kind,
+                        accepted: !!accepted,
+                        reason: reason || ''
+                      };
+                      window.__reclusterNewDetailsToggleDiag = diag;
+                    }
                     document.addEventListener('toggle', function (ev) {
                       var details = ev.target;
                       if (!details || !details.matches) return;
+                      if (details.matches('.recluster-new-expr-group[data-expr-group-id]')) {
+                        var exprGroupId = details.getAttribute('data-expr-group-id') || '';
+                        var expectedOpen = window.__reclusterNewExpressionExpectedOpen[exprGroupId];
+                        var exprToggleIsPhysical = consumePhysicalDetailsToggle(details);
+                        if (expectedOpen !== undefined && expectedOpen === !!details.open && !exprToggleIsPhysical) {
+                          delete window.__reclusterNewExpressionExpectedOpen[exprGroupId];
+                          recordDetailsToggleDiagnostic('expression', false, 'expected_server_state');
+                          return;
+                        }
+                        if (!ev.isTrusted || !exprToggleIsPhysical || !exprGroupId) {
+                          recordDetailsToggleDiagnostic('expression', false, 'not_physical');
+                          return;
+                        }
+                        recordDetailsToggleDiagnostic('expression', true, 'physical_summary');
+                        shinySet('recluster_new_expr_open_group', {
+                          group_id: exprGroupId,
+                          open: !!details.open,
+                          object: currentReclusterObjectContext().object,
+                          context_revision: currentReclusterObjectContext().context_revision,
+                          nonce: Date.now()
+                        });
+                        return;
+                      }
+                      if (details.matches('.recluster-new-metadata-col[data-metadata-open-column]')) {
+                        var colToggleIsPhysical = consumePhysicalDetailsToggle(details);
+                        if (!ev.isTrusted || !colToggleIsPhysical || !details.open) {
+                          recordDetailsToggleDiagnostic('metadata_col', false, 'not_physical_or_closed');
+                          return;
+                        }
+                        recordDetailsToggleDiagnostic('metadata_col', true, 'physical_summary');
+                        var colContext = currentReclusterObjectContext();
+                        shinySet('recluster_new_open_col', {
+                          value: details.getAttribute('data-metadata-open-column') || '',
+                          object: colContext.object,
+                          context_revision: colContext.context_revision,
+                          nonce: Date.now()
+                        });
+                        return;
+                      }
+                      if (details.matches('.recluster-new-metadata-bucket[data-metadata-open-bucket]')) {
+                        var bucketToggleIsPhysical = consumePhysicalDetailsToggle(details);
+                        if (!ev.isTrusted || !bucketToggleIsPhysical || !details.open) {
+                          recordDetailsToggleDiagnostic('metadata_bucket', false, 'not_physical_or_closed');
+                          return;
+                        }
+                        recordDetailsToggleDiagnostic('metadata_bucket', true, 'physical_summary');
+                        var bucketContext = currentReclusterObjectContext();
+                        shinySet('recluster_new_open_bucket', {
+                          value: details.getAttribute('data-metadata-open-bucket') || '',
+                          object: bucketContext.object,
+                          context_revision: bucketContext.context_revision,
+                          nonce: Date.now()
+                        });
+                        return;
+                      }
                       if (details.matches('.recluster-new-fold[data-basic-open-id]')) {
+                        var foldToggleIsPhysical = consumePhysicalDetailsToggle(details);
+                        if (!ev.isTrusted || !foldToggleIsPhysical) {
+                          recordDetailsToggleDiagnostic('basic_fold', false, 'not_physical');
+                          return;
+                        }
+                        recordDetailsToggleDiagnostic('basic_fold', true, 'physical_summary');
                         shinySet(details.getAttribute('data-basic-open-id'), !!details.open);
                       }
                     }, true);
-                    document.addEventListener('pointerdown', startExprRangeDrag, true);
-                    document.addEventListener('mousedown', startExprRangeDrag, true);
-                    document.addEventListener('touchstart', startExprRangeDrag, true);
-                    document.addEventListener('pointerup', endExprRangeDrag, true);
-                    document.addEventListener('pointercancel', endExprRangeDrag, true);
-                    document.addEventListener('mouseup', endExprRangeDrag, true);
-                    document.addEventListener('touchend', endExprRangeDrag, true);
-                    window.addEventListener('blur', endExprRangeDrag, true);
                     document.addEventListener('change', function (ev) {
                       if (!ev.target || ev.target.id !== 'recluster_new_expr_active_range') return;
-                      if (window.__reclusterNewExprRangeDragging) return;
                       commitExprRange();
                     }, true);
                   }
-                  if (!window.__reclusterNewSmartFloatBound) {
-                    window.__reclusterNewSmartFloatBound = true;
-                    window.__reclusterNewSmartFloatRaf = 0;
-                    window.__reclusterNewSmartFloat = function () {
-                      var page = document.querySelector('.plotting-page .recluster-new-page');
-                      if (!page) return;
-                      var shell = page.closest('.plotting-page');
-                      var activePane = page.querySelector('#recluster_new_workspace_tabs + .tab-content > .tab-pane.active') || page;
-                      var row = activePane.querySelector('.recluster-new-main-row');
-                      if (!shell || !row) return;
-                      var left = row.querySelector(':scope > .plotting-left-panel');
-                      var right = row.querySelector(':scope > .plot_area_card_style');
-                      if (!left || !right) return;
-                      shell.classList.remove('float-left-panel', 'float-plot-area');
-                      var viewportLimit = Math.max(360, window.innerHeight - 120);
-                      var leftH = Math.max(left.scrollHeight, left.getBoundingClientRect().height);
-                      if (leftH > viewportLimit) {
-                        shell.classList.add('float-left-panel');
-                      }
-                    };
-                    window.__reclusterNewScheduleSmartFloat = function () {
-                      if (window.__reclusterNewSmartFloatRaf) return;
-                      window.__reclusterNewSmartFloatRaf = window.requestAnimationFrame(function () {
-                        window.__reclusterNewSmartFloatRaf = 0;
-                        window.__reclusterNewSmartFloat();
-                        if (window.Plotly && window.Plotly.Plots && window.Plotly.Plots.resize) {
-                          ['recluster_new_umap_plot', 'recluster_new_scatter_plot'].forEach(function (id) {
-                            var el = document.getElementById(id);
-                            if (el) {
-                              var plot = el.querySelector('.js-plotly-plot') || el.querySelector('.plotly') || el;
-                              try { window.Plotly.Plots.resize(plot); } catch (e) {}
-                            }
+                  if (!window.__reclusterNewContextualModalButtonsBound) {
+                    window.__reclusterNewContextualModalButtonsBound = true;
+                    document.addEventListener('click', function (ev) {
+                      var button = ev.target && ev.target.closest && ev.target.closest('.recluster-new-contextual-modal-action');
+                      if (!button || !button.id || !window.Shiny || !window.Shiny.setInputValue) return;
+                      ev.preventDefault();
+                      ev.stopImmediatePropagation();
+                      var revision = button.getAttribute('data-recluster-modal-revision');
+                      window.Shiny.setInputValue(button.id, {
+                        object: button.getAttribute('data-recluster-modal-object') || '',
+                        context_revision: revision === null || revision === '' ? null : Number(revision),
+                        nonce: Date.now()
+                      }, {priority: 'event'});
+                    }, true);
+                  }
+                  if (!window.__reclusterNewExpressionStateSyncBound) {
+                    window.__reclusterNewExpressionStateSyncBound = true;
+                    function exprStateSetChecked(id, value) {
+                      var node = id && document.getElementById(id);
+                      if (node && node.type === 'checkbox') node.checked = !!value;
+                    }
+                    function applyExpressionState(payload) {
+                      currentReclusterObjectContext();
+                      if (!payload || !payload.groups || !reclusterNewObjectContextMatches(payload.object, payload.context_revision)) return;
+                      var details = document.querySelectorAll('[data-expr-group-id]');
+                      Array.prototype.forEach.call(details, function (node) {
+                        var gid = node.getAttribute('data-expr-group-id') || '';
+                        var group = payload.groups[gid];
+                        if (!group) return;
+                        var nextOpen = !!group.open;
+                        if (node.open !== nextOpen) {
+                          window.__reclusterNewExpressionExpectedOpen[gid] = nextOpen;
+                          node.open = nextOpen;
+                        }
+                        node.classList.toggle('is-violet-highlight-source', gid === (payload.active_group_id || ''));
+                        exprStateSetChecked(group.require_all_id, group.require_all);
+                        exprStateSetChecked(group.invert_id, group.invert);
+                        exprStateSetChecked(group.select_all_id, group.select_all);
+                        (group.genes || []).forEach(function (gene) {
+                          exprStateSetChecked(gene.check_id, gene.checked);
+                        });
+                      });
+                      var activeRange = payload.active_range || [];
+                      if (activeRange.length === 2 && window.jQuery) {
+                        var rangeNode = document.getElementById('recluster_new_expr_active_range');
+                        var slider = rangeNode ? window.jQuery(rangeNode).data('ionRangeSlider') : null;
+                        if (slider && slider.update) {
+                          slider.update({
+                            from: Number(activeRange[0]),
+                            to: Number(activeRange[1])
                           });
                         }
-                      });
-                    };
-                    window.addEventListener('resize', window.__reclusterNewScheduleSmartFloat, {passive: true});
-                    document.addEventListener('toggle', window.__reclusterNewScheduleSmartFloat, true);
-                    document.addEventListener('shown.bs.tab', window.__reclusterNewScheduleSmartFloat, true);
-                    if (window.jQuery && window.jQuery(document).on) {
-                      window.jQuery(document).on('shiny:value shiny:bound shiny:recalculated', window.__reclusterNewScheduleSmartFloat);
-                    }
-                    if (window.ResizeObserver) {
-                      window.__reclusterNewSmartFloatRO = new window.ResizeObserver(window.__reclusterNewScheduleSmartFloat);
-                      var root = document.querySelector('.recluster-new-page');
-                      if (root) window.__reclusterNewSmartFloatRO.observe(root);
-                    }
-                    if (window.MutationObserver) {
-                      var root2 = document.querySelector('.recluster-new-page');
-                      if (root2) {
-                        window.__reclusterNewSmartFloatMO = new window.MutationObserver(window.__reclusterNewScheduleSmartFloat);
-                        window.__reclusterNewSmartFloatMO.observe(root2, {childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'open', 'style']});
                       }
+                      var rows = document.querySelectorAll('.recluster-new-expr-gene-row');
+                      Array.prototype.forEach.call(rows, function (row) {
+                        row.classList.remove('is-active');
+                      });
+                      Object.keys(payload.groups).forEach(function (gid) {
+                        var group = payload.groups[gid];
+                        (group.genes || []).forEach(function (gene) {
+                          if (!gene.active_id || !gene.active) return;
+                          Array.prototype.forEach.call(rows, function (row) {
+                            if (row.getAttribute('data-expr-active-id') === gene.active_id) {
+                              row.classList.add('is-active');
+                            }
+                          });
+                        });
+                      });
                     }
-                    window.__reclusterNewScheduleSmartFloat();
+                    function applyExpressionSummaries(payload) {
+                      if (!payload || !reclusterNewObjectContextMatches(payload.object, payload.context_revision)) return;
+                      var summaries = payload.summaries || {};
+                      var nodes = document.querySelectorAll('[data-expr-summary-id]');
+                      Array.prototype.forEach.call(nodes, function (node) {
+                        var gid = node.getAttribute('data-expr-summary-id') || '';
+                        if (summaries[gid] !== undefined) node.textContent = summaries[gid];
+                      });
+                    }
+                    function applyExpressionGeneDetails(payload) {
+                      if (!payload || !reclusterNewObjectContextMatches(payload.object, payload.context_revision)) return;
+                      var details = payload.details || {};
+                      Object.keys(details).forEach(function (detailId) {
+                        var detail = details[detailId] || {};
+                        var countNode = null;
+                        var rangeNode = null;
+                        Array.prototype.forEach.call(document.querySelectorAll('[data-expr-gene-count-id]'), function (node) {
+                          if (node.getAttribute('data-expr-gene-count-id') === detailId) countNode = node;
+                        });
+                        Array.prototype.forEach.call(document.querySelectorAll('[data-expr-gene-note-id]'), function (node) {
+                          if (node.getAttribute('data-expr-gene-note-id') === detailId) rangeNode = node;
+                        });
+                        if (countNode && detail.count_text !== undefined) countNode.textContent = detail.count_text;
+                        if (rangeNode && detail.range_text !== undefined) rangeNode.textContent = detail.range_text;
+                      });
+                    }
+                    function applyMetadataColors(payload) {
+                      if (!payload || !payload.column || !payload.colors || !reclusterNewObjectContextMatches(payload.object, payload.context_revision)) return;
+                      var nodes = document.querySelectorAll('[data-metadata-color-column]');
+                      Array.prototype.forEach.call(nodes, function (node) {
+                        if (node.getAttribute('data-metadata-color-column') !== String(payload.column)) return;
+                        var level = node.getAttribute('data-metadata-color-level') || '';
+                        var color = payload.colors[level];
+                        if (!color) return;
+                        node.style.backgroundColor = color;
+                        node.title = 'Change ' + level + ' color (' + color + ')';
+                        node.setAttribute('aria-label', level + ': ' + color);
+                      });
+                    }
+                    function bindExpressionStateHandlers() {
+                      if (!window.Shiny || !window.Shiny.addCustomMessageHandler) return false;
+                      window.Shiny.addCustomMessageHandler('recluster-new-expression-state', applyExpressionState);
+                      window.Shiny.addCustomMessageHandler('recluster-new-expression-summaries', applyExpressionSummaries);
+                      window.Shiny.addCustomMessageHandler('recluster-new-expression-gene-details', applyExpressionGeneDetails);
+                      window.Shiny.addCustomMessageHandler('recluster-new-metadata-colors', applyMetadataColors);
+                      return true;
+                    }
+                    if (!bindExpressionStateHandlers()) {
+                      document.addEventListener('shiny:connected', bindExpressionStateHandlers, { once: true });
+                    }
                   }
                 })();
               ")),
@@ -1723,23 +2682,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
 
   .db_tab_is_active <- function() {
     nav_now <- tolower(trimws(.scalar_chr(input$main_navbar, "")))
-    return(nav_now %in% c("recluster_tab", "recluster_new_tab"))
+    return(identical(nav_now, "recluster_new_tab"))
   }
-
-  observe({
-    has_objs <- length(shared_data$all_seurat_objects) > 0L
-    if (has_objs) {
-      shinyjs::show("recluster_new_main_content_area")
-      shinyjs::hide("recluster_new_empty_workspace_state")
-    } else {
-      shinyjs::hide("recluster_new_main_content_area")
-      shinyjs::show("recluster_new_empty_workspace_state")
-    }
-  })
-
-  observeEvent(input$recluster_new_empty_state_go_to_workspace, {
-    updateNavbarPage(session, "main_navbar", selected = "rds_tab")
-  })
 
   observe({
     has_objs <- length(shared_data$all_seurat_objects) > 0L
@@ -1776,14 +2720,17 @@ recluster_new_server <- function(input, output, session, shared_data) {
     umap_reduction_choice = "",
     rule_assay_choice = "",
     rule_reduction_choice = "",
-    pending_umap_assay_choice = "",
-    pending_umap_reduction_choice = "",
-    pending_rule_assay_choice = "",
-    pending_rule_reduction_choice = "",
-    pending_umap_color_choice = "",
-    pending_umap_display_mode = "",
-    umap_control_syncing = FALSE,
-    visual_settings_by_object = list(),
+    umap_color_choices_sig = "",
+    expr_ui_structure_key = "",
+    expr_ui_staged_state = NULL,
+    # Incremented only when an object transition has settled. Dynamic
+    # expression UI must have a post-settlement render even when its output
+    # was suspended while the Analysis tab was hidden.
+    expr_ui_render_revision = 0L,
+    expr_active_range_structure_key = "",
+    expr_active_range_data_revision = 0L,
+    # Set only by exact post-load flush confirming object, revision, and data slot.
+    confirmed_plot_context_key = "",
     rule_definitions = list(),
     rule_active_cells = character(0),
     rule_overlap_group = NULL,
@@ -1792,7 +2739,14 @@ recluster_new_server <- function(input, output, session, shared_data) {
     debug_rule_overlap_state = "",
     metadata_open_column = "",
     metadata_open_bucket = "cluster",
+    metadata_selector_structure_key = "",
+    metadata_filter_definition_signature = "",
+    metadata_filter_data_revision = 0L,
+    cell_groups_structure_key = "",
     debug_meta_switch_count = 0L,
+    rule_meta_choices_sig = "",
+    tcr_choices_sig = "",
+    viz_controls_structure_key = "",
     viz_controls_cache_sig = "",
     viz_controls_cache = NULL,
     rule_viz_controls_cache_sig = "",
@@ -1807,9 +2761,29 @@ recluster_new_server <- function(input, output, session, shared_data) {
     status_logs = character(0)
   )
   final_cell_count_text <- reactiveVal(paste(RECLUSTER_NEW_UI_TEXT$t_text_selected_total, 0L, "cells"))
+  # Global overlay ownership is transient session state. The server releases
+  # it when the requested plot object is ready or has failed explicitly; do
+  # not make page interaction depend on a client DOM polling timeout.
+  recluster_new_overlay_request_id <- reactiveVal(0L)
+  recluster_new_overlay_state <- reactiveVal(list(
+    pending = FALSE,
+    request_id = 0L,
+    object = "",
+    revision = 0L,
+    tab = "",
+    status = "idle"
+  ))
   recluster_new_pending_population_cells <- reactiveVal(character(0))
+  recluster_new_pending_population_object <- reactiveVal("")
+  recluster_new_pending_population_revision <- reactiveVal(NA_integer_)
+  recluster_new_import_match_object <- reactiveVal("")
+  recluster_new_import_match_revision <- reactiveVal(NA_integer_)
   lasso_selected_cells_state <- reactiveVal(character(0))
   rule_lasso_cells_state <- reactiveVal(character(0))
+  # Selection sources are independent state. This owner records which source
+  # most recently received explicit user intent; derived plots must never use
+  # it to write back into either source.
+  selection_owner_state <- reactiveVal("none")
   metadata_palette_picker <- curve_color_picker_server(
     "recluster_new_metadata_palette_picker",
     reset_trigger = reactive(input$recluster_new_metadata_palette_reset)
@@ -1819,23 +2793,78 @@ recluster_new_server <- function(input, output, session, shared_data) {
     reset_trigger = reactive(input$recluster_new_metadata_single_color_reset)
   )
 
-  .current_visual_settings <- function() {
-    nm <- .scalar_chr(recluster_new_loaded_object_name(), default = "")
-    if (!nzchar(nm)) nm <- .scalar_chr(shared_data$active_object_name, default = "")
-    settings <- isolate(recluster_new_data$visual_settings_by_object[[nm]])
+  .visual_settings_normalize <- function(settings) {
     if (!is.list(settings)) settings <- list()
-    settings
+    out <- list()
+    text_fields <- c(
+      "umap_color_choice",
+      "umap_display_mode",
+      "umap_assay_choice",
+      "umap_reduction_choice",
+      "rule_assay_choice",
+      "rule_reduction_choice"
+    )
+    for (field in text_fields) {
+      value <- trimws(.scalar_chr(settings[[field]], default = ""))
+      if (nzchar(value)) out[[field]] <- value
+    }
+    gene_values <- as.character(settings$umap_gene_values %||% c("", "", ""))
+    length(gene_values) <- 3L
+    gene_values[is.na(gene_values)] <- ""
+    out$umap_gene_values <- trimws(gene_values)
+    dot_size <- suppressWarnings(as.numeric(settings$dot_size %||% NA_real_))
+    if (length(dot_size) == 1L && is.finite(dot_size) && dot_size > 0) {
+      out$dot_size <- dot_size
+    }
+    stroke_width <- suppressWarnings(as.numeric(settings$stroke_width %||% NA_real_))
+    if (length(stroke_width) == 1L && is.finite(stroke_width)) {
+      out$stroke_width <- max(0, min(1, stroke_width))
+    }
+    out
   }
 
-  .remember_visual_settings <- function(dot_size = NULL, stroke_width = NULL) {
-    nm <- .scalar_chr(recluster_new_loaded_object_name(), default = "")
-    if (!nzchar(nm)) nm <- .scalar_chr(shared_data$active_object_name, default = "")
-    if (!nzchar(nm)) return(invisible(NULL))
-    settings <- isolate(recluster_new_data$visual_settings_by_object[[nm]])
-    if (!is.list(settings)) settings <- list()
+  .visual_settings_store_get <- function(sobj) {
+    if (is.null(sobj) || !inherits(sobj, "Seurat")) return(list())
+    misc <- tryCatch(sobj@misc, error = function(e) list())
+    ana <- tryCatch(misc$analysis, error = function(e) NULL)
+    dbn <- if (is.list(ana)) tryCatch(ana$data_browser_new, error = function(e) NULL) else NULL
+    stored <- if (is.list(dbn)) dbn$visual_settings else NULL
+    .visual_settings_normalize(stored)
+  }
+
+  .visual_settings_store_set <- function(sobj, settings) {
+    if (is.null(sobj) || !inherits(sobj, "Seurat")) return(sobj)
+    misc <- tryCatch(sobj@misc, error = function(e) list())
+    if (!is.list(misc$analysis)) misc$analysis <- list()
+    if (!is.list(misc$analysis$data_browser_new)) misc$analysis$data_browser_new <- list()
+    misc$analysis$data_browser_new$visual_settings <- .visual_settings_normalize(settings)
+    sobj@misc <- misc
+    sobj
+  }
+
+  .current_visual_settings <- function() {
+    .visual_settings_store_get(isolate(recluster_new_data$seurat_obj))
+  }
+
+  .remember_visual_settings <- function(dot_size = NULL, stroke_width = NULL, ...) {
+    values <- list(...)
+    obj <- isolate(recluster_new_data$seurat_obj)
+    if (is.null(obj) || !inherits(obj, "Seurat")) return(invisible(NULL))
+    settings <- .visual_settings_store_get(obj)
     if (!is.null(dot_size)) settings$dot_size <- dot_size
     if (!is.null(stroke_width)) settings$stroke_width <- stroke_width
-    recluster_new_data$visual_settings_by_object[[nm]] <- settings
+    if (length(values)) {
+      if (is.null(names(values)) || any(!nzchar(names(values)))) {
+        stop("Data Browser visual settings require named values.", call. = FALSE)
+      }
+      settings[names(values)] <- values
+    }
+    next_settings <- .visual_settings_normalize(settings)
+    if (identical(.visual_settings_normalize(.visual_settings_store_get(obj)), next_settings)) {
+      return(invisible(NULL))
+    }
+    obj <- .visual_settings_store_set(obj, next_settings)
+    .persist_active_object(obj, update_local = TRUE)
     invisible(NULL)
   }
 
@@ -1843,18 +2872,20 @@ recluster_new_server <- function(input, output, session, shared_data) {
   # input bindings and key them by object so rebuilding or switching objects
   # cannot reset user-selected dot size or highlight stroke setting.
   observeEvent(input$recluster_new_dot_size, {
+    if (!.recluster_new_event_allowed("dot_size")) return(invisible(NULL))
     value <- suppressWarnings(as.numeric(input$recluster_new_dot_size))
     if (length(value) == 1L && is.finite(value) && value > 0) {
       .remember_visual_settings(dot_size = value)
     }
-  }, ignoreInit = FALSE)
+  }, ignoreInit = TRUE)
 
   observeEvent(input$recluster_new_stroke_width, {
+    if (!.recluster_new_event_allowed("stroke_width")) return(invisible(NULL))
     value <- suppressWarnings(as.numeric(input$recluster_new_stroke_width))
     if (length(value) == 1L && is.finite(value)) {
       .remember_visual_settings(stroke_width = max(0, min(1, value)))
     }
-  }, ignoreInit = FALSE)
+  }, ignoreInit = TRUE)
 
   recluster_new_object_selector <- wl_bind_active_object_selector(
     input = input,
@@ -1883,6 +2914,9 @@ recluster_new_server <- function(input, output, session, shared_data) {
   .active_plot_tab <- reactiveVal("umap")
   .active_expr_tab <- reactiveVal("stacked")
   .active_rule_plot_tab <- reactiveVal("rule_umap")
+  # Agent note: Keep dynamic expression inputs bound once per stable ID. Do not
+  # destroy/recreate observers on each UI-state redraw; that loses gene delete
+  # clicks while Shiny replaces or synchronizes expression rows.
   .expr_bound_inputs <- reactiveVal(character(0))
   .gene_value_cache <- new.env(parent = emptyenv())
   .gene_value_cache_order <- character(0)
@@ -1892,45 +2926,37 @@ recluster_new_server <- function(input, output, session, shared_data) {
     .gene_value_cache_order <<- character(0)
     invisible(NULL)
   }
+  .db_diag_enabled <- isTRUE(get0(
+    "WANLAB_DB_DIAG_MODE",
+    ifnotfound = identical(Sys.getenv("WANLAB_DB_DIAG_MODE", "0"), "1")
+  ))
   .db_dbg <- function(tag, ...) {
+    if (!isTRUE(.db_diag_enabled)) return(invisible(NULL))
     ts <- format(Sys.time(), "%H:%M:%OS3")
     payload <- paste(..., collapse = " ")
     message(sprintf("[DB_UMAP_DBG][%s][%s] %s", ts, tag, payload))
   }
-  .activate_gene_expression_display <- function() {
-    expr_state <- .expr_state_normalize(recluster_new_data$expr_selection)
-    active_group_id <- .scalar_chr(expr_state$active_group_id, default = "")
-    if (nzchar(active_group_id)) {
-      expr_state$active_group_id <- ""
-      .expr_set_state(expr_state)
-      .db_dbg("gene_mode_deactivate_expr_group", sprintf("group_id=%s", active_group_id))
-    }
-    recluster_new_data$umap_display_mode <- "gene"
-    recluster_new_data$pending_umap_display_mode <- "gene"
-    updateRadioButtons(session, "recluster_new_umap_display_mode", selected = "gene")
-    .set_umap_color_choice("Single Gene Expression")
-    if (!identical(.active_expr_tab(), "violin")) {
-      .active_expr_tab("violin")
-    }
-    suppressWarnings(try(updateTabsetPanel(session, "recluster_new_expr_tabs", selected = "violin"), silent = TRUE))
-    session$sendCustomMessage("recluster-new-set-tab", list(id = "recluster_new_expr_tabs", value = "violin"))
-    invisible(NULL)
+  # Keep active-object gene catalogs in Selectize's server-side store. Sending
+  # the full catalog through updateSelectInput serializes thousands of option
+  # nodes on every hydration and can freeze the browser during object/tab
+  # transitions. Server-side Selectize keeps catalog ownership in R while the
+  # client receives only query results.
+  .db_update_gene_selectize <- function(input_id, genes, selected = character(0)) {
+    wl_update_gene_selectize(
+      session,
+      input_id,
+      genes,
+      selected = selected,
+      server = TRUE
+    )
   }
-
+  # Gene selectors own gene values only. Selectize hydration is a view update,
+  # not a command to change UMAP coloring or the lower plot tab.
   observeEvent(input$recluster_new_gene_expr_select_1, {
-    if (isTRUE(recluster_new_data$umap_control_syncing)) return(invisible(NULL))
-    old_gene <- .scalar_chr(as.character(recluster_new_data$umap_gene_values %||% c("", "", ""))[[1]], default = "")
+    if (!.recluster_new_event_allowed("gene_expr_select_1")) return(invisible(NULL))
     next_gene <- .scalar_chr(input$recluster_new_gene_expr_select_1, default = "")
-    display_now <- .scalar_chr(recluster_new_data$umap_display_mode, default = "metadata")
-    if (identical(display_now, "metadata") && !nzchar(next_gene) && nzchar(old_gene)) {
-      .db_dbg("gene1_ignored", sprintf("input=<empty> old=%s display=%s", old_gene, display_now))
-      return(invisible(NULL))
-    }
     .set_umap_gene_value(1L, next_gene)
     genes_now <- .umap_gene_selection()$genes
-    if (nzchar(next_gene) && length(genes_now) && (!identical(display_now, "metadata") || !identical(next_gene, old_gene))) {
-      .activate_gene_expression_display()
-    }
     .db_dbg("gene1", sprintf("input=%s genes=%s color_before=%s",
       as.character(input$recluster_new_gene_expr_select_1 %||% ""),
       paste(genes_now, collapse = ","),
@@ -1939,21 +2965,10 @@ recluster_new_server <- function(input, output, session, shared_data) {
     .db_dbg("gene1", sprintf("color_after=%s", as.character(recluster_new_data$umap_color_choice %||% "")))
   }, ignoreNULL = TRUE)
   observeEvent(input$recluster_new_gene_expr_select_2, {
-    if (isTRUE(recluster_new_data$umap_control_syncing)) return(invisible(NULL))
-    old_vals <- as.character(recluster_new_data$umap_gene_values %||% c("", "", ""))
-    length(old_vals) <- 3L
-    old_gene <- .scalar_chr(old_vals[[2]], default = "")
+    if (!.recluster_new_event_allowed("gene_expr_select_2")) return(invisible(NULL))
     next_gene <- .scalar_chr(input$recluster_new_gene_expr_select_2, default = "")
-    display_now <- .scalar_chr(recluster_new_data$umap_display_mode, default = "metadata")
-    if (identical(display_now, "metadata") && !nzchar(next_gene) && nzchar(old_gene)) {
-      .db_dbg("gene2_ignored", sprintf("input=<empty> old=%s display=%s", old_gene, display_now))
-      return(invisible(NULL))
-    }
     .set_umap_gene_value(2L, next_gene)
     genes_now <- .umap_gene_selection()$genes
-    if (nzchar(next_gene) && length(genes_now) && (!identical(display_now, "metadata") || !identical(next_gene, old_gene))) {
-      .activate_gene_expression_display()
-    }
     .db_dbg("gene2", sprintf("input=%s genes=%s color_before=%s",
       as.character(input$recluster_new_gene_expr_select_2 %||% ""),
       paste(genes_now, collapse = ","),
@@ -1962,21 +2977,10 @@ recluster_new_server <- function(input, output, session, shared_data) {
     .db_dbg("gene2", sprintf("color_after=%s", as.character(recluster_new_data$umap_color_choice %||% "")))
   }, ignoreNULL = TRUE)
   observeEvent(input$recluster_new_gene_expr_select_3, {
-    if (isTRUE(recluster_new_data$umap_control_syncing)) return(invisible(NULL))
-    old_vals <- as.character(recluster_new_data$umap_gene_values %||% c("", "", ""))
-    length(old_vals) <- 3L
-    old_gene <- .scalar_chr(old_vals[[3]], default = "")
+    if (!.recluster_new_event_allowed("gene_expr_select_3")) return(invisible(NULL))
     next_gene <- .scalar_chr(input$recluster_new_gene_expr_select_3, default = "")
-    display_now <- .scalar_chr(recluster_new_data$umap_display_mode, default = "metadata")
-    if (identical(display_now, "metadata") && !nzchar(next_gene) && nzchar(old_gene)) {
-      .db_dbg("gene3_ignored", sprintf("input=<empty> old=%s display=%s", old_gene, display_now))
-      return(invisible(NULL))
-    }
     .set_umap_gene_value(3L, next_gene)
     genes_now <- .umap_gene_selection()$genes
-    if (nzchar(next_gene) && length(genes_now) && (!identical(display_now, "metadata") || !identical(next_gene, old_gene))) {
-      .activate_gene_expression_display()
-    }
     .db_dbg("gene3", sprintf("input=%s genes=%s color_before=%s",
       as.character(input$recluster_new_gene_expr_select_3 %||% ""),
       paste(genes_now, collapse = ","),
@@ -1985,14 +2989,11 @@ recluster_new_server <- function(input, output, session, shared_data) {
     .db_dbg("gene3", sprintf("color_after=%s", as.character(recluster_new_data$umap_color_choice %||% "")))
   }, ignoreNULL = TRUE)
   observeEvent(input$recluster_new_color_by_select, {
-    if (isTRUE(recluster_new_data$umap_control_syncing)) return(invisible(NULL))
+    if (!.recluster_new_event_allowed("color_by")) return(invisible(NULL))
     next_choice <- .scalar_chr(input$recluster_new_color_by_select, default = "")
     if (!nzchar(next_choice)) return(invisible(NULL))
-    pending_choice <- .scalar_chr(recluster_new_data$pending_umap_color_choice, default = "")
-    if (nzchar(pending_choice) && identical(next_choice, pending_choice)) {
-      recluster_new_data$pending_umap_color_choice <- ""
-      return(invisible(NULL))
-    }
+    current_choice <- .scalar_chr(recluster_new_data$umap_color_choice, default = "")
+    if (identical(next_choice, current_choice)) return(invisible(NULL))
     genes_now <- .umap_gene_selection()$genes
     .db_dbg("color_input", sprintf("next=%s genes=%s active_col=%s stored_before=%s",
       next_choice,
@@ -2002,8 +3003,13 @@ recluster_new_server <- function(input, output, session, shared_data) {
     ))
     recluster_new_data$umap_color_choice <- next_choice
     recluster_new_data$umap_display_mode <- if (identical(next_choice, "Single Gene Expression")) "gene" else "metadata"
-    recluster_new_data$pending_umap_display_mode <- recluster_new_data$umap_display_mode
-    updateRadioButtons(session, "recluster_new_umap_display_mode", selected = recluster_new_data$umap_display_mode)
+    .remember_visual_settings(
+      umap_color_choice = next_choice,
+      umap_display_mode = recluster_new_data$umap_display_mode
+    )
+    if (!identical(.scalar_chr(input$recluster_new_umap_display_mode, default = ""), recluster_new_data$umap_display_mode)) {
+      updateRadioButtons(session, "recluster_new_umap_display_mode", selected = recluster_new_data$umap_display_mode)
+    }
     .db_dbg("color_input_applied", sprintf(
       "stored=%s display=%s resolved=%s",
       as.character(recluster_new_data$umap_color_choice %||% ""),
@@ -2012,11 +3018,10 @@ recluster_new_server <- function(input, output, session, shared_data) {
     ))
   }, ignoreInit = TRUE)
   observeEvent(input$recluster_new_umap_display_mode, {
+    if (!.recluster_new_event_allowed("umap_display_mode")) return(invisible(NULL))
     mode_now <- .scalar_chr(input$recluster_new_umap_display_mode, default = "metadata")
     if (!(mode_now %in% c("metadata", "gene"))) mode_now <- "metadata"
-    pending_mode <- .scalar_chr(recluster_new_data$pending_umap_display_mode, default = "")
-    if (nzchar(pending_mode) && identical(mode_now, pending_mode)) {
-      recluster_new_data$pending_umap_display_mode <- ""
+    if (identical(mode_now, .scalar_chr(recluster_new_data$umap_display_mode, default = "metadata"))) {
       return(invisible(NULL))
     }
     recluster_new_data$umap_display_mode <- mode_now
@@ -2032,14 +3037,91 @@ recluster_new_server <- function(input, output, session, shared_data) {
   .current_expr_tab <- reactive({ .active_expr_tab() })
   .current_rule_plot_tab <- reactive({ .active_rule_plot_tab() })
 
-  .plotly_touch_zoom <- function(p) {
+  .plotly_register_selection_events <- function(p) {
+    # Agent note: plotly_deselect is also emitted by ordinary redraw/rebind and
+    # is not physical user intent. Register selection and explicit clear only.
+    for (event_name in c("plotly_selected", "plotly_doubleclick")) {
+      p <- plotly::event_register(p, event_name)
+    }
+    p
+  }
+
+  .plotly_interactive_tools <- function(p) {
+    # Agent note: only expression-distribution histograms suppress Plotly tools.
+    # UMAP and other interactive plots keep Plotly's full default modebar.
     plotly::config(
       p,
-      scrollZoom = TRUE,
       displayModeBar = TRUE,
-      doubleClick = "reset",
+      modeBarButtonsToAdd = c("lasso2d", "select2d"),
       responsive = TRUE
     )
+  }
+
+  .plotly_touch_zoom <- function(p) {
+    # Register events on every placeholder and rendered state for each source.
+    # event_data() is installed before the first browser flush; an unregistered
+    # placeholder otherwise emits warnings and leaves a noisy startup path.
+    p <- .plotly_register_selection_events(p)
+    .plotly_interactive_tools(p)
+  }
+
+  .plotly_selection_event_data <- function(event_name, source) {
+    # Agent note: subscribe directly to Plotly. Navigation inputs are UI views
+    # and must not gate physical selection events; revision-prefixed cell keys
+    # below provide deterministic object-context validation.
+    plotly::event_data(event_name, source = source)
+  }
+
+  .recluster_new_empty_plot <- function(source = "recluster_new_plot_source") {
+    plot_ly(source = source) %>%
+      add_trace(
+        type = "scattergl",
+        mode = "markers",
+        x = numeric(0),
+        y = numeric(0),
+        hoverinfo = "skip",
+        showlegend = FALSE
+      ) %>%
+      layout(
+        xaxis = list(visible = FALSE),
+        yaxis = list(visible = FALSE),
+        margin = list(l = 0, r = 0, t = 0, b = 0)
+      ) %>%
+      .plotly_touch_zoom()
+  }
+
+  .recluster_new_error_plot <- function(message_text, source = "recluster_new_plot_source") {
+    message_text <- as.character(message_text %||% character(0))
+    if (!length(message_text) || is.na(message_text[[1L]]) || !nzchar(message_text[[1L]])) {
+      message_text <- "Unknown Data Browser plot error."
+    } else {
+      message_text <- message_text[[1L]]
+    }
+    message_text <- paste0("Data Browser plot error: ", substr(message_text, 1L, 500L))
+    plot_ly(source = source) %>%
+      add_trace(
+        type = "scattergl",
+        mode = "markers",
+        x = numeric(0),
+        y = numeric(0),
+        hoverinfo = "skip",
+        showlegend = FALSE
+      ) %>%
+      layout(
+        xaxis = list(visible = FALSE),
+        yaxis = list(visible = FALSE),
+        annotations = list(list(
+          text = message_text,
+          x = 0.5,
+          y = 0.5,
+          xref = "paper",
+          yref = "paper",
+          showarrow = FALSE,
+          font = list(size = 14, color = "#b91c1c")
+        )),
+        margin = list(l = 20, r = 20, t = 30, b = 20)
+      ) %>%
+      .plotly_touch_zoom()
   }
 
   .current_umap_assay <- function(obj) {
@@ -2060,64 +3142,58 @@ recluster_new_server <- function(input, output, session, shared_data) {
     if (nzchar(input_val) && input_val %in% assay_choices) return(input_val)
     .preferred_assay_choice(obj)
   }
+  .current_reduction_entry <- function() {
+    nm <- .scalar_chr(recluster_new_loaded_object_name(), default = "")
+    if (!nzchar(nm)) nm <- .scalar_chr(shared_data$active_object_name, default = "")
+    if (!nzchar(nm)) return(NULL)
+    tryCatch(shared_data$all_seurat_objects[[nm]], error = function(e) NULL)
+  }
+  .saved_embedding_reduction <- function(obj, requested) {
+    dims <- wanlab_get_active_embedding_dims(.current_reduction_entry())
+    if (!length(dims)) return("")
+    wanlab_resolve_embedding_reduction(obj, requested, preferred_dims = dims)
+  }
   .current_umap_reduction <- function(obj) {
     reduction_choices <- .embedding_reduction_choices(obj)
     if (!length(reduction_choices)) return("")
     target <- .scalar_chr(recluster_new_data$umap_reduction_choice, default = "")
+    target_lc <- tolower(target)
+    target_family <- if (grepl("^tsne($|_)", target_lc)) "tsne" else if (grepl("^umap($|_)", target_lc)) "umap" else ""
+    if (nzchar(target_family)) {
+      preferred <- .saved_embedding_reduction(obj, target_family)
+      if (nzchar(preferred)) return(preferred)
+    }
     if (nzchar(target) && target %in% reduction_choices) return(target)
     input_val <- .scalar_chr(input$recluster_new_umap_reduction_select, default = "")
+    input_lc <- tolower(input_val)
+    input_family <- if (grepl("^tsne($|_)", input_lc)) "tsne" else if (grepl("^umap($|_)", input_lc)) "umap" else ""
+    if (nzchar(input_family)) {
+      preferred <- .saved_embedding_reduction(obj, input_family)
+      if (nzchar(preferred)) return(preferred)
+    }
     if (nzchar(input_val) && input_val %in% reduction_choices) return(input_val)
-    .preferred_embedding_reduction(obj)
+    .preferred_embedding_reduction(obj, entry = .current_reduction_entry())
   }
   .current_rule_reduction <- function(obj) {
     reduction_choices <- .embedding_reduction_choices(obj)
     if (!length(reduction_choices)) return("")
     target <- .scalar_chr(recluster_new_data$rule_reduction_choice, default = "")
+    target_lc <- tolower(target)
+    target_family <- if (grepl("^tsne($|_)", target_lc)) "tsne" else if (grepl("^umap($|_)", target_lc)) "umap" else ""
+    if (nzchar(target_family)) {
+      preferred <- .saved_embedding_reduction(obj, target_family)
+      if (nzchar(preferred)) return(preferred)
+    }
     if (nzchar(target) && target %in% reduction_choices) return(target)
     input_val <- .scalar_chr(input$recluster_new_rule_umap_reduction_select, default = "")
+    input_lc <- tolower(input_val)
+    input_family <- if (grepl("^tsne($|_)", input_lc)) "tsne" else if (grepl("^umap($|_)", input_lc)) "umap" else ""
+    if (nzchar(input_family)) {
+      preferred <- .saved_embedding_reduction(obj, input_family)
+      if (nzchar(preferred)) return(preferred)
+    }
     if (nzchar(input_val) && input_val %in% reduction_choices) return(input_val)
-    .preferred_embedding_reduction(obj)
-  }
-  .pending_control_field <- function(input_id) {
-    switch(
-      .scalar_chr(input_id, default = ""),
-      recluster_new_assay_select = "pending_umap_assay_choice",
-      recluster_new_umap_reduction_select = "pending_umap_reduction_choice",
-      recluster_new_rule_assay_select = "pending_rule_assay_choice",
-      recluster_new_rule_umap_reduction_select = "pending_rule_reduction_choice",
-      ""
-    )
-  }
-  .set_pending_control <- function(input_id, selected) {
-    fld <- .pending_control_field(input_id)
-    if (!nzchar(fld)) return(invisible(NULL))
-    recluster_new_data[[fld]] <- .scalar_chr(selected, default = "")
-    invisible(NULL)
-  }
-  .consume_pending_control <- function(input_id, value) {
-    fld <- .pending_control_field(input_id)
-    if (!nzchar(fld)) return(FALSE)
-    pending <- .scalar_chr(recluster_new_data[[fld]], default = "")
-    if (!nzchar(pending)) return(FALSE)
-    val <- .scalar_chr(value, default = "")
-    if (identical(val, pending)) {
-      recluster_new_data[[fld]] <- ""
-      return(TRUE)
-    }
-    recluster_new_data[[fld]] <- ""
-    .db_dbg("pending_control_user_value", sprintf("id=%s value=%s pending=%s", input_id, val, pending))
-    FALSE
-  }
-  .update_control_select <- function(input_id, choices = NULL, selected = character(0)) {
-    .db_dbg("update_control_select", sprintf("id=%s selected=%s choices_n=%d", input_id, paste(selected, collapse = ","), length(choices)))
-    .set_pending_control(input_id, selected)
-    freezeReactiveValue(input, input_id)
-    if (is.null(choices)) {
-      updateSelectInput(session, input_id, selected = selected)
-    } else {
-      updateSelectInput(session, input_id, choices = choices, selected = selected)
-    }
-    invisible(NULL)
+    .preferred_embedding_reduction(obj, entry = .current_reduction_entry())
   }
   .reduction_pca_dims_label <- function(obj, reduction_name) {
     if (is.null(obj) || !inherits(obj, "Seurat")) return("")
@@ -2136,8 +3212,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
       # selector label must still identify the active embedding precisely.
       preferred_red <- .preferred_embedding_reduction(obj, entry = entry)
       if (identical(red, preferred_red)) {
-        entry_dims <- suppressWarnings(as.integer(tryCatch(entry$prefs$confirmed_dims$value, error = function(e) NA_integer_)))
-        dims_val <- entry_dims[is.finite(entry_dims) & !is.na(entry_dims)]
+        dims_val <- wanlab_get_active_embedding_dims(entry)
       }
     }
     dims_use <- if (length(dims_val)) dims_val[[1]] else NA_integer_
@@ -2224,8 +3299,61 @@ recluster_new_server <- function(input, output, session, shared_data) {
   .cat_input_id <- function(col_name) paste0("recluster_new_cat__", .profile_key(col_name))
   .rng_input_id <- function(col_name) paste0("recluster_new_rng__", .profile_key(col_name))
   .cat_level_input_id <- function(col_name, level_name) paste0("recluster_new_cat_level__", .profile_key(col_name), "__", .safe_key(level_name))
+  # Agent note: Dynamic metadata controls can unbind during UI remounts. Keep
+  # last-known checkbox state outside Shiny input so an absent input cannot
+  # silently turn an unchecked population back on.
+  .metadata_level_checked_state <- new.env(parent = emptyenv())
+  .metadata_level_state_key <- function(col_name, level_name) {
+    paste(
+      .recluster_new_canonical_object_name(),
+      .recluster_new_context_revision(),
+      .profile_key(col_name),
+      .safe_key(level_name),
+      sep = "\u001f"
+    )
+  }
+  .metadata_level_checked <- function(col_name, level_name, isolate_input = FALSE) {
+    input_id <- .cat_level_input_id(col_name, level_name)
+    input_value <- if (isTRUE(isolate_input)) isolate(input[[input_id]]) else input[[input_id]]
+    if (!is.null(input_value)) return(isTRUE(input_value))
+    state_key <- .metadata_level_state_key(col_name, level_name)
+    if (exists(state_key, envir = .metadata_level_checked_state, inherits = FALSE)) {
+      return(isTRUE(get(state_key, envir = .metadata_level_checked_state, inherits = FALSE)))
+    }
+    TRUE
+  }
+  .metadata_level_rename_input_id <- function(col_name, level_name, level_index) {
+    paste0("recluster_new_level_rename__", .profile_key(col_name), "__", sprintf("%03d", level_index), "__", .safe_key(level_name))
+  }
   .grp_toggle_input_id <- function(group_name) paste0("recluster_new_group_enabled__", .safe_key(group_name))
   .grp_delete_input_id <- function(group_name) paste0("recluster_new_group_delete__", .safe_key(group_name))
+  .cell_groups_structure_signature <- function(groups) {
+    groups <- groups %||% list()
+    if (!is.list(groups) || !length(groups)) return("")
+    names_now <- names(groups) %||% character(0)
+    vapply(seq_along(groups), function(i) {
+      group <- groups[[i]] %||% list()
+      group_name <- .scalar_chr(names_now[[i]] %||% group$name, default = sprintf("group_%03d", i))
+      cells <- unique(as.character(group$cells %||% character(0)))
+      cells <- sort(cells[!is.na(cells) & nzchar(cells)], method = "radix")
+      metadata_col <- .scalar_chr(group$metadata_col, default = "")
+      paste(group_name, metadata_col, paste(cells, collapse = "\u001f"), sep = "=")
+    }, character(1)) |>
+      paste(collapse = "\u001e")
+  }
+  .set_cell_groups_structure <- function(groups, object_name = NULL) {
+    if (!is.list(groups)) groups <- list()
+    recluster_new_data$cell_groups <- groups
+    object_name <- .scalar_chr(
+      object_name,
+      default = .scalar_chr(recluster_new_loaded_object_name(), default = .scalar_chr(shared_data$active_object_name, default = ""))
+    )
+    next_key <- paste(object_name, .cell_groups_structure_signature(groups), sep = "::")
+    if (!identical(.scalar_chr(recluster_new_data$cell_groups_structure_key, default = ""), next_key)) {
+      recluster_new_data$cell_groups_structure_key <- next_key
+    }
+    invisible(groups)
+  }
   .expr_group_rename_input_id <- function(group_id) paste0("recluster_new_expr_group_rename__", .safe_key(group_id))
   .expr_group_open_input_id <- function(group_id) paste0("recluster_new_expr_group_open__", .safe_key(group_id))
   .expr_group_require_all_input_id <- function(group_id) paste0("recluster_new_expr_require_all__", .safe_key(group_id))
@@ -2236,6 +3364,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
   .expr_gene_check_input_id <- function(group_id, gene_id) paste0("recluster_new_expr_gene_check__", .safe_key(group_id), "__", .safe_key(gene_id))
   .expr_gene_active_input_id <- function(group_id, gene_id) paste0("recluster_new_expr_gene_active__", .safe_key(group_id), "__", .safe_key(gene_id))
   .expr_gene_delete_input_id <- function(group_id, gene_id) paste0("recluster_new_expr_gene_delete__", .safe_key(group_id), "__", .safe_key(gene_id))
+  .expr_gene_delete_event_id <- function() "recluster_new_expr_gene_delete_event"
+  .expr_gene_detail_id <- function(group_id, gene_id) paste(.safe_key(group_id), .safe_key(gene_id), sep = "__")
 
   .expr_default_state <- function() {
     list(inherit_population = TRUE, active_group_id = "", groups = list(), next_group_index = 1L, next_gene_index = 1L)
@@ -2278,7 +3408,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
           range = rng
         )
       }
-      active_gene_id <- .safe_key(.scalar_chr(g$active_gene_id, default = ""))
+      active_gene_raw <- .scalar_chr(g$active_gene_id, default = "")
+      active_gene_id <- if (nzchar(active_gene_raw)) .safe_key(active_gene_raw) else ""
       gene_ids <- vapply(clean_genes, function(x) .scalar_chr(x$id, default = ""), character(1))
       # Agent note: Empty active_gene_id is intentional user state: no orange
       # active-gene outline. Only repair non-empty IDs that reference a removed gene.
@@ -2314,12 +3445,63 @@ recluster_new_server <- function(input, output, session, shared_data) {
     out
   }
 
+  .expr_structure_signature <- function(state) {
+    state <- .expr_state_normalize(state)
+    groups <- vapply(state$groups %||% list(), function(g) {
+      genes <- vapply(g$genes %||% list(), function(gr) {
+        paste(
+          .scalar_chr(gr$id, default = ""),
+          .scalar_chr(gr$gene, default = ""),
+          sep = "="
+        )
+      }, character(1))
+      paste(c(
+        .scalar_chr(g$id, default = ""),
+        .scalar_chr(g$name, default = ""),
+        genes
+      ), collapse = "|")
+    }, character(1))
+    paste(groups, collapse = "||")
+  }
+
+  .expr_ui_structure_key <- function(state, object_name = "", assay_name = "") {
+    paste(
+      .scalar_chr(object_name, default = ""),
+      .scalar_chr(assay_name, default = ""),
+      .expr_structure_signature(state),
+      sep = "::"
+    )
+  }
+
+  .expr_active_range_structure_key <- function(state, object_name = "", assay_name = "") {
+    active <- .expr_active_gene(state)
+    paste(
+      .scalar_chr(object_name, default = ""),
+      .scalar_chr(assay_name, default = ""),
+      if (is.null(active)) "" else .scalar_chr(active$group_id, default = ""),
+      if (is.null(active)) "" else .scalar_chr(active$gene_id, default = ""),
+      if (is.null(active)) "" else .scalar_chr(active$gene, default = ""),
+      sep = "::"
+    )
+  }
+
   .expr_store_get <- function(sobj) {
     if (is.null(sobj) || !inherits(sobj, "Seurat")) return(.expr_default_state())
     misc <- tryCatch(sobj@misc, error = function(e) list())
     ana <- tryCatch(misc$analysis, error = function(e) NULL)
     dbn <- if (is.list(ana)) tryCatch(ana$data_browser_new, error = function(e) NULL) else NULL
-    .expr_state_normalize(if (is.list(dbn)) dbn$expression_selection else NULL)
+    .expr_without_active_gene_focus(
+      .expr_state_normalize(if (is.list(dbn)) dbn$expression_selection else NULL)
+    )
+  }
+
+  .expr_without_active_gene_focus <- function(state) {
+    state <- .expr_state_normalize(state)
+    state$groups <- lapply(state$groups %||% list(), function(group) {
+      group$active_gene_id <- ""
+      group
+    })
+    state
   }
 
   .expr_store_set <- function(sobj, state) {
@@ -2327,23 +3509,179 @@ recluster_new_server <- function(input, output, session, shared_data) {
     misc <- tryCatch(sobj@misc, error = function(e) list())
     if (!is.list(misc$analysis)) misc$analysis <- list()
     if (!is.list(misc$analysis$data_browser_new)) misc$analysis$data_browser_new <- list()
-    misc$analysis$data_browser_new$expression_selection <- .expr_state_normalize(state)
+    # Active gene is transient UI focus, not object-owned scientific/session
+    # state. Persist groups, checks, and thresholds; require a physical gene-row
+    # click before orange focus and the range distribution appear each visit.
+    misc$analysis$data_browser_new$expression_selection <- .expr_without_active_gene_focus(state)
     sobj@misc <- misc
     sobj
   }
 
+  .saved_group_state_normalize <- function(groups, obj = NULL) {
+    if (!is.list(groups) || !length(groups)) return(list())
+    object_cells <- if (!is.null(obj) && inherits(obj, "Seurat")) colnames(obj) else character(0)
+    names_now <- names(groups) %||% character(0)
+    out <- list()
+    for (i in seq_along(groups)) {
+      group <- groups[[i]]
+      if (!is.list(group)) next
+      group_name <- .scalar_chr(names_now[[i]] %||% group$name, default = sprintf("Saved group %d", i))
+      if (!nzchar(group_name)) next
+      cells <- unique(as.character(group$cells %||% character(0)))
+      cells <- cells[!is.na(cells) & nzchar(cells)]
+      if (length(object_cells)) cells <- intersect(cells, object_cells)
+      metadata_col <- .scalar_chr(group$metadata_col, default = "")
+      out_name <- group_name
+      if (out_name %in% names(out)) out_name <- make.unique(c(names(out), out_name))[length(names(out)) + 1L]
+      out[[out_name]] <- list(
+        cells = cells,
+        enabled = isTRUE(group$enabled),
+        metadata_col = metadata_col
+      )
+    }
+    out
+  }
+
+  .saved_group_store_get <- function(sobj) {
+    if (is.null(sobj) || !inherits(sobj, "Seurat")) return(list())
+    misc <- tryCatch(sobj@misc, error = function(e) list())
+    ana <- tryCatch(misc$analysis, error = function(e) NULL)
+    dbn <- if (is.list(ana)) tryCatch(ana$data_browser_new, error = function(e) NULL) else NULL
+    stored <- if (is.list(dbn)) dbn$saved_groups else NULL
+    groups <- .saved_group_state_normalize(stored, obj = sobj)
+    if (length(groups)) return(groups)
+
+    # Reconstruct legacy saved-group metadata rows once when older objects do
+    # not yet carry the object-owned UI state.
+    md <- tryCatch(sobj@meta.data, error = function(e) NULL)
+    if (is.null(md) || !is.data.frame(md)) return(groups)
+    saved_cols <- colnames(md)[grepl("^saved_group_", colnames(md))]
+    if (!length(saved_cols)) return(groups)
+    for (col_name in saved_cols) {
+      vals <- as.character(md[[col_name]])
+      vals[is.na(vals) | !nzchar(vals)] <- ""
+      labels <- unique(vals[nzchar(vals)])
+      if (!length(labels)) next
+      group_name <- labels[[1L]]
+      if (group_name %in% names(groups)) group_name <- make.unique(c(names(groups), group_name))[length(names(groups)) + 1L]
+      groups[[group_name]] <- list(
+        cells = rownames(md)[vals == labels[[1L]]],
+        enabled = FALSE,
+        metadata_col = col_name
+      )
+    }
+    .saved_group_state_normalize(groups, obj = sobj)
+  }
+
+  .saved_group_store_set <- function(sobj, groups) {
+    if (is.null(sobj) || !inherits(sobj, "Seurat")) return(sobj)
+    misc <- tryCatch(sobj@misc, error = function(e) list())
+    if (!is.list(misc$analysis)) misc$analysis <- list()
+    if (!is.list(misc$analysis$data_browser_new)) misc$analysis$data_browser_new <- list()
+    misc$analysis$data_browser_new$saved_groups <- .saved_group_state_normalize(groups, obj = sobj)
+    sobj@misc <- misc
+    sobj
+  }
+
+  .metadata_color_store_get <- function(sobj) {
+    if (is.null(sobj) || !inherits(sobj, "Seurat")) return(list())
+    misc <- tryCatch(sobj@misc, error = function(e) list())
+    stored <- tryCatch(misc$metadata_level_colors, error = function(e) NULL)
+    if (!is.list(stored) || !length(stored)) return(list())
+    stored_names <- names(stored)
+    if (is.null(stored_names) || length(stored_names) != length(stored)) {
+      stored_names <- as.character(seq_along(stored))
+    }
+    ord <- order(stored_names)
+    stored <- stored[ord]
+    stored_names <- stored_names[ord]
+    normalized <- lapply(stored, function(color_map) {
+      vals <- tryCatch(as.character(color_map), error = function(e) character(0))
+      nms <- names(color_map) %||% character(0)
+      if (length(vals) != length(nms)) return(character(0))
+      keep <- !is.na(nms) & nzchar(nms) & !is.na(vals) & nzchar(vals)
+      vals <- vals[keep]
+      nms <- nms[keep]
+      map_order <- order(nms)
+      stats::setNames(vals[map_order], nms[map_order])
+    })
+    stats::setNames(normalized, stored_names)
+  }
+
+  # Object-owned state is one comparison unit during same-name workspace
+  # replacement. Comparing this record prevents a replacement with identical
+  # reduction dimensions from leaving old controls mounted in the session.
+  .object_owned_state <- function(sobj) {
+    list(
+      expression_selection = .expr_store_get(sobj),
+      saved_groups = .saved_group_store_get(sobj),
+      visual_settings = .visual_settings_store_get(sobj),
+      metadata_level_colors = .metadata_color_store_get(sobj)
+    )
+  }
+
   .expr_set_state <- function(state, persist = TRUE) {
     state <- .expr_state_normalize(state)
+    old_state <- .expr_state_normalize(isolate(recluster_new_data$expr_selection))
+    if (identical(old_state, state)) return(invisible(old_state))
+    # Agent note: Expression buttons are direct user edits to object-owned
+    # state. Do not discard them because plot settlement is still in progress;
+    # plot readiness and state persistence are separate transactions.
+    # Agent note: staged UI exists only for the add-gene post-flush handoff.
+    # Any later edit, including delete, must render canonical object state;
+    # leaving this snapshot mounted can resurrect a deleted gene.
+    recluster_new_data$expr_ui_staged_state <- NULL
+    old_structure_key <- .scalar_chr(recluster_new_data$expr_ui_structure_key, default = "")
     recluster_new_data$expr_selection <- state
+    object_name <- .recluster_new_canonical_object_name()
+    assay_name <- .scalar_chr(
+      recluster_new_data$umap_assay_choice,
+      default = .scalar_chr(input$recluster_new_assay_select, default = "")
+    )
+    next_structure_key <- .expr_ui_structure_key(state, object_name, assay_name)
+    if (!identical(old_structure_key, next_structure_key)) {
+      .db_dbg(
+        "expr_ui_structure_change",
+        sprintf("object=%s assay=%s old=%s new=%s", object_name, assay_name, substr(old_structure_key, 1L, 120L), substr(next_structure_key, 1L, 120L))
+      )
+      recluster_new_data$expr_ui_structure_key <- next_structure_key
+    }
+    recluster_new_data$expr_active_range_structure_key <- .expr_active_range_structure_key(
+      state,
+      object_name,
+      assay_name
+    )
     if (isTRUE(persist)) {
       obj <- recluster_new_data$seurat_obj
       if (!is.null(obj) && inherits(obj, "Seurat")) {
         obj <- .expr_store_set(obj, state)
-        # Agent note: Expression state lives in Seurat misc, but replacing local
-        # plot object rebuilds controls and resets user-selected assay.
-        .persist_active_object(obj, update_local = FALSE)
+        # Agent note: Keep local and registry object-owned state identical after
+        # every expression edit. Leaving the local copy stale makes the shared
+        # object reconciliation observer misclassify a normal checkbox/gene/
+        # range edit as an external workspace replacement and reload the page.
+        # The local visual controls preserve their canonical selections while
+        # the object copy is updated, so this is a state sync, not a reload.
+        .persist_active_object(obj, update_local = TRUE)
       }
     }
+    .expr_send_state_to_ui(state)
+    invisible(state)
+  }
+
+  .expr_ui_render_state <- function() {
+    staged <- isolate(recluster_new_data$expr_ui_staged_state)
+    if (is.list(staged)) staged else isolate(recluster_new_data$expr_selection)
+  }
+
+  .expr_stage_added_gene_ui <- function(state) {
+    state <- .expr_state_normalize(state)
+    object_name <- .recluster_new_canonical_object_name()
+    assay_name <- .scalar_chr(
+      recluster_new_data$umap_assay_choice,
+      default = .scalar_chr(input$recluster_new_assay_select, default = "")
+    )
+    recluster_new_data$expr_ui_staged_state <- state
+    recluster_new_data$expr_ui_structure_key <- .expr_ui_structure_key(state, object_name, assay_name)
     invisible(state)
   }
 
@@ -2384,6 +3722,97 @@ recluster_new_server <- function(input, output, session, shared_data) {
       state$groups[[gi]]$active_gene_id <- gene_id
     }
     state
+  }
+
+  .expr_controls_payload <- function(state) {
+    state <- .expr_state_normalize(state)
+    owner_now <- .scalar_chr(selection_owner_state(), default = "none")
+    active_gene <- .expr_active_gene(state)
+    groups <- list()
+    for (g in state$groups %||% list()) {
+      gid <- .scalar_chr(g$id, default = "")
+      if (!nzchar(gid)) next
+      genes <- lapply(g$genes %||% list(), function(gr) {
+        gene_id <- .scalar_chr(gr$id, default = "")
+        list(
+          check_id = .expr_gene_check_input_id(gid, gene_id),
+          active_id = .expr_gene_active_input_id(gid, gene_id),
+          checked = isTRUE(gr$checked),
+          active = identical(.scalar_chr(g$active_gene_id, default = ""), gene_id)
+        )
+      })
+      groups[[gid]] <- list(
+        open = isTRUE(g$open),
+        require_all_id = .expr_group_require_all_input_id(gid),
+        require_all = isTRUE(g$require_all),
+        invert_id = .expr_group_invert_input_id(gid),
+        invert = isTRUE(g$invert),
+        select_all_id = .expr_group_select_all_input_id(gid),
+        select_all = length(g$genes %||% list()) > 0L && all(vapply(g$genes %||% list(), function(gr) isTRUE(gr$checked), logical(1))),
+        genes = genes
+      )
+    }
+    list(
+      object = .recluster_new_canonical_object_name(),
+      context_revision = .recluster_new_context_revision(),
+      active_group_id = if (identical(owner_now, "expression")) {
+        .scalar_chr(state$active_group_id, default = "")
+      } else {
+        ""
+      },
+      active_range = if (!is.null(active_gene)) {
+        suppressWarnings(as.numeric(active_gene$range %||% numeric(0)))
+      } else {
+        numeric(0)
+      },
+      groups = groups
+    )
+  }
+
+  .expr_send_state_to_ui <- function(state) {
+    session$sendCustomMessage("recluster-new-expression-state", .expr_controls_payload(state))
+    invisible(NULL)
+  }
+
+  .set_selection_owner <- function(next_owner, source = "") {
+    next_owner <- .scalar_chr(next_owner, default = "none")
+    if (!(next_owner %in% c("none", "expression", "manual"))) {
+      stop(sprintf("Invalid Data Browser selection owner: %s", next_owner), call. = FALSE)
+    }
+    previous_owner <- .scalar_chr(selection_owner_state(), default = "none")
+    if (!isTRUE(.recluster_new_context_is_settled())) {
+      .db_dbg(
+        "selection_owner_commit_ignored_unsettled_context",
+        sprintf("from=%s requested=%s source=%s", previous_owner, next_owner, .scalar_chr(source, default = ""))
+      )
+      return(invisible(previous_owner))
+    }
+    if (identical(previous_owner, next_owner)) return(invisible(next_owner))
+    selection_owner_state(next_owner)
+    .db_dbg(
+      "selection_owner_transition",
+      sprintf("from=%s to=%s source=%s", previous_owner, next_owner, .scalar_chr(source, default = ""))
+    )
+    # Expression DOM is a view of canonical state. Push owner changes through
+    # one custom-message path; never synthesize another Shiny input.
+    .expr_send_state_to_ui(recluster_new_data$expr_selection)
+    invisible(next_owner)
+  }
+
+  .restore_selection_owner_after_manual_clear <- function(source = "") {
+    if (!identical(.scalar_chr(selection_owner_state(), default = "none"), "manual")) {
+      return(invisible(NULL))
+    }
+    remaining_manual <- unique(c(
+      as.character(lasso_selected_cells_state() %||% character(0)),
+      as.character(recluster_new_data$selected_cells %||% character(0)),
+      as.character(enabled_group_cells() %||% character(0))
+    ))
+    if (length(remaining_manual[nzchar(remaining_manual)])) return(invisible("manual"))
+    expr_state <- .expr_state_normalize(recluster_new_data$expr_selection)
+    next_owner <- if (nzchar(.scalar_chr(expr_state$active_group_id, default = ""))) "expression" else "none"
+    .set_selection_owner(next_owner, source)
+    invisible(next_owner)
   }
 
   .expr_format_range <- function(rng) {
@@ -2455,9 +3884,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
     pal <- character(0)
     
     if (identical(palette_choice, "Default Seurat")) {
-      fn <- tryCatch(getFromNamespace("DiscretePalette", "Seurat"), error = function(e) NULL)
       pal <- tryCatch(
-        if (is.function(fn)) suppressWarnings(as.character(fn(n))) else character(0),
+        as.character(scales::hue_pal()(n)),
         error = function(e) character(0)
       )
     } else {
@@ -2520,8 +3948,26 @@ recluster_new_server <- function(input, output, session, shared_data) {
     # visible/filter subsets. Hidden populations keep reserved color positions.
     lv <- .sort_numeric_first(unique(c(object_levels, requested_levels)))
     if (!length(lv)) return(setNames(character(0), character(0)))
-    fallback <- .seurat_discrete_palette(length(lv))
-    names(fallback) <- lv
+    # Agent note: Preserve carried object colors first. When no carried color
+    # exists, use actual Seurat DimPlot default hues, not DiscretePalette().
+    fallback <- tryCatch(
+      figure_resolve_metadata_palette(
+        sobj = sobj,
+        reduction_name = .current_umap_reduction(sobj),
+        color_col = col_name,
+        label_values = object_levels,
+        levels_vec = lv
+      ),
+      error = function(e) NULL
+    )
+    if (!is.character(fallback) || length(fallback) != length(lv)) {
+      fallback <- scales::hue_pal()(length(lv))
+    } else {
+      fallback <- toupper(as.character(fallback))
+      bad <- is.na(fallback) | !vapply(fallback, .is_hex_color, logical(1))
+      if (any(bad)) fallback[bad] <- scales::hue_pal()(length(lv))[bad]
+    }
+    fallback <- stats::setNames(fallback, lv)
     stored <- .read_metadata_level_colors(sobj, col_name)
     if (!length(stored)) return(fallback)
     out <- fallback
@@ -2621,6 +4067,16 @@ recluster_new_server <- function(input, output, session, shared_data) {
     "data"
   }
 
+  .expr_assay_name <- function(obj = recluster_new_data$seurat_obj) {
+    assay_choices <- .safe_assay_choices(obj)
+    if (!length(assay_choices)) return("")
+    canonical <- .scalar_chr(recluster_new_data$umap_assay_choice, default = "")
+    if (nzchar(canonical) && canonical %in% assay_choices) return(canonical)
+    input_value <- .scalar_chr(input$recluster_new_assay_select, default = "")
+    if (nzchar(input_value) && input_value %in% assay_choices) return(input_value)
+    .preferred_assay_choice(obj)
+  }
+
   .expr_expression_range_info <- function(vals) {
     vals <- suppressWarnings(as.numeric(vals %||% numeric(0)))
     vals <- vals[is.finite(vals)]
@@ -2638,12 +4094,45 @@ recluster_new_server <- function(input, output, session, shared_data) {
     )
   }
 
+  .expr_distribution_display_range <- function(full_rng) {
+    full_rng <- suppressWarnings(as.numeric(full_rng %||% numeric(0)))
+    full_rng <- sort(full_rng[is.finite(full_rng)])
+    if (length(full_rng) < 2L || !is.finite(diff(full_rng)) || diff(full_rng) <= 0) {
+      return(full_rng)
+    }
+    # Keep only enough negative display space to show the zero-density tail.
+    # Plot and slider share this range, so larger padding wastes panel width.
+    x_padding <- max(diff(full_rng) * 0.005, .Machine$double.eps)
+    c(min(full_rng[[1L]], 0) - x_padding, full_rng[[2L]])
+  }
+
   .selected_levels_for_column <- function(col_name, profile) {
     lv <- as.character(profile$levels %||% character(0))
     if (!length(lv)) return(character(0))
-    keep <- vapply(lv, function(x) isTRUE(input[[.cat_level_input_id(col_name, x)]] %||% TRUE), logical(1))
+    keep <- vapply(lv, function(x) .metadata_level_checked(col_name, x), logical(1))
     lv[keep]
   }
+
+  observe({
+    if (!.recluster_new_event_allowed("metadata_level_state_capture")) return(invisible(NULL))
+    profiles <- recluster_new_data$metadata_profiles
+    if (!length(profiles)) return(invisible(NULL))
+    for (col_name in names(profiles)) {
+      levels_now <- as.character(profiles[[col_name]]$levels %||% character(0))
+      if (!length(levels_now)) next
+      for (level_name in levels_now) {
+        input_value <- input[[.cat_level_input_id(col_name, level_name)]]
+        if (is.null(input_value)) next
+        state_key <- .metadata_level_state_key(col_name, level_name)
+        state_value <- isTRUE(input_value)
+        if (!exists(state_key, envir = .metadata_level_checked_state, inherits = FALSE) ||
+            !identical(get(state_key, envir = .metadata_level_checked_state, inherits = FALSE), state_value)) {
+          assign(state_key, state_value, envir = .metadata_level_checked_state)
+        }
+      }
+    }
+    invisible(NULL)
+  }, priority = 1200)
 
   .metadata_has_value <- function(vec) {
     if (is.numeric(vec) || is.integer(vec)) {
@@ -2699,7 +4188,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }
 
   .write_metadata_level_colors <- function(sobj, col_name, color_map) {
-    if (is.null(sobj) || !inherits(sobj, "Seurat") || !is.list(color_map) || !length(color_map)) return(sobj)
+    if (is.null(sobj) || !inherits(sobj, "Seurat") || is.null(color_map) || !length(color_map)) return(sobj)
+    if (!is.list(color_map)) color_map <- as.list(color_map)
     misc <- tryCatch(sobj@misc, error = function(e) list())
     if (!is.list(misc$metadata_level_colors)) misc$metadata_level_colors <- list()
 
@@ -2724,9 +4214,65 @@ recluster_new_server <- function(input, output, session, shared_data) {
     out[order(names(out), method = "radix")]
   }
 
+  .send_metadata_colors_to_ui <- function(obj, col_name, levels_vec = NULL) {
+    if (is.null(obj) || !inherits(obj, "Seurat") || !nzchar(.scalar_chr(col_name, default = ""))) {
+      return(invisible(NULL))
+    }
+    if (is.null(levels_vec)) {
+      profile <- (recluster_new_data$metadata_profiles %||% list())[[col_name]]
+      levels_vec <- if (is.list(profile)) profile$levels else character(0)
+    }
+    levels_vec <- as.character(levels_vec %||% character(0))
+    levels_vec <- levels_vec[!is.na(levels_vec) & nzchar(levels_vec)]
+    if (!length(levels_vec)) return(invisible(NULL))
+    color_map <- .level_color_map(obj, col_name, levels_vec)
+    colors <- as.list(unname(as.character(color_map)))
+    names(colors) <- names(color_map)
+    .db_dbg(
+      "metadata_colors_ui",
+      sprintf("column=%s levels=%d colors=%s", col_name, length(colors), paste(unname(as.character(color_map)), collapse = ","))
+    )
+    session$sendCustomMessage(
+      "recluster-new-metadata-colors",
+      list(
+        object = .recluster_new_canonical_object_name(),
+        context_revision = .recluster_new_context_revision(),
+        column = col_name,
+        colors = colors
+      )
+    )
+    invisible(NULL)
+  }
+
   .persist_active_object <- function(sobj, update_local = TRUE) {
     nm <- .recluster_new_canonical_object_name()
     if (!nzchar(nm) || is.null(sobj) || !inherits(sobj, "Seurat")) return(invisible(NULL))
+    if (!isTRUE(.recluster_new_context_is_settled())) {
+      .db_dbg(
+        "persist_ignored_unsettled_context",
+        sprintf(
+          "target=%s active=%s loaded=%s loading=%s syncing=%s activating=%s",
+          nm,
+          .scalar_chr(shared_data$active_object_name, default = ""),
+          .scalar_chr(recluster_new_loaded_object_name(), default = ""),
+          as.character(isTRUE(recluster_new_object_loading())),
+          as.character(isTRUE(recluster_new_dataset_syncing())),
+          as.character(isTRUE(recluster_new_page_activating()))
+        )
+      )
+      return(invisible(NULL))
+    }
+    loaded_name <- .scalar_chr(recluster_new_loaded_object_name(), default = "")
+    active_name <- .scalar_chr(shared_data$active_object_name, default = "")
+    # Expression selection is object-owned. Reattach current loaded-object
+    # state before unrelated object writes, because local plot objects can lag
+    # behind the canonical object after a group edit.
+    if (nzchar(loaded_name) && identical(nm, loaded_name) && identical(nm, active_name)) {
+      expr_state <- tryCatch(recluster_new_data$expr_selection, error = function(e) NULL)
+      if (is.list(expr_state)) sobj <- .expr_store_set(sobj, expr_state)
+      saved_groups <- tryCatch(recluster_new_data$cell_groups, error = function(e) list())
+      sobj <- .saved_group_store_set(sobj, saved_groups)
+    }
     entry <- shared_data$all_seurat_objects[[nm]]
     if (is.list(entry) && !is.null(entry$obj)) {
       entry$obj <- sobj
@@ -2740,6 +4286,14 @@ recluster_new_server <- function(input, output, session, shared_data) {
 
   .sync_metadata_profiles_from_object <- function(obj) {
     if (is.null(obj) || !inherits(obj, "Seurat")) return(invisible(NULL))
+    recluster_new_data$metadata_filter_data_revision <-
+      as.integer(recluster_new_data$metadata_filter_data_revision %||% 0L) + 1L
+    loaded_name <- .scalar_chr(recluster_new_loaded_object_name(), default = "")
+    active_name <- .scalar_chr(shared_data$active_object_name, default = "")
+    if (nzchar(loaded_name) && identical(loaded_name, active_name)) {
+      obj <- .expr_store_set(obj, recluster_new_data$expr_selection)
+      obj <- .saved_group_store_set(obj, recluster_new_data$cell_groups)
+    }
     obj <- .strip_metadata_color_mirror_columns(obj)
     md <- obj@meta.data
     available_cols <- colnames(md)[vapply(md, .is_supported_meta_column, logical(1))]
@@ -2754,6 +4308,18 @@ recluster_new_server <- function(input, output, session, shared_data) {
     }
     recluster_new_data$plot_df <- plot_df
     recluster_new_data$metadata_profiles <- profiles
+    next_metadata_key <- .metadata_selector_structure_key(profiles)
+    if (!identical(.scalar_chr(recluster_new_data$metadata_selector_structure_key, default = ""), next_metadata_key)) {
+      .db_dbg(
+        "metadata_ui_structure_change",
+        sprintf("old=%s new=%s", substr(.scalar_chr(recluster_new_data$metadata_selector_structure_key, default = ""), 1L, 120L), substr(next_metadata_key, 1L, 120L))
+      )
+      recluster_new_data$metadata_selector_structure_key <- next_metadata_key
+    }
+    next_controls_key <- .viz_controls_structure_key(obj)
+    if (!identical(.scalar_chr(recluster_new_data$viz_controls_structure_key, default = ""), next_controls_key)) {
+      recluster_new_data$viz_controls_structure_key <- next_controls_key
+    }
     recluster_new_data$seurat_obj <- obj
     invisible(profiles)
   }
@@ -2784,12 +4350,66 @@ recluster_new_server <- function(input, output, session, shared_data) {
       if (!identical(.scalar_chr(recluster_new_data$metadata_active_column, default = ""), target_col)) {
         recluster_new_data$metadata_active_column <- target_col
       }
-      .set_umap_color_choice(target_col, choices = c("Single Gene Expression", available_cols, "None"))
-      updateSelectInput(session, "recluster_new_pb_meta_col", choices = available_cols, selected = target_col)
-      updateSelectInput(session, "recluster_new_rule_color_by_select", choices = c("Single Gene Expression", available_cols, "None"), selected = target_col)
-      updateSelectInput(session, "recluster_new_scatter_color_by", choices = c("None", available_cols), selected = target_col)
+
+      color_choices <- c("Single Gene Expression", available_cols, "None")
+      color_now <- .scalar_chr(recluster_new_data$umap_color_choice, default = "")
+      display_now <- .scalar_chr(recluster_new_data$umap_display_mode, default = "metadata")
+      if (!(color_now %in% color_choices)) {
+        color_now <- if (identical(display_now, "gene") && length(.umap_gene_selection()$genes)) {
+          "Single Gene Expression"
+        } else {
+          target_col
+        }
+      }
+      # Metadata writes must not change independent UMAP display state. Only
+      # repair color choice when its previous value no longer exists.
+      .set_umap_color_choice(color_now, choices = color_choices)
+
+      preserve_choice <- function(input_id, choices, fallback) {
+        current <- .scalar_chr(isolate(input[[input_id]]), default = "")
+        selected <- if (nzchar(current) && current %in% choices) current else fallback
+        if (!identical(current, selected)) {
+          updateSelectInput(session, input_id, choices = choices, selected = selected)
+        }
+        selected
+      }
+      preserve_choice(
+        "recluster_new_pb_meta_col",
+        available_cols,
+        if (target_col %in% available_cols) target_col else if (length(available_cols)) available_cols[[1]] else ""
+      )
+      preserve_choice(
+        "recluster_new_rule_color_by_select",
+        color_choices,
+        if (target_col %in% available_cols) target_col else "None"
+      )
+      preserve_choice(
+        "recluster_new_scatter_color_by",
+        c("None", available_cols),
+        if (target_col %in% available_cols) target_col else "None"
+      )
     }
     invisible(NULL)
+  }
+
+  # All metadata/object mutations use this path. It reattaches expression
+  # state before replacing the registry entry, then refreshes dependent
+  # metadata views without resetting unrelated controls.
+  .commit_metadata_object_update <- function(obj, open_col = NULL) {
+    if (is.null(obj) || !inherits(obj, "Seurat")) return(invisible(NULL))
+    .persist_active_object(obj)
+    .refresh_metadata_after_object_update(obj, open_col = open_col)
+    .db_dbg(
+      "metadata_object_commit",
+      sprintf(
+        "object=%s open_col=%s metadata_cols=%d expr_groups=%d",
+        .recluster_new_canonical_object_name(),
+        .scalar_chr(open_col, default = ""),
+        ncol(obj@meta.data),
+        length(.expr_state_normalize(recluster_new_data$expr_selection)$groups %||% list())
+      )
+    )
+    invisible(obj)
   }
 
   .pb_store_get <- function(sobj) {
@@ -2869,25 +4489,37 @@ recluster_new_server <- function(input, output, session, shared_data) {
     vals <- as.character(recluster_new_data$umap_gene_values %||% c("", "", ""))
     length(vals) <- 3L
     vals[is.na(vals)] <- ""
-    vals[[index]] <- trimws(.scalar_chr(value, default = ""))
+    next_value <- trimws(.scalar_chr(value, default = ""))
+    if (identical(vals[[index]], next_value)) return(invisible(vals))
+    vals[[index]] <- next_value
     recluster_new_data$umap_gene_values <- vals
+    .remember_visual_settings(umap_gene_values = vals)
     invisible(vals)
   }
 
-  .set_umap_color_choice <- function(choice, choices = NULL) {
+  .set_umap_color_choice <- function(choice, choices = NULL, update_ui = TRUE, persist = TRUE) {
     ch <- .scalar_chr(choice, default = "")
     if (!nzchar(ch)) return(invisible(NULL))
     if (length(choices) && !(ch %in% choices)) return(invisible(NULL))
     cur <- .scalar_chr(recluster_new_data$umap_color_choice, default = "")
-    if (identical(cur, ch) && !length(choices)) return(invisible(ch))
+    choices_sig <- if (length(choices)) paste(as.character(choices), collapse = "\u001f") else ""
+    choices_changed <- length(choices) && !identical(
+      .scalar_chr(recluster_new_data$umap_color_choices_sig, default = ""),
+      choices_sig
+    )
+    if (identical(cur, ch) && !isTRUE(choices_changed)) return(invisible(ch))
     .db_dbg("set_color", sprintf("cur=%s next=%s", cur, ch))
     recluster_new_data$umap_color_choice <- ch
-    recluster_new_data$pending_umap_color_choice <- ch
-    recluster_new_data$umap_control_syncing <- TRUE
-    on.exit({
-      recluster_new_data$umap_control_syncing <- FALSE
-    }, add = TRUE)
-    updateSelectInput(session, "recluster_new_color_by_select", choices = choices %||% NULL, selected = ch)
+    if (length(choices)) recluster_new_data$umap_color_choices_sig <- choices_sig
+    if (isTRUE(persist)) {
+      .remember_visual_settings(
+        umap_color_choice = ch,
+        umap_display_mode = if (identical(ch, "Single Gene Expression")) "gene" else "metadata"
+      )
+    }
+    if (isTRUE(update_ui)) {
+      updateSelectInput(session, "recluster_new_color_by_select", choices = choices %||% NULL, selected = ch)
+    }
     invisible(ch)
   }
 
@@ -2900,47 +4532,53 @@ recluster_new_server <- function(input, output, session, shared_data) {
     assay_choices <- .safe_assay_choices(obj)
     if (!length(assay_choices)) return(invisible(NULL))
 
-    assay_now <- .scalar_chr(input$recluster_new_assay_select, default = "")
+    assay_state_before <- .scalar_chr(recluster_new_data$umap_assay_choice, default = "")
+    assay_now <- .expr_assay_name(obj)
     assay_target <- if (nzchar(assay_now) && assay_now %in% assay_choices) assay_now else assay_choices[[1]]
     if (isTRUE(force)) {
       forced_target <- .scalar_chr(recluster_new_data$umap_assay_choice, default = "")
       if (nzchar(forced_target) && forced_target %in% assay_choices) assay_target <- forced_target
     }
-    recluster_new_data$umap_assay_choice <- assay_target
+    if (!identical(.scalar_chr(recluster_new_data$umap_assay_choice, default = ""), assay_target)) {
+      recluster_new_data$umap_assay_choice <- assay_target
+    }
     if (!identical(assay_now, assay_target)) {
-      .update_control_select("recluster_new_assay_select", choices = assay_choices, selected = assay_target)
-    } else if (isTRUE(force)) {
-      .update_control_select("recluster_new_assay_select", choices = assay_choices, selected = assay_target)
+      updateSelectInput(session, "recluster_new_assay_select", choices = assay_choices, selected = assay_target)
     }
 
     all_genes <- .assay_feature_names(obj, assay_target)
     if (length(all_genes)) {
-      recluster_new_data$umap_control_syncing <- TRUE
-      on.exit({
-        recluster_new_data$umap_control_syncing <- FALSE
-      }, add = TRUE)
       stored_umap_genes <- as.character(recluster_new_data$umap_gene_values %||% c("", "", ""))
       length(stored_umap_genes) <- 3L
       stored_umap_genes[is.na(stored_umap_genes)] <- ""
       gene_now <- .scalar_chr(stored_umap_genes[[1]], default = "")
       gene2_now <- .scalar_chr(stored_umap_genes[[2]], default = "")
       gene3_now <- .scalar_chr(stored_umap_genes[[3]], default = "")
-      gene_target <- if (nzchar(gene_now) && gene_now %in% all_genes) gene_now else character(0)
-      gene2_target <- if (nzchar(gene2_now) && gene2_now %in% all_genes) gene2_now else character(0)
-      gene3_target <- if (nzchar(gene3_now) && gene3_now %in% all_genes) gene3_now else character(0)
-      recluster_new_data$umap_gene_values <- c(
+      gene_target <- if (nzchar(gene_now) && gene_now %in% all_genes) gene_now else ""
+      gene2_target <- if (nzchar(gene2_now) && gene2_now %in% all_genes) gene2_now else ""
+      gene3_target <- if (nzchar(gene3_now) && gene3_now %in% all_genes) gene3_now else ""
+      next_gene_values <- c(
         .scalar_chr(gene_target, default = ""),
         .scalar_chr(gene2_target, default = ""),
         .scalar_chr(gene3_target, default = "")
       )
-      if (isTRUE(force) || !identical(gene_now, gene_target)) {
-        wl_update_gene_selectize(session, "recluster_new_gene_expr_select_1", all_genes, selected = gene_target)
+      current_gene_values <- as.character(recluster_new_data$umap_gene_values %||% c("", "", ""))
+      length(current_gene_values) <- 3L
+      current_gene_values[is.na(current_gene_values)] <- ""
+      if (!identical(current_gene_values, next_gene_values)) {
+        recluster_new_data$umap_gene_values <- next_gene_values
       }
-      if (isTRUE(force) || !identical(gene2_now, gene2_target)) {
-        wl_update_gene_selectize(session, "recluster_new_gene_expr_select_2", all_genes, selected = gene2_target)
+      if (isTRUE(force) || !identical(assay_state_before, assay_target) || !identical(gene_now, gene_target)) {
+        selected_gene <- if (nzchar(gene_target)) gene_target else character(0)
+        .db_update_gene_selectize("recluster_new_gene_expr_select_1", all_genes, selected = selected_gene)
       }
-      if (isTRUE(force) || !identical(gene3_now, gene3_target)) {
-        wl_update_gene_selectize(session, "recluster_new_gene_expr_select_3", all_genes, selected = gene3_target)
+      if (isTRUE(force) || !identical(assay_state_before, assay_target) || !identical(gene2_now, gene2_target)) {
+        selected_gene <- if (nzchar(gene2_target)) gene2_target else character(0)
+        .db_update_gene_selectize("recluster_new_gene_expr_select_2", all_genes, selected = selected_gene)
+      }
+      if (isTRUE(force) || !identical(assay_state_before, assay_target) || !identical(gene3_now, gene3_target)) {
+        selected_gene <- if (nzchar(gene3_target)) gene3_target else character(0)
+        .db_update_gene_selectize("recluster_new_gene_expr_select_3", all_genes, selected = selected_gene)
       }
     }
 
@@ -2948,12 +4586,25 @@ recluster_new_server <- function(input, output, session, shared_data) {
     scatter_y_now <- .scalar_chr(input$recluster_new_scatter_gene_y, default = "")
     scatter_x_target <- if (nzchar(scatter_x_now) && scatter_x_now %in% all_genes) scatter_x_now else if (length(all_genes)) all_genes[[1]] else character(0)
     scatter_y_target <- if (nzchar(scatter_y_now) && scatter_y_now %in% all_genes) scatter_y_now else if (length(all_genes) >= 2) all_genes[[2]] else scatter_x_target
-    if (isTRUE(force) || !identical(scatter_x_now, scatter_x_target)) {
-      wl_update_gene_selectize(session, "recluster_new_scatter_gene_x", all_genes, selected = scatter_x_target)
+    if (isTRUE(force) || !identical(assay_state_before, assay_target) || !identical(scatter_x_now, scatter_x_target)) {
+      .db_update_gene_selectize("recluster_new_scatter_gene_x", all_genes, selected = scatter_x_target)
     }
-    if (isTRUE(force) || !identical(scatter_y_now, scatter_y_target)) {
-      wl_update_gene_selectize(session, "recluster_new_scatter_gene_y", all_genes, selected = scatter_y_target)
+    if (isTRUE(force) || !identical(assay_state_before, assay_target) || !identical(scatter_y_now, scatter_y_target)) {
+      .db_update_gene_selectize("recluster_new_scatter_gene_y", all_genes, selected = scatter_y_target)
     }
+    next_expr_key <- .expr_ui_structure_key(
+      recluster_new_data$expr_selection,
+      .recluster_new_canonical_object_name(),
+      assay_target
+    )
+    if (!identical(.scalar_chr(recluster_new_data$expr_ui_structure_key, default = ""), next_expr_key)) {
+      recluster_new_data$expr_ui_structure_key <- next_expr_key
+    }
+    recluster_new_data$expr_active_range_structure_key <- .expr_active_range_structure_key(
+      recluster_new_data$expr_selection,
+      .recluster_new_canonical_object_name(),
+      assay_target
+    )
     invisible(NULL)
   }
 
@@ -2964,25 +4615,27 @@ recluster_new_server <- function(input, output, session, shared_data) {
     assay_choices <- .safe_assay_choices(obj)
     if (!length(assay_choices)) return(invisible(NULL))
 
+    assay_state_before <- .scalar_chr(recluster_new_data$rule_assay_choice, default = "")
     assay_now <- .scalar_chr(input$recluster_new_rule_assay_select, default = "")
     assay_target <- if (nzchar(assay_now) && assay_now %in% assay_choices) assay_now else assay_choices[[1]]
     if (isTRUE(force)) {
       forced_target <- .scalar_chr(recluster_new_data$rule_assay_choice, default = "")
       if (nzchar(forced_target) && forced_target %in% assay_choices) assay_target <- forced_target
     }
-    recluster_new_data$rule_assay_choice <- assay_target
+    if (!identical(.scalar_chr(recluster_new_data$rule_assay_choice, default = ""), assay_target)) {
+      recluster_new_data$rule_assay_choice <- assay_target
+    }
     if (!identical(assay_now, assay_target)) {
-      .update_control_select("recluster_new_rule_assay_select", choices = assay_choices, selected = assay_target)
-    } else if (isTRUE(force)) {
-      .update_control_select("recluster_new_rule_assay_select", choices = assay_choices, selected = assay_target)
+      updateSelectInput(session, "recluster_new_rule_assay_select", choices = assay_choices, selected = assay_target)
     }
 
     all_genes <- .assay_feature_names(obj, assay_target)
     if (length(all_genes)) {
       gene_now <- .scalar_chr(input$recluster_new_rule_gene_expr_select_1, default = "")
-      gene_target <- if (nzchar(gene_now) && gene_now %in% all_genes) gene_now else character(0)
-      if (isTRUE(force) || !identical(gene_now, gene_target)) {
-        wl_update_gene_selectize(session, "recluster_new_rule_gene_expr_select_1", all_genes, selected = gene_target)
+      gene_target <- if (nzchar(gene_now) && gene_now %in% all_genes) gene_now else ""
+      if (isTRUE(force) || !identical(assay_state_before, assay_target) || !identical(gene_now, gene_target)) {
+        selected_gene <- if (nzchar(gene_target)) gene_target else character(0)
+        .db_update_gene_selectize("recluster_new_rule_gene_expr_select_1", all_genes, selected = selected_gene)
       }
     }
 
@@ -2990,12 +4643,131 @@ recluster_new_server <- function(input, output, session, shared_data) {
     scatter_y_now <- .scalar_chr(input$recluster_new_rule_scatter_gene_y, default = "")
     scatter_x_target <- if (nzchar(scatter_x_now) && scatter_x_now %in% all_genes) scatter_x_now else if (length(all_genes)) all_genes[[1]] else character(0)
     scatter_y_target <- if (nzchar(scatter_y_now) && scatter_y_now %in% all_genes) scatter_y_now else if (length(all_genes) >= 2) all_genes[[2]] else scatter_x_target
-    if (isTRUE(force) || !identical(scatter_x_now, scatter_x_target)) {
-      wl_update_gene_selectize(session, "recluster_new_rule_scatter_gene_x", all_genes, selected = scatter_x_target)
+    if (isTRUE(force) || !identical(assay_state_before, assay_target) || !identical(scatter_x_now, scatter_x_target)) {
+      .db_update_gene_selectize("recluster_new_rule_scatter_gene_x", all_genes, selected = scatter_x_target)
     }
-    if (isTRUE(force) || !identical(scatter_y_now, scatter_y_target)) {
-      wl_update_gene_selectize(session, "recluster_new_rule_scatter_gene_y", all_genes, selected = scatter_y_target)
+    if (isTRUE(force) || !identical(assay_state_before, assay_target) || !identical(scatter_y_now, scatter_y_target)) {
+      .db_update_gene_selectize("recluster_new_rule_scatter_gene_y", all_genes, selected = scatter_y_target)
     }
+    invisible(NULL)
+  }
+
+  # Dynamic selectize controls report their actual shiny:bound lifecycle event
+  # from the browser. Hydrate only after that binding exists; this removes the
+  # old flush-order dependency and also covers cached renderUI reuse.
+  .hydrate_bound_gene_selectize <- function(input_id) {
+    input_id <- .scalar_chr(input_id, default = "")
+    obj <- recluster_new_data$seurat_obj
+    if (!nzchar(input_id) || is.null(obj) || !inherits(obj, "Seurat")) return(invisible(NULL))
+
+    assay_name <- ""
+    all_genes <- character(0)
+    selected_gene <- character(0)
+    if (grepl("^recluster_new_gene_expr_select_[1-3]$", input_id)) {
+      assay_name <- .current_umap_assay(obj)
+      all_genes <- .assay_feature_names(obj, assay_name)
+      values <- as.character(recluster_new_data$umap_gene_values %||% c("", "", ""))
+      length(values) <- 3L
+      values[is.na(values)] <- ""
+      index <- suppressWarnings(as.integer(sub("^recluster_new_gene_expr_select_", "", input_id)))
+      selected_gene <- if (is.finite(index) && index >= 1L && index <= 3L) values[[index]] else ""
+    } else if (input_id %in% c("recluster_new_scatter_gene_x", "recluster_new_scatter_gene_y")) {
+      assay_name <- .current_umap_assay(obj)
+      all_genes <- .assay_feature_names(obj, assay_name)
+      selected_gene <- .scalar_chr(input[[input_id]], default = "")
+    } else if (input_id %in% c("recluster_new_rule_gene_expr_select_1", "recluster_new_rule_scatter_gene_x", "recluster_new_rule_scatter_gene_y")) {
+      assay_name <- .current_rule_assay(obj)
+      all_genes <- .assay_feature_names(obj, assay_name)
+      selected_gene <- .scalar_chr(input[[input_id]], default = "")
+    } else if (grepl("^recluster_new_expr_add_gene__", input_id)) {
+      assay_name <- .expr_assay_name(obj)
+      all_genes <- .assay_feature_names(obj, assay_name)
+      selected_gene <- character(0)
+    } else {
+      return(invisible(NULL))
+    }
+
+    all_genes <- unique(as.character(all_genes %||% character(0)))
+    all_genes <- all_genes[!is.na(all_genes) & nzchar(all_genes)]
+    selected_gene <- if (nzchar(selected_gene) && selected_gene %in% all_genes) selected_gene else character(0)
+    .db_dbg(
+      "gene_selectize_bound",
+      sprintf("id=%s assay=%s genes=%d selected=%s", input_id, assay_name, length(all_genes), paste(selected_gene, collapse = ","))
+    )
+    .db_update_gene_selectize(input_id, all_genes, selected = selected_gene)
+    invisible(NULL)
+  }
+
+  observeEvent(input$recluster_new_gene_selectize_bound, {
+    if (!.recluster_new_event_allowed("gene_selectize_bound")) return(invisible(NULL))
+    payload <- input$recluster_new_gene_selectize_bound
+    if (!is.list(payload)) return(invisible(NULL))
+    if (!.recluster_new_payload_context_matches(payload)) return(invisible(NULL))
+    .hydrate_bound_gene_selectize(payload$id)
+  }, ignoreInit = TRUE, priority = 1050)
+
+  # Dynamic gene controls need one common post-render hydration contract.
+  # Bound events cover reused nodes, while this callback covers newly rendered
+  # nodes whose earlier bound event belonged to an unsettled object flush.
+  # Only captured immutable values cross the non-reactive callback boundary;
+  # all current-context validation reads stay inside isolate().
+  .schedule_gene_selectize_hydration <- function(input_ids, genes, object_name, context_revision, source = "") {
+    input_ids <- unique(as.character(input_ids %||% character(0)))
+    input_ids <- input_ids[!is.na(input_ids) & nzchar(input_ids)]
+    genes <- unique(as.character(genes %||% character(0)))
+    genes <- genes[!is.na(genes) & nzchar(genes)]
+    object_name <- .scalar_chr(object_name, default = "")
+    context_revision <- suppressWarnings(as.integer(context_revision %||% NA_integer_))
+    if (!length(input_ids) || !length(genes) || !nzchar(object_name) ||
+        !is.finite(context_revision) || is.na(context_revision)) {
+      return(invisible(NULL))
+    }
+    session$onFlushed(function() {
+      # Agent note: onFlushed is imperative, not a reactive consumer. Keep the
+      # complete callback transaction isolated, including helper calls.
+      isolate({
+      snapshot <- list(
+        active = .scalar_chr(shared_data$active_object_name, default = ""),
+        loaded = .scalar_chr(recluster_new_loaded_object_name(), default = ""),
+        revision = .recluster_new_context_revision(),
+        settled = .recluster_new_context_is_settled()
+      )
+      if (!isTRUE(snapshot$settled) ||
+          !identical(snapshot$active, object_name) ||
+          !identical(snapshot$loaded, object_name) ||
+          !identical(snapshot$revision, context_revision)) {
+        .db_dbg(
+          "gene_catalog_flush_ignored_stale",
+          sprintf(
+            "source=%s rendered_object=%s rendered_revision=%d active=%s loaded=%s revision=%s settled=%s",
+            .scalar_chr(source, default = ""),
+            object_name,
+            context_revision,
+            snapshot$active,
+            snapshot$loaded,
+            as.character(snapshot$revision),
+            as.character(snapshot$settled)
+          )
+        )
+        return(invisible(NULL))
+      }
+      .db_dbg(
+        "gene_catalog_flush_hydrate",
+        sprintf(
+          "source=%s object=%s revision=%d controls=%d genes=%d",
+          .scalar_chr(source, default = ""),
+          object_name,
+          context_revision,
+          length(input_ids),
+          length(genes)
+        )
+      )
+      for (input_id in input_ids) {
+        .db_update_gene_selectize(input_id, genes, selected = character(0))
+      }
+      invisible(NULL)
+      })
+    }, once = TRUE)
     invisible(NULL)
   }
 
@@ -3003,6 +4775,18 @@ recluster_new_server <- function(input, output, session, shared_data) {
   recluster_new_loaded_object_name <- reactiveVal("")
   recluster_new_object_loading <- reactiveVal(FALSE)
   recluster_new_page_activating <- reactiveVal(FALSE)
+  # A failed object load is terminal for this exact registry source. Keep the
+  # failure visible instead of retrying the same invalid object on every flush.
+  # A changed object entry produces a new source signature and can retry.
+  recluster_new_load_failure_source_signature <- reactiveVal("")
+  # Monotonic object-context token. Object names are not sufficient when a
+  # workspace import replaces an object under the same name; custom messages
+  # and mounted DOM must also belong to this exact load transaction.
+  recluster_new_object_context_revision <- reactiveVal(0L)
+  # Only this revision may release object-transition isolation after the next
+  # Shiny flush. Older onFlushed callbacks must never settle a newer load.
+  recluster_new_transition_flush_revision <- reactiveVal(NA_integer_)
+  recluster_new_transition_flush_token <- reactiveVal(0L)
   umap_plot_rendered <- reactiveVal(NULL)
   violin_plot_rendered <- reactiveVal(NULL)
 
@@ -3011,15 +4795,147 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }
 
   .recluster_new_canonical_object_name <- function() {
-    loaded <- .scalar_chr(recluster_new_loaded_object_name(), default = "")
-    if (isTRUE(.recluster_new_on_page()) && nzchar(loaded)) return(loaded)
+    # Canonical identity always comes from shared state. The loaded name is a
+    # transaction-local view and must not mask a newer active object during
+    # page entry or object switching.
     .scalar_chr(shared_data$active_object_name, default = "")
+  }
+
+  # Plot consumers may render only after one exact object/data-slot
+  # transaction has been confirmed. This key is a lifecycle fact, not a
+  # timeout or a browser-side readiness guess.
+  .recluster_new_expected_plot_context_key <- function(
+    active_name = NULL,
+    loaded_name = NULL,
+    revision = NULL
+  ) {
+    if (is.null(active_name)) active_name <- .recluster_new_canonical_object_name()
+    if (is.null(loaded_name)) loaded_name <- .scalar_chr(recluster_new_loaded_object_name(), default = "")
+    if (is.null(revision)) revision <- .recluster_new_context_revision()
+    active_name <- .scalar_chr(active_name, default = "")
+    loaded_name <- .scalar_chr(loaded_name, default = "")
+    revision <- suppressWarnings(as.integer(revision %||% NA_integer_))
+    if (!nzchar(active_name) || !identical(active_name, loaded_name) ||
+        !is.finite(revision) || is.na(revision)) {
+      return("")
+    }
+    paste(active_name, loaded_name, revision, .expr_selection_slot(), sep = "::")
+  }
+
+  .recluster_new_clear_page_context <- function(reason = "page_left") {
+    recluster_new_data$confirmed_plot_context_key <- ""
+    loaded <- .scalar_chr(isolate(recluster_new_loaded_object_name()), default = "")
+    has_local_object <- !is.null(isolate(recluster_new_data$seurat_obj))
+    if (!nzchar(loaded) && !has_local_object) return(invisible(NULL))
+    .db_dbg(
+      "page_context_clear",
+      sprintf("reason=%s loaded=%s", .scalar_chr(reason, default = "page_left"), loaded)
+    )
+    # Do not let a hidden page retain a renderable object from its previous
+    # route. Re-entry must load only current shared canonical state.
+    recluster_new_loaded_object_name("")
+    recluster_new_data$seurat_obj <- NULL
+    recluster_new_data$plot_df <- NULL
+    .clear_viz_controls_cache()
+    umap_plot_rendered(NULL)
+    violin_plot_rendered(NULL)
+    recluster_new_object_loading(FALSE)
+    recluster_new_dataset_syncing(FALSE)
+    recluster_new_page_activating(FALSE)
+    recluster_new_transition_flush_token(0L)
+    recluster_new_transition_flush_revision(NA_integer_)
+    invisible(NULL)
+  }
+
+  # Every input event must be processed against one settled object context.
+  # During a canonical-object transition, old DOM bindings can still deliver
+  # one final event in the same Shiny flush. Rejecting that event by context is
+  # deterministic; elapsed-time waits would only hide the ordering defect.
+  .recluster_new_context_is_settled <- function() {
+    active <- .scalar_chr(shared_data$active_object_name, default = "")
+    loaded <- .scalar_chr(recluster_new_loaded_object_name(), default = "")
+    confirmed_key <- .scalar_chr(recluster_new_data$confirmed_plot_context_key, default = "")
+    expected_key <- .recluster_new_expected_plot_context_key(
+      active_name = active,
+      loaded_name = loaded,
+      revision = .recluster_new_context_revision()
+    )
+    isTRUE(.recluster_new_on_page()) && nzchar(active) && identical(active, loaded) &&
+      !isTRUE(recluster_new_object_loading()) &&
+      !isTRUE(recluster_new_dataset_syncing()) &&
+      !isTRUE(recluster_new_page_activating()) &&
+      nzchar(confirmed_key) && identical(confirmed_key, expected_key)
+  }
+
+  .recluster_new_event_allowed <- function(source = "") {
+    if (isTRUE(.recluster_new_context_is_settled())) return(TRUE)
+    .db_dbg(
+      "event_ignored_unsettled_context",
+      sprintf(
+        "source=%s active=%s loaded=%s loading=%s syncing=%s activating=%s %s",
+        .scalar_chr(source, default = ""),
+        .scalar_chr(shared_data$active_object_name, default = ""),
+        .scalar_chr(recluster_new_loaded_object_name(), default = ""),
+        as.character(isTRUE(recluster_new_object_loading())),
+        as.character(isTRUE(recluster_new_dataset_syncing())),
+        as.character(isTRUE(recluster_new_page_activating())),
+        paste0("confirmed=", substr(.scalar_chr(recluster_new_data$confirmed_plot_context_key, default = ""), 1L, 120L))
+      )
+    )
+    FALSE
+  }
+
+  .recluster_new_context_revision <- function() {
+    value <- suppressWarnings(as.integer(recluster_new_object_context_revision() %||% 0L))
+    if (!is.finite(value) || is.na(value) || value < 0L) 0L else value
+  }
+
+  .recluster_new_begin_object_transition <- function(active_name) {
+    next_revision <- .recluster_new_context_revision() + 1L
+    recluster_new_object_context_revision(next_revision)
+    recluster_new_data$confirmed_plot_context_key <- ""
+    .db_dbg(
+      "object_context_begin",
+      sprintf("revision=%d active=%s loaded=%s", next_revision, active_name, .scalar_chr(recluster_new_loaded_object_name(), default = ""))
+    )
+    next_revision
+  }
+
+  .recluster_new_payload_context_matches <- function(payload, allow_empty = FALSE) {
+    if (!is.list(payload)) return(FALSE)
+    object_name <- .scalar_chr(payload$object, default = "")
+    revision <- suppressWarnings(as.integer(payload$context_revision %||% NA_integer_))
+    if (isTRUE(allow_empty) && !nzchar(object_name) && (is.na(revision) || !is.finite(revision))) {
+      return(TRUE)
+    }
+    nzchar(object_name) && identical(object_name, .recluster_new_canonical_object_name()) &&
+      is.finite(revision) && !is.na(revision) && identical(revision, .recluster_new_context_revision())
+  }
+
+  .recluster_new_expression_state_needs_reload <- function(object_name = "") {
+    object_name <- .scalar_chr(object_name, default = "")
+    if (!nzchar(object_name)) return(FALSE)
+    entry <- tryCatch(shared_data$all_seurat_objects[[object_name]], error = function(e) NULL)
+    shared_obj <- if (is.list(entry) && !is.null(entry$obj)) entry$obj else entry
+    if (is.null(shared_obj) || !inherits(shared_obj, "Seurat")) return(FALSE)
+    !identical(
+      .expr_store_get(shared_obj),
+      .expr_without_active_gene_focus(recluster_new_data$expr_selection)
+    )
   }
 
   .final_plot_df_signature <- function() {
     obj <- recluster_new_data$seurat_obj
     if (is.null(obj) || !inherits(obj, "Seurat")) return("")
-    umap_gene_info <- .umap_gene_selection()
+    display_mode <- .scalar_chr(recluster_new_data$umap_display_mode, default = "metadata")
+    # Gene selectors do not belong to the metadata-colored UMAP cache. This
+    # keeps catalog hydration and lower expression-tab edits from launching a
+    # full-cell UMAP rebuild when gene coloring is not selected.
+    umap_gene_info <- if (identical(display_mode, "gene")) {
+      .umap_gene_selection()
+    } else {
+      list(genes = character(0))
+    }
     universe <- rownames(recluster_new_data$plot_df %||% data.frame())
     paste(
       .scalar_chr(recluster_new_loaded_object_name(), default = ""),        # part 1: loaded_object_name
@@ -3028,7 +4944,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
       .scalar_chr(input$recluster_new_umap_axis_y_select, default = ""),    # part 4: y_axis
       .current_umap_assay(obj),                                              # part 5: assay
       .scalar_chr(input$recluster_new_slot_select, default = ""),           # part 6: slot
-      .scalar_chr(recluster_new_data$umap_display_mode, default = ""),      # part 7: display_mode
+      display_mode,                                                          # part 7: display_mode
       .scalar_chr(recluster_new_data$umap_color_choice, default = ""),      # part 8: color_choice
       paste(as.character(umap_gene_info$genes %||% character(0)), collapse = "|"), # part 9: gene_list
       .cell_set_signature(.visible_umap_cells(), universe),                  # part 10: visible_cells_sig
@@ -3036,6 +4952,11 @@ recluster_new_server <- function(input, output, session, shared_data) {
       # Agent note: Orange outline follows active gene independently from the
       # combined selection; active-gene changes must invalidate both plot caches.
       .cell_set_signature(expression_active_gene_result()$cells, universe),  # part 12: active_gene_cells_sig
+      # Agent note: Paint membership and paint source are separate from subset
+      # membership. Keep both sets in the cache key so saved-group cyan and
+      # other-selection violet traces cannot remain stale after a toggle.
+      .cell_set_signature(saved_group_highlight_cells(), universe),            # part 13: saved_group_highlight_cells_sig
+      .cell_set_signature(violet_selection_highlight_cells(), universe),       # part 14: violet_selection_highlight_cells_sig
       sep = "::"
     )
   }
@@ -3074,22 +4995,26 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }
 
   .umap_plot_cache_signature <- function() {
-    # Keep the heavy Plotly cache keyed to data and plot geometry only. Metadata
-    # level colors can be echoed by restored browser controls while the sidebar is
-    # rebinding; using that derived palette as a cache key creates a render loop.
+    # Keep the heavy Plotly cache keyed to data and plot geometry. The explicit
+    # color tick invalidates this cache after a palette write without reading the
+    # derived palette during cache evaluation.
+    visual_settings <- .current_visual_settings()
     paste(
       .final_plot_df_signature(),                                                                          # parts 1-12 (see .final_plot_df_signature)
       .scalar_chr(input$recluster_new_split_by_select, default = ""),                                    # part 13: split_by
-      as.character(suppressWarnings(as.numeric(input$recluster_new_dot_size %||% 1.0))),                  # part 14: dot_size
+      as.character(suppressWarnings(as.numeric(visual_settings$dot_size %||% input$recluster_new_dot_size %||% 1.0))), # part 14: dot_size
       as.character(suppressWarnings(as.numeric(input$recluster_new_dot_alpha %||% 0.8))),                 # part 15: dot_alpha
-      as.character(suppressWarnings(as.numeric(input$recluster_new_stroke_width %||% 0.1))),              # part 16: stroke_width
+      as.character(suppressWarnings(as.numeric(visual_settings$stroke_width %||% input$recluster_new_stroke_width %||% 0.1))), # part 16: stroke_width
       .scalar_chr(input$recluster_new_stroke_color, default = "black"),                                   # part 17: stroke_color
+      as.character(suppressWarnings(as.integer(recluster_new_data$umap_color_tick %||% 0L))),              # part 18: color_tick
       sep = "::"
     )
   }
 
   .finalize_umap_plotly <- function(p) {
-    p <- .plotly_touch_zoom(event_register(p, "plotly_selected"))
+    p <- event_register(p, "plotly_selected")
+    p <- event_register(p, "plotly_doubleclick")
+    p <- .plotly_touch_zoom(p)
     cache_sig <- .umap_plot_cache_signature()
     if (nzchar(cache_sig)) {
       isolate({
@@ -3100,10 +5025,17 @@ recluster_new_server <- function(input, output, session, shared_data) {
     p
   }
 
-  .viz_controls_cache_sig <- function(obj, tab_key) {
+  .viz_controls_structure_key <- function(obj, object_name = "") {
+    nm <- .scalar_chr(object_name, default = "")
+    if (!nzchar(nm)) nm <- .scalar_chr(recluster_new_loaded_object_name(), default = "")
+    if (!nzchar(nm)) nm <- .scalar_chr(shared_data$active_object_name, default = "")
+    dims <- wanlab_get_active_embedding_dims(tryCatch(
+      shared_data$all_seurat_objects[[nm]],
+      error = function(e) NULL
+    ))
     paste(
-      .scalar_chr(recluster_new_loaded_object_name(), default = ""),
-      .scalar_chr(tab_key, default = ""),
+      nm,
+      paste(dims, collapse = ","),
       paste(names(recluster_new_data$metadata_profiles %||% list()), collapse = "|"),
       paste(.safe_assay_choices(obj), collapse = "|"),
       paste(.embedding_reduction_choices(obj), collapse = "|"),
@@ -3111,7 +5043,28 @@ recluster_new_server <- function(input, output, session, shared_data) {
     )
   }
 
+  .metadata_selector_structure_key <- function(profiles, object_name = "") {
+    nm <- .scalar_chr(object_name, default = "")
+    if (!nzchar(nm)) nm <- .scalar_chr(recluster_new_loaded_object_name(), default = "")
+    if (!nzchar(nm)) nm <- .scalar_chr(shared_data$active_object_name, default = "")
+    profiles <- profiles %||% list()
+    profile_sig <- vapply(names(profiles), function(col_name) {
+      profile <- profiles[[col_name]] %||% list()
+      levels <- as.character(profile$levels %||% character(0))
+      paste(
+        col_name,
+        .scalar_chr(profile$bucket, default = ""),
+        as.character(isTRUE(profile$numeric_like)),
+        paste(levels, collapse = "\u001f"),
+        sep = "="
+      )
+    }, character(1))
+    paste(nm, paste(profile_sig, collapse = "\u001e"), sep = "::")
+  }
+
   .clear_viz_controls_cache <- function() {
+    recluster_new_data$viz_controls_structure_key <- ""
+    recluster_new_data$metadata_selector_structure_key <- ""
     recluster_new_data$viz_controls_cache_sig <- ""
     recluster_new_data$viz_controls_cache <- NULL
     recluster_new_data$rule_viz_controls_cache_sig <- ""
@@ -3120,10 +5073,173 @@ recluster_new_server <- function(input, output, session, shared_data) {
     invisible(NULL)
   }
 
-  .load_active_recluster_new_object <- function(active_name) {
+  .recluster_new_load_source_signature <- function(active_name = "") {
+    active_name <- .scalar_chr(active_name, default = "")
+    if (!nzchar(active_name)) return("")
+    entry <- tryCatch(shared_data$all_seurat_objects[[active_name]], error = function(e) NULL)
+    obj <- if (is.list(entry) && !is.null(entry$obj)) entry$obj else entry
+    if (is.null(obj)) return(paste(active_name, "missing", sep = "::"))
+    if (!inherits(obj, "Seurat")) {
+      return(paste(active_name, "class", paste(class(obj), collapse = "|"), sep = "::"))
+    }
+    reductions <- tryCatch(.embedding_reduction_choices(obj), error = function(e) character(0))
+    shape_signature <- if (length(reductions)) {
+      tryCatch(.reduction_shape_signature(obj), error = function(e) "")
+    } else {
+      ""
+    }
+    paste(active_name, paste(reductions, collapse = "|"), shape_signature, sep = "::")
+  }
+
+  .recluster_new_schedule_context_settle <- function(revision, message = "Loading selected dataset plot...", tab_now = "") {
+    revision <- suppressWarnings(as.integer(revision %||% NA_integer_))
+    if (!is.finite(revision) || is.na(revision)) return(invisible(NULL))
+    previous_token <- suppressWarnings(as.integer(isolate(recluster_new_transition_flush_token()) %||% 0L))
+    if (!is.finite(previous_token) || is.na(previous_token) || previous_token < 0L) previous_token <- 0L
+    settle_token <- previous_token + 1L
+    recluster_new_transition_flush_token(settle_token)
+    recluster_new_transition_flush_revision(revision)
+    session$onFlushed(function() {
+      # Agent note: later settlement helpers also inspect reactive state, so
+      # isolating only the initial snapshot is insufficient.
+      isolate({
+      context_snapshot <- list(
+        current_revision = .recluster_new_context_revision(),
+        pending_token = suppressWarnings(as.integer(recluster_new_transition_flush_token()) %||% NA_integer_),
+        pending_revision = suppressWarnings(as.integer(recluster_new_transition_flush_revision()) %||% NA_integer_),
+        active_object = .recluster_new_canonical_object_name(),
+        loaded_object = .scalar_chr(recluster_new_loaded_object_name(), default = ""),
+        object_ready = inherits(recluster_new_data$seurat_obj, "Seurat"),
+        plot_data_ready = is.data.frame(recluster_new_data$plot_df)
+      )
+      current_revision <- context_snapshot$current_revision
+      pending_token <- context_snapshot$pending_token
+      pending_revision <- context_snapshot$pending_revision
+      if (!is.finite(pending_revision) || is.na(pending_revision) ||
+          !is.finite(pending_token) || is.na(pending_token) ||
+          !identical(pending_token, settle_token) ||
+          !identical(pending_revision, revision) || !identical(current_revision, revision)) {
+        .db_dbg(
+          "transition_flush_ignored_stale",
+          sprintf(
+            "token=%d pending_token=%s revision=%d pending_revision=%s current=%d",
+            settle_token,
+            as.character(pending_token),
+            revision,
+            as.character(pending_revision),
+            current_revision
+          )
+        )
+        return(invisible(NULL))
+      }
+      recluster_new_transition_flush_token(0L)
+      recluster_new_transition_flush_revision(NA_integer_)
+      recluster_new_dataset_syncing(FALSE)
+      recluster_new_page_activating(FALSE)
+      if (!isTRUE(context_snapshot$object_ready) ||
+          !isTRUE(context_snapshot$plot_data_ready) ||
+          !identical(context_snapshot$active_object, context_snapshot$loaded_object)) {
+        recluster_new_data$confirmed_plot_context_key <- ""
+        .db_dbg(
+          "transition_flush_not_ready",
+          sprintf(
+            "revision=%d active=%s loaded=%s object_ready=%s plot_data_ready=%s",
+            revision,
+            context_snapshot$active_object,
+            context_snapshot$loaded_object,
+            as.character(isTRUE(context_snapshot$object_ready)),
+            as.character(isTRUE(context_snapshot$plot_data_ready))
+          )
+        )
+        .recluster_new_overlay_cancel("context_not_ready")
+        return(invisible(NULL))
+      }
+      # The loaded-object observer may have run while syncing was still TRUE
+      # and was therefore required to reject its event. Hydrate every gene
+      # catalog only after this exact revision becomes settled; otherwise a
+      # workspace/object switch can leave the three RGB controls bound but
+      # visibly empty until an unrelated control change happens.
+      isolate({
+        .sync_assay_gene_inputs(force = TRUE)
+        .sync_rule_assay_gene_inputs(force = TRUE)
+      })
+      expr_ui_revision <- suppressWarnings(as.integer(isolate(recluster_new_data$expr_ui_render_revision) %||% 0L))
+      if (!is.finite(expr_ui_revision) || is.na(expr_ui_revision) || expr_ui_revision < 0L) expr_ui_revision <- 0L
+      recluster_new_data$expr_ui_render_revision <- expr_ui_revision + 1L
+      confirmed_key <- .recluster_new_expected_plot_context_key(
+        active_name = context_snapshot$active_object,
+        loaded_name = context_snapshot$loaded_object,
+        revision = revision
+      )
+      if (!nzchar(confirmed_key)) {
+        recluster_new_data$confirmed_plot_context_key <- ""
+        .db_dbg("transition_flush_not_confirmed", sprintf("revision=%d active=%s", revision, context_snapshot$active_object))
+        .recluster_new_overlay_cancel("context_not_confirmed")
+        return(invisible(NULL))
+      }
+      recluster_new_data$confirmed_plot_context_key <- confirmed_key
+      .db_dbg("plot_context_confirmed", sprintf("revision=%d key=%s", revision, confirmed_key))
+      .db_dbg("object_context_settled", sprintf("revision=%d active=%s", revision, context_snapshot$active_object))
+      .recluster_new_overlay_show_plot(message, tab_now = tab_now)
+      invisible(NULL)
+      })
+    }, once = TRUE)
+    invisible(NULL)
+  }
+
+  .load_active_recluster_new_object <- function(active_name, settle_message = "Loading selected dataset plot...") {
+    transition_revision <- .recluster_new_begin_object_transition(.scalar_chr(active_name, default = ""))
+    transition_tab <- .scalar_chr(isolate(input$recluster_new_tabs), default = "umap")
+    recluster_new_dataset_syncing(TRUE)
+    owns_loading_state <- !isTRUE(recluster_new_object_loading())
+    if (owns_loading_state) recluster_new_object_loading(TRUE)
+    if (owns_loading_state) on.exit(recluster_new_object_loading(FALSE), add = TRUE)
+    on.exit(
+      .recluster_new_schedule_context_settle(
+        transition_revision,
+        message = settle_message,
+        tab_now = transition_tab
+      ),
+      add = TRUE
+    )
+    # Object-scoped dialogs/results cannot cross a context boundary. Clear
+    # them before any new object-derived UI is allowed to settle.
+    session$userData$recluster_new_expr_group_name_context <- NULL
+    session$userData$recluster_new_metadata_palette_context <- NULL
+    session$userData$recluster_new_metadata_single_color_context <- NULL
+    session$userData$recluster_new_metadata_rename_history <- list()
+    try(removeModal(), silent = TRUE)
     .clear_gene_value_cache()
     .clear_viz_controls_cache()
+    rm(list = ls(envir = .metadata_level_checked_state, all.names = TRUE), envir = .metadata_level_checked_state)
+    # Object-scoped workflows cannot survive an object transition. Clear
+    # pending match/subset transactions before loading new canonical data;
+    # their dialogs/tables otherwise retain cell IDs from the old object.
+    recluster_new_pending_population_cells(character(0))
+    recluster_new_pending_population_object("")
+    recluster_new_pending_population_revision(NA_integer_)
+    recluster_new_import_match_object("")
+    recluster_new_import_match_revision(NA_integer_)
+    .import_match(data.frame())
+    recluster_new_latest_import(data.frame())
+    .pseudobulk_table_data(NULL)
+    final_cell_count_text(paste(RECLUSTER_NEW_UI_TEXT$t_text_selected_total, 0L, "cells"))
+    umap_plot_rendered(NULL)
+    violin_plot_rendered(NULL)
+    recluster_new_data$metadata_hover_active <- FALSE
+    recluster_new_data$expr_active_range_data_revision <-
+      as.integer(recluster_new_data$expr_active_range_data_revision %||% 0L) + 1L
+    recluster_new_data$metadata_filter_data_revision <-
+      as.integer(recluster_new_data$metadata_filter_data_revision %||% 0L) + 1L
     active_name <- .scalar_chr(active_name, default = "")
+    # Selection and view state cannot cross object boundaries. Reset source
+    # state before loading the next canonical object, then derive expression
+    # owner from that object's persisted expression state below.
+    lasso_selected_cells_state(character(0))
+    rule_lasso_cells_state(character(0))
+    selection_owner_state("none")
+    recluster_new_data$rule_meta_choices_sig <- ""
+    recluster_new_data$tcr_choices_sig <- ""
     .db_dbg(
       "load_object_start",
       sprintf(
@@ -3134,17 +5250,22 @@ recluster_new_server <- function(input, output, session, shared_data) {
       )
     )
     if (!nzchar(active_name)) {
+      recluster_new_load_failure_source_signature("")
       recluster_new_data$seurat_obj <- NULL
       recluster_new_data$plot_df <- NULL
-      recluster_new_data$cell_groups <- list()
+      .set_cell_groups_structure(list(), object_name = active_name)
       recluster_new_data$selected_cells <- character(0)
       recluster_new_data$imported_barcode_sources <- character(0)
       recluster_new_data$metadata_profiles <- list()
+      recluster_new_data$metadata_selector_structure_key <- ""
       recluster_new_data$metadata_active_column <- ""
       recluster_new_data$metadata_active_cells <- character(0)
       recluster_new_data$metadata_filter_state <- "all"
+      recluster_new_data$metadata_filter_definition_signature <- ""
       recluster_new_data$expr_selection <- .expr_default_state()
       .expr_bound_inputs(character(0))
+      recluster_new_data$expr_ui_structure_key <- ""
+      recluster_new_data$expr_active_range_structure_key <- ""
       recluster_new_data$rule_definitions <- list()
       recluster_new_data$rule_active_cells <- character(0)
       recluster_new_data$rule_overlap_group <- NULL
@@ -3158,17 +5279,27 @@ recluster_new_server <- function(input, output, session, shared_data) {
     entry <- shared_data$all_seurat_objects[[active_name]]
     obj <- if (is.list(entry) && !is.null(entry$obj)) entry$obj else entry
     if (is.null(obj) || !inherits(obj, "Seurat")) {
+      failure_signature <- .recluster_new_load_source_signature(active_name)
+      recluster_new_load_failure_source_signature(failure_signature)
+      .db_dbg(
+        "load_object_terminal_failure",
+        sprintf("active=%s source=%s reason=invalid_seurat", active_name, failure_signature)
+      )
       recluster_new_data$seurat_obj <- NULL
       recluster_new_data$plot_df <- NULL
-      recluster_new_data$cell_groups <- list()
+      .set_cell_groups_structure(list(), object_name = active_name)
       recluster_new_data$selected_cells <- character(0)
       recluster_new_data$imported_barcode_sources <- character(0)
       recluster_new_data$metadata_profiles <- list()
+      recluster_new_data$metadata_selector_structure_key <- ""
       recluster_new_data$metadata_active_column <- ""
       recluster_new_data$metadata_active_cells <- character(0)
       recluster_new_data$metadata_filter_state <- "all"
+      recluster_new_data$metadata_filter_definition_signature <- ""
       recluster_new_data$expr_selection <- .expr_default_state()
       .expr_bound_inputs(character(0))
+      recluster_new_data$expr_ui_structure_key <- ""
+      recluster_new_data$expr_active_range_structure_key <- ""
       recluster_new_data$rule_definitions <- list()
       recluster_new_data$rule_active_cells <- character(0)
       recluster_new_data$rule_overlap_group <- NULL
@@ -3181,17 +5312,27 @@ recluster_new_server <- function(input, output, session, shared_data) {
     }
     reduction_choices <- .embedding_reduction_choices(obj)
     if (!length(reduction_choices)) {
+      failure_signature <- .recluster_new_load_source_signature(active_name)
+      recluster_new_load_failure_source_signature(failure_signature)
+      .db_dbg(
+        "load_object_terminal_failure",
+        sprintf("active=%s source=%s reason=no_reduction", active_name, failure_signature)
+      )
       recluster_new_data$seurat_obj <- NULL
       recluster_new_data$plot_df <- NULL
-      recluster_new_data$cell_groups <- list()
+      .set_cell_groups_structure(list(), object_name = active_name)
       recluster_new_data$selected_cells <- character(0)
       recluster_new_data$imported_barcode_sources <- character(0)
       recluster_new_data$metadata_profiles <- list()
+      recluster_new_data$metadata_selector_structure_key <- ""
       recluster_new_data$metadata_active_column <- ""
       recluster_new_data$metadata_active_cells <- character(0)
       recluster_new_data$metadata_filter_state <- "all"
+      recluster_new_data$metadata_filter_definition_signature <- ""
       recluster_new_data$expr_selection <- .expr_default_state()
       .expr_bound_inputs(character(0))
+      recluster_new_data$expr_ui_structure_key <- ""
+      recluster_new_data$expr_active_range_structure_key <- ""
       recluster_new_data$rule_definitions <- list()
       recluster_new_data$rule_active_cells <- character(0)
       recluster_new_data$rule_overlap_group <- NULL
@@ -3208,9 +5349,46 @@ recluster_new_server <- function(input, output, session, shared_data) {
 
     plot_df <- data.frame(row.names = colnames(obj))
 
-    assay_choices <- .safe_assay_choices(obj)
-    assay_to_use <- .preferred_assay_choice(obj)
-    all_genes <- if (nzchar(assay_to_use)) .assay_feature_names(obj, assay_to_use) else character(0)
+    visual_settings_loaded <- .visual_settings_store_get(obj)
+    assay_choices_loaded <- .safe_assay_choices(obj)
+    stored_umap_assay <- .scalar_chr(visual_settings_loaded$umap_assay_choice, default = "")
+    assay_to_use <- if (nzchar(stored_umap_assay) && stored_umap_assay %in% assay_choices_loaded) {
+      stored_umap_assay
+    } else {
+      .preferred_assay_choice(obj)
+    }
+    stored_rule_assay <- .scalar_chr(visual_settings_loaded$rule_assay_choice, default = "")
+    rule_assay_to_use <- if (nzchar(stored_rule_assay) && stored_rule_assay %in% assay_choices_loaded) {
+      stored_rule_assay
+    } else {
+      assay_to_use
+    }
+    # Read object-owned expression state before any metadata cleanup can write
+    # this object back. This matters when workspace import replaces an object
+    # under the same name while this page still has an older local object.
+    expr_state_loaded <- .expr_store_get(obj)
+    saved_groups_loaded <- .saved_group_store_get(obj)
+    # Agent note: Saved-group membership persists, but enabled checkboxes are
+    # landing-only selection state. Start every object landing unchecked so a
+    # stale prior selection cannot repaint UMAP without new user intent.
+    saved_groups_loaded <- lapply(saved_groups_loaded, function(group) {
+      group$enabled <- FALSE
+      group
+    })
+    saved_groups_loaded <- .saved_group_state_normalize(saved_groups_loaded, obj = obj)
+    # Normalize legacy objects into their object-owned slots during load. A
+    # workspace may import only this object, so waiting for a later group edit
+    # would lose the migrated state when the user switches away immediately.
+    obj <- .expr_store_set(obj, expr_state_loaded)
+    obj <- .saved_group_store_set(obj, saved_groups_loaded)
+    recluster_new_data$expr_selection <- expr_state_loaded
+    .expr_bound_inputs(character(0))
+    recluster_new_data$expr_ui_structure_key <- .expr_ui_structure_key(expr_state_loaded, active_name, assay_to_use)
+    recluster_new_data$expr_active_range_structure_key <- .expr_active_range_structure_key(
+      expr_state_loaded,
+      active_name,
+      assay_to_use
+    )
 
     md_ncol_before <- ncol(obj@meta.data)
     obj <- .strip_metadata_color_mirror_columns(obj)
@@ -3229,19 +5407,52 @@ recluster_new_server <- function(input, output, session, shared_data) {
     default_open_col <- if (length(cluster_cols)) cluster_cols[[1]] else if (length(available_cols)) available_cols[[1]] else ""
 
     recluster_new_data$seurat_obj <- obj
-    if (ncol(md) < md_ncol_before) .persist_active_object(obj)
+    recluster_new_load_failure_source_signature("")
+    # This is still inside object-load transaction. The generic persistence
+    # helper intentionally resolves through loaded_object_name, which still
+    # names the previous object until the transaction commits. Write the
+    # complete normalized object explicitly to active_name so incoming data
+    # can never overwrite the previous object's registry slot.
+    active_entry <- shared_data$all_seurat_objects[[active_name]]
+    if (is.list(active_entry) && !is.null(active_entry$obj)) {
+      active_entry$obj <- obj
+    } else {
+      active_entry <- obj
+    }
+    shared_data$all_seurat_objects[[active_name]] <- active_entry
+    if (ncol(md) < md_ncol_before) {
+      .db_dbg(
+        "load_object_cleanup_persisted",
+        sprintf("active=%s removed_mirror_columns=%d", active_name, md_ncol_before - ncol(md))
+      )
+    }
     recluster_new_data$plot_df <- plot_df
-    recluster_new_data$cell_groups <- list()
+    .set_cell_groups_structure(saved_groups_loaded, object_name = active_name)
     recluster_new_data$selected_cells <- character(0)
     recluster_new_data$imported_barcode_sources <- character(0)
     recluster_new_data$metadata_profiles <- profiles
+    recluster_new_data$metadata_selector_structure_key <- .metadata_selector_structure_key(profiles, active_name)
     recluster_new_data$metadata_active_column <- ""
     recluster_new_data$metadata_active_cells <- character(0)
     recluster_new_data$metadata_filter_state <- "all"
+    recluster_new_data$metadata_filter_definition_signature <- ""
     recluster_new_data$metadata_open_column <- default_open_col
     recluster_new_data$metadata_open_bucket <- if (nzchar(default_open_col)) .scalar_chr(bucket_map[[default_open_col]], default = "cluster") else "cluster"
-    recluster_new_data$expr_selection <- .expr_store_get(obj)
-    .expr_bound_inputs(character(0))
+    if (nzchar(.scalar_chr(expr_state_loaded$active_group_id, default = ""))) {
+      selection_owner_state("expression")
+    }
+    .db_dbg(
+      "selection_owner_load",
+      sprintf(
+        "object=%s expr_active=%s enabled_saved_groups=%d owner=%s",
+        active_name,
+        .scalar_chr(expr_state_loaded$active_group_id, default = ""),
+        sum(vapply(saved_groups_loaded, function(group) {
+          is.list(group) && isTRUE(group$enabled) && length(group$cells %||% character(0)) > 0L
+        }, logical(1))),
+        .scalar_chr(selection_owner_state(), default = "none")
+      )
+    )
     recluster_new_data$rule_definitions <- list()
     recluster_new_data$rule_active_cells <- character(0)
     recluster_new_data$rule_overlap_group <- NULL
@@ -3250,141 +5461,156 @@ recluster_new_server <- function(input, output, session, shared_data) {
     recluster_new_data$debug_rule_overlap_state <- ""
     recluster_new_data$last_load_status <- ""
 
-    preferred_col <- .scalar_chr(recluster_new_data$metadata_open_column, default = "")
-    default_color <- if (nzchar(preferred_col) && preferred_col %in% available_cols) {
-      preferred_col
-    } else if ("seurat_clusters" %in% available_cols) {
-      "seurat_clusters"
-    } else if ("orig.ident" %in% available_cols) {
-      "orig.ident"
-    } else if (length(available_cols)) {
-      available_cols[[1]]
+    default_color <- if (nzchar(default_open_col)) default_open_col else "None"
+    stored_genes <- as.character(visual_settings_loaded$umap_gene_values %||% c("", "", ""))
+    length(stored_genes) <- 3L
+    stored_genes[is.na(stored_genes)] <- ""
+    all_genes_for_state <- .assay_feature_names(obj, assay_to_use)
+    stored_genes <- vapply(stored_genes, function(gene) {
+      hit <- all_genes_for_state[tolower(all_genes_for_state) == tolower(trimws(gene))]
+      if (length(hit)) hit[[1L]] else ""
+    }, character(1))
+    stored_display_mode <- .scalar_chr(visual_settings_loaded$umap_display_mode, default = "metadata")
+    if (!(stored_display_mode %in% c("metadata", "gene"))) stored_display_mode <- "metadata"
+    stored_color <- .scalar_chr(visual_settings_loaded$umap_color_choice, default = "")
+    color_choices_loaded <- c("Single Gene Expression", available_cols, "None")
+    if (identical(stored_display_mode, "gene") && length(unique(stored_genes[nzchar(stored_genes)]))) {
+      stored_color <- "Single Gene Expression"
     } else {
-      "None"
+      stored_display_mode <- "metadata"
+      if (!nzchar(stored_color) || !(stored_color %in% color_choices_loaded) || identical(stored_color, "Single Gene Expression")) {
+        stored_color <- default_color
+      }
     }
-
-    split_choices <- colnames(md)[vapply(md, .is_reasonable_discrete, logical(1))]
-    split_choices <- split_choices[!is.na(split_choices) & nzchar(split_choices)]
-    default_scatter <- if ("seurat_clusters" %in% available_cols) "seurat_clusters" else if (length(available_cols)) available_cols[[1]] else "None"
-    red_sel <- .preferred_embedding_reduction(obj, entry = entry)
+    recluster_new_data$umap_gene_values <- stored_genes
+    recluster_new_data$umap_display_mode <- stored_display_mode
+    .set_umap_color_choice(
+      stored_color,
+      choices = color_choices_loaded,
+      update_ui = FALSE,
+      persist = FALSE
+    )
+    reduction_choices_loaded <- .embedding_reduction_choices(obj)
+    stored_umap_reduction <- .scalar_chr(visual_settings_loaded$umap_reduction_choice, default = "")
+    red_sel <- if (nzchar(stored_umap_reduction) && stored_umap_reduction %in% reduction_choices_loaded) {
+      stored_umap_reduction
+    } else {
+      .preferred_embedding_reduction(obj, entry = entry)
+    }
+    stored_rule_reduction <- .scalar_chr(visual_settings_loaded$rule_reduction_choice, default = "")
+    rule_red_sel <- if (nzchar(stored_rule_reduction) && stored_rule_reduction %in% reduction_choices_loaded) {
+      stored_rule_reduction
+    } else {
+      red_sel
+    }
     recluster_new_data$umap_assay_choice <- assay_to_use
-    recluster_new_data$rule_assay_choice <- assay_to_use
+    recluster_new_data$rule_assay_choice <- rule_assay_to_use
     recluster_new_data$umap_reduction_choice <- red_sel
-    recluster_new_data$rule_reduction_choice <- red_sel
+    recluster_new_data$rule_reduction_choice <- rule_red_sel
 
-    recluster_new_data$umap_control_syncing <- TRUE
-    on.exit({
-      recluster_new_data$umap_control_syncing <- FALSE
-    }, add = TRUE)
-
-    slot_now <- .scalar_chr(input$recluster_new_slot_select, default = "data")
-    if (!(slot_now %in% c("data", "counts", "scale.data"))) slot_now <- "data"
-    gene_now <- .scalar_chr(input$recluster_new_gene_expr_select_1, default = "")
-    gene2_now <- .scalar_chr(input$recluster_new_gene_expr_select_2, default = "")
-    gene3_now <- .scalar_chr(input$recluster_new_gene_expr_select_3, default = "")
-
-    .update_control_select("recluster_new_assay_select", choices = assay_choices, selected = if (nzchar(assay_to_use)) assay_to_use else character(0))
-    updateSelectInput(session, "recluster_new_slot_select", choices = c("data", "counts", "scale.data"), selected = slot_now)
-    updateCheckboxInput(session, "recluster_new_expr_limit_population", value = isTRUE(recluster_new_data$expr_selection$inherit_population %||% TRUE))
-    recluster_new_data$umap_display_mode <- "metadata"
-    updateRadioButtons(session, "recluster_new_umap_display_mode", selected = "metadata")
-    recluster_new_data$umap_color_choice <- default_color
-    .set_umap_color_choice(default_color, choices = c("Single Gene Expression", available_cols, "None"))
-    updateSelectInput(session, "recluster_new_split_by_select", choices = c("None", split_choices))
-    updateSelectInput(session, "recluster_new_scatter_color_by", choices = c("None", available_cols), selected = default_scatter)
-    updateSelectInput(session, "recluster_new_rule_color_by_select", choices = c("Single Gene Expression", available_cols, "None"), selected = default_color)
-    updateSelectInput(session, "recluster_new_rule_split_by_select", choices = c("None", split_choices))
-    updateSelectInput(session, "recluster_new_rule_scatter_color_by", choices = c("None", available_cols), selected = default_scatter)
-    axis_choices <- .axis_index_choices(obj, red_sel)
-    axis_vals <- as.character(axis_choices)
-    x_sel <- if (length(axis_vals)) axis_vals[[1]] else "1"
-    y_sel <- if (length(axis_vals) >= 2L) axis_vals[[2]] else x_sel
-    reduction_choice_labels <- vapply(reduction_choices, function(red) .reduction_display_label(obj, red), character(1))
-    .update_control_select("recluster_new_umap_reduction_select", choices = stats::setNames(reduction_choices, reduction_choice_labels), selected = red_sel)
-    updateSelectInput(session, "recluster_new_umap_axis_x_select", choices = axis_choices, selected = x_sel)
-    updateSelectInput(session, "recluster_new_umap_axis_y_select", choices = axis_choices, selected = y_sel)
-    .update_control_select("recluster_new_rule_umap_reduction_select", choices = stats::setNames(reduction_choices, reduction_choice_labels), selected = red_sel)
-    updateSelectInput(session, "recluster_new_rule_umap_axis_x_select", choices = axis_choices, selected = x_sel)
-    updateSelectInput(session, "recluster_new_rule_umap_axis_y_select", choices = axis_choices, selected = y_sel)
-    updateSelectInput(session, "recluster_new_rule_slot_select", choices = c("data", "counts", "scale.data"), selected = slot_now)
-
-    wl_update_gene_selectize(
-      session,
-      "recluster_new_gene_expr_select_1",
-      all_genes,
-      selected = if (nzchar(gene_now) && gene_now %in% all_genes) gene_now else character(0)
-    )
-    wl_update_gene_selectize(
-      session,
-      "recluster_new_gene_expr_select_2",
-      all_genes,
-      selected = if (nzchar(gene2_now) && gene2_now %in% all_genes) gene2_now else character(0)
-    )
-    wl_update_gene_selectize(
-      session,
-      "recluster_new_gene_expr_select_3",
-      all_genes,
-      selected = if (nzchar(gene3_now) && gene3_now %in% all_genes) gene3_now else character(0)
-    )
-
-    scatter_x_now <- .scalar_chr(input$recluster_new_scatter_gene_x, default = "")
-    scatter_y_now <- .scalar_chr(input$recluster_new_scatter_gene_y, default = "")
-    default_scatter_x <- if (nzchar(scatter_x_now) && scatter_x_now %in% all_genes) {
-      scatter_x_now
-    } else if (length(all_genes) >= 1) {
-      all_genes[[1]]
-    } else {
-      character(0)
+    inherit_population_target <- isTRUE(recluster_new_data$expr_selection$inherit_population %||% TRUE)
+    if (!identical(isTRUE(input$recluster_new_expr_limit_population), inherit_population_target)) {
+      updateCheckboxInput(session, "recluster_new_expr_limit_population", value = inherit_population_target)
     }
-    default_scatter_y <- if (nzchar(scatter_y_now) && scatter_y_now %in% all_genes) {
-      scatter_y_now
-    } else if (length(all_genes) >= 2) {
-      all_genes[[2]]
-    } else {
-      default_scatter_x
-    }
-    wl_update_gene_selectize(session, "recluster_new_scatter_gene_x", all_genes, selected = default_scatter_x)
-    wl_update_gene_selectize(session, "recluster_new_scatter_gene_y", all_genes, selected = default_scatter_y)
     recluster_new_loaded_object_name(active_name)
+    # Existing mounted controls receive restored checked/open/active state
+    # without synthesizing Shiny input events.
+    .expr_send_state_to_ui(expr_state_loaded)
+    recluster_new_data$viz_controls_structure_key <- .viz_controls_structure_key(obj, active_name)
     .db_dbg(
       "load_object_done",
       sprintf(
-        "active=%s reductions=%d metadata_cols=%d assay=%s slot=%s red=%s",
+        "active=%s reductions=%d metadata_cols=%d assay=%s slot=data red=%s expr_groups=%d expr_active=%s",
         active_name,
         length(reduction_choices),
         length(available_cols),
         assay_to_use,
-        slot_now,
-        red_sel
+        red_sel,
+        length(expr_state_loaded$groups %||% list()),
+        .scalar_chr(expr_state_loaded$active_group_id, default = "")
       )
     )
     invisible(NULL)
   }
 
   output$recluster_new_expression_groups_ui <- renderUI({
-    state <- .expr_state_normalize(recluster_new_data$expr_selection)
+    # Read before the settled check so this output is invalidated by the
+    # explicit post-settlement render transaction, including when the output
+    # was initially suspended by a hidden navbar page.
+    ui_render_revision <- recluster_new_data$expr_ui_render_revision
+    if (!.recluster_new_context_is_settled()) return(NULL)
+    # Structure key is sole reactive dependency. Checkbox, active-gene, and
+    # open-state changes update existing DOM through custom messages; replacing
+    # this tree for every value change recreates inputs and causes feedback.
+    structure_key <- recluster_new_data$expr_ui_structure_key
+    staged_ui <- is.list(isolate(recluster_new_data$expr_ui_staged_state))
+    state <- .expr_state_normalize(.expr_ui_render_state())
+    object_name_now <- .recluster_new_canonical_object_name()
     groups <- state$groups %||% list()
+    .db_dbg(
+      "expression_groups_ui_render",
+      sprintf(
+        "object=%s context_revision=%d ui_revision=%s groups=%d",
+        object_name_now,
+        .recluster_new_context_revision(),
+        as.character(ui_render_revision),
+        length(groups)
+      )
+    )
     if (!length(groups)) {
-      return(tagList(
-        div(class = "app-secondary-status", RECLUSTER_NEW_UI_TEXT$t_text_expr_no_groups),
-        div(class = "recluster-new-expr-range app-secondary-status", RECLUSTER_NEW_UI_TEXT$t_text_expr_select_gene_range)
-      ))
+      return(
+        div(
+          class = "recluster-new-expression-state-root",
+          `data-recluster-object-context` = object_name_now,
+          `data-recluster-object-context-revision` = .recluster_new_context_revision(),
+          div(class = "app-secondary-status", RECLUSTER_NEW_UI_TEXT$t_text_expr_no_groups),
+          div(class = "recluster-new-expr-range app-secondary-status", RECLUSTER_NEW_UI_TEXT$t_text_expr_select_gene_range)
+        )
+      )
     }
 
-    obj_now <- recluster_new_data$seurat_obj
-    expr_base_cells <- if (!is.null(obj_now) && inherits(obj_now, "Seurat")) {
-      if (isTRUE(state$inherit_population)) .expr_base_population_cells() else colnames(obj_now)
+    obj_now <- isolate(recluster_new_data$seurat_obj)
+    assay_now <- isolate(.expr_assay_name(obj_now))
+    genes_now <- if (!is.null(obj_now) && inherits(obj_now, "Seurat")) {
+      .assay_feature_names(obj_now, assay_now)
     } else {
       character(0)
     }
+    .db_dbg(
+      "expression_gene_catalog",
+      sprintf(
+        "object=%s context_revision=%d assay=%s genes=%d groups=%d",
+        object_name_now,
+        .recluster_new_context_revision(),
+        assay_now,
+        length(genes_now),
+        length(groups)
+      )
+    )
+    expr_base_cells <- isolate(if (!is.null(obj_now) && inherits(obj_now, "Seurat")) {
+      if (isTRUE(state$inherit_population)) .expr_base_population_cells() else colnames(obj_now)
+    } else {
+      character(0)
+    })
+    group_cells_by_id <- if (isTRUE(staged_ui)) {
+      list()
+    } else {
+      isolate(expression_group_cells_result()$group_cells %||% list())
+    }
 
-    active_gid <- .scalar_chr(state$active_group_id, default = "")
+    active_gid <- if (identical(.scalar_chr(isolate(selection_owner_state()), default = "none"), "expression")) {
+      .scalar_chr(state$active_group_id, default = "")
+    } else {
+      ""
+    }
     group_nodes <- lapply(groups, function(g) {
       gid <- .scalar_chr(g$id, default = "")
       genes <- g$genes %||% list()
       checked_n <- sum(vapply(genes, function(gr) isTRUE(gr$checked), logical(1)))
-      group_cells <- as.character((expression_group_cells_result()$group_cells %||% list())[[gid]] %||% character(0))
-      summary_txt <- if (length(genes)) {
+      group_cells <- as.character(group_cells_by_id[[gid]] %||% character(0))
+      summary_txt <- if (isTRUE(staged_ui)) {
+        "Calculating..."
+      } else if (length(genes)) {
         sprintf("%d genes, %d cells", checked_n, length(group_cells))
       } else {
         RECLUSTER_NEW_UI_TEXT$t_text_expr_group_summary_empty
@@ -3396,8 +5622,12 @@ recluster_new_server <- function(input, output, session, shared_data) {
           gene_id <- .scalar_chr(gr$id, default = "")
           gene_name <- .scalar_chr(gr$gene, default = "")
           active <- identical(.scalar_chr(g$active_gene_id, default = ""), gene_id)
-          gene_cells <- .expr_gene_cells(gr, expr_base_cells, obj = obj_now)
-          gene_count_txt <- sprintf("%d cells", length(gene_cells))
+          gene_count_txt <- if (isTRUE(staged_ui)) {
+            "Calculating..."
+          } else {
+            gene_cells <- isolate(.expr_gene_cells(gr, expr_base_cells, obj = obj_now))
+            sprintf("%d cells", length(gene_cells))
+          }
           div(
             class = paste("recluster-new-expr-gene-row", if (active) "is-active" else ""),
             `data-expr-active-id` = .expr_gene_active_input_id(gid, gene_id),
@@ -3410,50 +5640,47 @@ recluster_new_server <- function(input, output, session, shared_data) {
               div(
                 class = "recluster-new-expr-gene-title-row",
                 div(class = "recluster-new-expr-gene-name", title = gene_name, gene_name),
-                div(class = "recluster-new-expr-gene-count", gene_count_txt)
+                div(
+                  class = "recluster-new-expr-gene-count",
+                  `data-expr-gene-count-id` = .expr_gene_detail_id(gid, gene_id),
+                  gene_count_txt
+                )
               ),
-              div(class = "recluster-new-expr-gene-note", .expr_format_range(gr$range))
+              div(
+                class = "recluster-new-expr-gene-note",
+                `data-expr-gene-note-id` = .expr_gene_detail_id(gid, gene_id),
+                .expr_format_range(gr$range)
+              )
             ),
             div(
               class = "recluster-new-expr-gene-actions",
-              if (active) {
-                tags$button(
-                  type = "button",
-                  class = "btn btn-xs recluster-new-expr-gene-clear",
-                  `data-expr-active-id` = .expr_gene_active_input_id(gid, gene_id),
-                  title = "Clear active gene highlight",
-                  `aria-label` = sprintf("Clear %s active gene highlight", gene_name),
-                  icon("times")
-                )
-              },
-              actionButton(.expr_gene_delete_input_id(gid, gene_id), label = NULL, icon = icon("trash"), class = "btn btn-outline-danger btn-xs")
+              actionButton(
+                .expr_gene_delete_input_id(gid, gene_id),
+                label = NULL,
+                icon = icon("trash"),
+                class = "btn btn-outline-danger btn-xs",
+                `data-expr-delete-group-id` = gid,
+                `data-expr-delete-gene-id` = gene_id
+              )
             )
           )
         })
       }
-      tags$details(
-        class = paste(
-          "recluster-new-expr-group app-accordion",
-          if (nzchar(active_gid) && identical(gid, active_gid)) "is-violet-highlight-source" else ""
-        ),
-        `data-accordion-group` = "recluster-new-expr-groups",
-        open = if (isTRUE(g$open)) NA else NULL,
-        ontoggle = sprintf(
-          paste0(
-            "if(event && event.isTrusted){",
-            "Shiny.setInputValue('recluster_new_expr_open_group',",
-            "{group_id:%s,open:this.open,nonce:Date.now()},",
-            "{priority:'event'});}"
+        tags$details(
+          class = paste(
+            "recluster-new-expr-group app-accordion",
+            if (nzchar(active_gid) && identical(gid, active_gid)) "is-violet-highlight-source" else ""
           ),
-          jsonlite::toJSON(gid, auto_unbox = TRUE)
-        ),
+          `data-expr-group-id` = gid,
+          `data-accordion-group` = "recluster-new-expr-groups",
+          open = if (isTRUE(g$open)) NA else NULL,
                 tags$summary(
                   span(
                     class = "recluster-new-expr-group-title",
                     title = "Click to open group",
                     .scalar_chr(g$name, default = "Expression group")
                   ),
-                  span(class = "recluster-new-expr-group-summary", summary_txt),
+                  span(class = "recluster-new-expr-group-summary", `data-expr-summary-id` = gid, summary_txt),
                   div(
                     class = "recluster-new-expr-group-actions",
                     tags$button(
@@ -3489,37 +5716,76 @@ recluster_new_server <- function(input, output, session, shared_data) {
           div(class = "recluster-new-expr-gene-list", gene_nodes),
           div(
             class = "recluster-new-expr-add-gene",
-            wl_gene_selectize_input(.expr_group_add_gene_input_id(gid), RECLUSTER_NEW_UI_TEXT$t_label_expr_add_gene, selected = character(0), placeholder = "Type to search gene", width = "100%")
+            wl_gene_selectize_input(
+              .expr_group_add_gene_input_id(gid),
+              RECLUSTER_NEW_UI_TEXT$t_label_expr_add_gene,
+              selected = character(0),
+              placeholder = "Type to search gene",
+              width = "100%",
+              min_chars = 0L,
+              open_on_focus = TRUE,
+              preload = TRUE,
+              choices = genes_now,
+              defer_choices = TRUE
+            )
           )
         )
       )
     })
 
-    obj_now <- recluster_new_data$seurat_obj
-    assay_now <- .scalar_chr(input$recluster_new_assay_select, default = "")
-    genes_now <- if (!is.null(obj_now) && inherits(obj_now, "Seurat")) .assay_feature_names(obj_now, assay_now) else character(0)
-    add_ids <- vapply(groups, function(g) .expr_group_add_gene_input_id(.scalar_chr(g$id, default = "")), character(1))
-    add_ids <- add_ids[nzchar(add_ids)]
-    if (length(genes_now) && length(add_ids)) {
-      session$onFlushed(function() {
-        for (id in add_ids) {
-          wl_update_gene_selectize(session, id, genes_now, selected = character(0))
-        }
-      }, once = TRUE)
-    }
+    add_gene_ids <- vapply(
+      groups,
+      function(g) .expr_group_add_gene_input_id(.scalar_chr(g$id, default = "")),
+      character(1)
+    )
+    add_gene_ids <- add_gene_ids[nzchar(add_gene_ids)]
+    .schedule_gene_selectize_hydration(
+      add_gene_ids,
+      genes_now,
+      object_name_now,
+      .recluster_new_context_revision(),
+      source = "expression_groups_ui"
+    )
 
-    tagList(group_nodes, uiOutput("recluster_new_expr_active_range_ui"))
+    div(
+      class = "recluster-new-expression-state-root",
+      `data-recluster-object-context` = object_name_now,
+      `data-recluster-object-context-revision` = .recluster_new_context_revision(),
+      tagList(group_nodes, uiOutput("recluster_new_expr_active_range_ui"))
+    )
   })
 
+  outputOptions(output, "recluster_new_expression_groups_ui", suspendWhenHidden = FALSE)
+
   output$recluster_new_expr_active_range_ui <- renderUI({
-    state <- .expr_state_normalize(recluster_new_data$expr_selection)
+    # This revision increments only after the exact object transition settles.
+    # It invalidates a range UI that previously returned NULL while its parent
+    # output was hidden or still loading, without polling or delayed retries.
+    post_settlement_revision <- recluster_new_data$expr_ui_render_revision
+    if (!.recluster_new_context_is_settled()) return(NULL)
+    # Active gene/object/assay changes rebuild this structure. Range and
+    # population value changes update the mounted slider/plot without remounting
+    # Shiny inputs, preventing value-only feedback loops.
+    structure_key <- recluster_new_data$expr_active_range_structure_key
+    data_revision <- recluster_new_data$expr_active_range_data_revision
+    render_key <- paste(
+      structure_key,
+      as.character(data_revision %||% 0L),
+      as.character(post_settlement_revision %||% 0L),
+      sep = "::"
+    )
+    if (!nzchar(render_key)) return(NULL)
+    state <- .expr_state_normalize(.expr_ui_render_state())
     active <- .expr_active_gene(state)
     if (is.null(active)) {
       return(div(class = "recluster-new-expr-range app-secondary-status", RECLUSTER_NEW_UI_TEXT$t_text_expr_select_gene_range))
     }
-    obj <- recluster_new_data$seurat_obj
+    # Metadata/palette writes replace local Seurat object identity but do not
+    # change expression values. Keep this UI mounted until object load or
+    # active assay/gene structure explicitly changes.
+    obj <- isolate(recluster_new_data$seurat_obj)
     req(obj)
-    assay_now <- .scalar_chr(input$recluster_new_assay_select, default = "")
+    assay_now <- .expr_assay_name(obj)
     slot_now <- .expr_selection_slot()
     vals <- .fetch_gene_values(obj, assay_now, active$gene, slot_now)
     if (is.null(vals) || !length(vals)) {
@@ -3530,20 +5796,32 @@ recluster_new_server <- function(input, output, session, shared_data) {
       return(div(class = "recluster-new-expr-range app-secondary-status", RECLUSTER_NEW_UI_TEXT$t_text_expr_range_unavailable))
     }
     full_rng <- range_info$full_range
+    display_rng <- .expr_distribution_display_range(full_rng)
     cur <- suppressWarnings(as.numeric(active$range %||% range_info$default_range))
     if (length(cur) != 2L || any(!is.finite(cur))) cur <- range_info$default_range
     cur[[1]] <- max(full_rng[[1]], min(cur[[1]], full_rng[[2]]))
     cur[[2]] <- max(cur[[1]], min(cur[[2]], full_rng[[2]]))
+    # Keep full-precision numeric values here. Label formatting and endpoint
+    # alignment are applied after the slider input binding is initialized.
+    expr_range_slider <- sliderInput(
+      "recluster_new_expr_active_range",
+      label = NULL,
+      min = display_rng[[1]],
+      max = display_rng[[2]],
+      value = cur,
+      step = signif(diff(display_rng) / 200, 3)
+    )
+    expr_range_slider <- htmltools::tagQuery(expr_range_slider)$
+      find("input#recluster_new_expr_active_range")$
+      addAttrs(`data-force-edges` = "true")$
+      allTags()
     div(
       class = "recluster-new-expr-range",
-      sliderInput(
-        "recluster_new_expr_active_range",
-        sprintf("%s expression range", active$gene),
-        min = full_rng[[1]],
-        max = full_rng[[2]],
-        value = cur,
-        step = signif((full_rng[[2]] - full_rng[[1]]) / 200, 3)
+      div(
+        class = "recluster-new-expr-distribution",
+        plotlyOutput("recluster_new_expr_active_distribution", height = "148px", width = "100%")
       ),
+      expr_range_slider,
       if (is.finite(range_info$min_nonzero)) {
         div(
           class = "recluster-new-expr-range-hint",
@@ -3553,13 +5831,366 @@ recluster_new_server <- function(input, output, session, shared_data) {
     )
   })
 
+  outputOptions(output, "recluster_new_expr_active_range_ui", suspendWhenHidden = FALSE)
+
+  .empty_expr_distribution_plot <- function() {
+    # Keep pre-settlement output schema-valid. A layout-only widget causes
+    # Plotly to emit a missing-trace warning before the object context settles.
+    plotly::plot_ly() %>%
+      plotly::add_trace(
+        x = numeric(0),
+        y = numeric(0),
+        type = "scatter",
+        mode = "markers",
+        hoverinfo = "skip",
+        showlegend = FALSE
+      ) %>%
+      plotly::layout(
+        xaxis = list(visible = FALSE),
+        yaxis = list(visible = FALSE),
+        margin = list(l = 0, r = 0, t = 0, b = 0),
+        plot_bgcolor = "#ffffff",
+        paper_bgcolor = "#ffffff"
+      ) %>%
+      plotly::config(
+        # Agent note: tool suppression belongs only to this expression-range
+        # distribution. Never move it into shared interactive Plotly helpers.
+        displayModeBar = FALSE,
+        scrollZoom = FALSE,
+        doubleClick = FALSE,
+        staticPlot = TRUE,
+        responsive = TRUE
+      )
+  }
+
+  output$recluster_new_expr_active_distribution <- renderPlotly({
+    # Force one render after object-context settlement when the initial
+    # placeholder was evaluated before the active gene became available.
+    post_settlement_revision <- recluster_new_data$expr_ui_render_revision
+    range_structure_key <- recluster_new_data$expr_active_range_structure_key
+    range_data_revision <- recluster_new_data$expr_active_range_data_revision
+    confirmed_context_key <- recluster_new_data$confirmed_plot_context_key
+    expression_state_signal <- recluster_new_data$expr_selection
+    expression_render_key <- paste(
+      as.character(post_settlement_revision %||% 0L),
+      .scalar_chr(range_structure_key, default = ""),
+      as.character(range_data_revision %||% 0L),
+      .scalar_chr(confirmed_context_key, default = ""),
+      sep = "::"
+    )
+    if (!nzchar(expression_render_key)) return(.empty_expr_distribution_plot())
+    if (!.recluster_new_context_is_settled()) return(.empty_expr_distribution_plot())
+    state <- .expr_state_normalize(expression_state_signal)
+    active <- .expr_active_gene(state)
+    obj <- recluster_new_data$seurat_obj
+    if (is.null(active) || is.null(obj) || !inherits(obj, "Seurat")) {
+      return(.empty_expr_distribution_plot())
+    }
+
+    vals <- .fetch_gene_values(
+      obj,
+      .expr_assay_name(obj),
+      active$gene,
+      .expr_selection_slot()
+    )
+    if (is.null(vals) || !length(vals)) return(.empty_expr_distribution_plot())
+
+    all_vals <- vals[is.finite(vals)]
+    full_rng <- range(all_vals, na.rm = TRUE)
+    if (!all(is.finite(full_rng)) || full_rng[[1]] >= full_rng[[2]]) {
+      return(.empty_expr_distribution_plot())
+    }
+    base_cells <- if (isTRUE(state$inherit_population)) .expr_base_population_cells() else colnames(obj)
+    vals <- vals[intersect(base_cells, names(vals))]
+    vals <- vals[is.finite(vals)]
+    if (!length(vals)) return(.empty_expr_distribution_plot())
+    .db_dbg(
+      "expression_distribution_data",
+      sprintf(
+        "object=%s gene=%s all_cells=%d plotted_cells=%d zero_cells=%d range=%s",
+        .recluster_new_canonical_object_name(),
+        active$gene,
+        length(all_vals),
+        length(vals),
+        sum(vals == 0),
+        paste(signif(full_rng, 5), collapse = "-")
+      )
+    )
+
+    display_rng <- .expr_distribution_display_range(full_rng)
+    cur <- suppressWarnings(as.numeric(active$range %||% full_rng))
+    cur <- cur[is.finite(cur)]
+    if (length(cur) < 2L) cur <- full_rng
+    cur <- sort(cur[seq_len(2L)])
+    cur[[1]] <- max(full_rng[[1]], min(cur[[1]], full_rng[[2]]))
+    cur[[2]] <- max(cur[[1]], min(cur[[2]], full_rng[[2]]))
+
+    # Match QC's horizontal violin contract: expression runs on x, a smooth
+    # density envelope rises above the x-axis, and every cell is a
+    # deterministic rug dot at the baseline. Keep a small display-only x
+    # domain below zero so the kernel tail is not cut at the data boundary and
+    # the zero tick shares the same coordinate as the slider.
+    density_grid <- seq(display_rng[[1]], display_rng[[2]], length.out = 1024L)
+    density_from_values <- function(values, grid) {
+      values <- as.numeric(values)
+      values <- values[is.finite(values)]
+      if (!length(values)) return(numeric(length(grid)))
+      if (length(unique(values)) < 2L) {
+        bandwidth <- max(
+          diff(range(grid)) / 128,
+          if (length(grid) > 1L) diff(grid)[[1L]] * 2 else 1e-6
+        )
+        return(exp(-0.5 * ((grid - values[[1L]]) / bandwidth)^2))
+      }
+      estimate <- stats::density(
+        values,
+        from = grid[[1L]],
+        to = grid[[length(grid)]],
+        n = length(grid),
+        cut = 0,
+        kernel = "gaussian",
+        # Agent note: Keep local expression-distribution structure visible;
+        # stronger smoothing can imply cutoffs unsupported by cell density.
+        adjust = 0.8,
+        na.rm = TRUE
+      )
+      if (length(estimate$y) != length(grid) || any(!is.finite(estimate$y))) {
+        return(numeric(length(grid)))
+      }
+      pmax(as.numeric(estimate$y), 0)
+    }
+    density_width <- density_from_values(vals, density_grid)
+    selected_mask <- vals >= cur[[1]] & vals <= cur[[2]]
+    selected_vals <- vals[selected_mask]
+    selected_width <- density_from_values(selected_vals, density_grid)
+    max_density_width <- max(c(density_width, selected_width), na.rm = TRUE)
+    if (!is.finite(max_density_width) || max_density_width <= 0) max_density_width <- 1
+    # Tied values (especially zeros) otherwise occupy the same seven lanes and
+    # look under-counted. Keep raw values in `value`; `plot_value` is a small,
+    # deterministic display-only tie jitter for visible dot separation.
+    dot_band <- max(1.4, max_density_width * 0.48)
+    dot_lane_count <- max(24L, min(48L, ceiling(sqrt(length(vals)) * 1.8)))
+    dot_y <- dot_band * (
+      0.04 + (((seq_along(vals) - 1L) %% dot_lane_count) /
+        max(1, dot_lane_count - 1L)) * 0.92
+    )
+    value_rank <- ave(seq_along(vals), vals, FUN = seq_along)
+    value_count <- ave(seq_along(vals), vals, FUN = length)
+    tie_unit <- ((value_rank - 1L) %% 11L) / 10 - 0.5
+    tie_jitter <- ifelse(value_count > 1L, tie_unit, 0)
+    at_left_edge <- vals == full_rng[[1]]
+    at_right_edge <- vals == full_rng[[2]]
+    tie_jitter <- ifelse(at_left_edge, abs(tie_jitter), tie_jitter)
+    tie_jitter <- ifelse(at_right_edge, -abs(tie_jitter), tie_jitter)
+    jitter_span <- diff(full_rng) * 0.018
+    plot_values <- pmax(
+      full_rng[[1]],
+      pmin(full_rng[[2]], vals + tie_jitter * jitter_span)
+    )
+    density_df <- data.frame(
+      value = as.numeric(density_grid),
+      width = as.numeric(density_width),
+      stringsAsFactors = FALSE
+    )
+    selected_density_df <- data.frame(
+      value = as.numeric(density_grid),
+      width = as.numeric(selected_width),
+      stringsAsFactors = FALSE
+    )
+    dot_df <- data.frame(
+      value = as.numeric(vals),
+      plot_value = as.numeric(plot_values),
+      y = as.numeric(dot_y),
+      selected = selected_mask,
+      stringsAsFactors = FALSE
+    )
+    dot_unselected_df <- dot_df[!dot_df$selected, c("plot_value", "y"), drop = FALSE]
+    dot_selected_df <- dot_df[dot_df$selected, c("plot_value", "y"), drop = FALSE]
+    .db_dbg(
+      "expression_distribution_violin",
+      sprintf(
+        "grid_points=%d density_peak=%.3f selected=%d dots=%d",
+        nrow(density_df),
+        max_density_width,
+        sum(selected_mask),
+        nrow(dot_df)
+      )
+    )
+    plot_y_max <- max(max_density_width * 1.12, dot_band * 1.2)
+    zero_shape <- if (display_rng[[1]] < 0 && display_rng[[2]] > 0) {
+      list(list(
+        type = "line",
+        xref = "x",
+        yref = "y",
+        x0 = 0,
+        x1 = 0,
+        y0 = 0,
+        y1 = plot_y_max,
+        line = list(color = "#94a3b8", dash = "dot", width = 1),
+        layer = "below"
+      ))
+    } else {
+      list()
+    }
+    cutoff_shapes <- list(
+      list(
+        name = "expr-lower-cutoff",
+        type = "line",
+        xref = "x",
+        yref = "y",
+        x0 = cur[[1]],
+        x1 = cur[[1]],
+        y0 = 0,
+        y1 = plot_y_max,
+        line = list(color = "#2F80B7", dash = "dash", width = 1),
+        layer = "above"
+      ),
+      list(
+        name = "expr-upper-cutoff",
+        type = "line",
+        xref = "x",
+        yref = "y",
+        x0 = cur[[2]],
+        x1 = cur[[2]],
+        y0 = 0,
+        y1 = plot_y_max,
+        line = list(color = "#2F80B7", dash = "dash", width = 1),
+        layer = "above"
+      )
+    )
+
+    p <- plotly::plot_ly() %>%
+      plotly::add_trace(
+        data = density_df,
+        x = ~value,
+        y = ~width,
+        type = "scatter",
+        mode = "lines",
+        fill = "tozeroy",
+        line = list(color = "#69B3E7", width = 1.2),
+        fillcolor = "rgba(105,179,231,0.28)",
+        hoverinfo = "skip",
+        showlegend = FALSE,
+        inherit = FALSE
+      )
+    if (any(selected_width > 0)) {
+      p <- p %>% plotly::add_trace(
+        data = selected_density_df,
+        x = ~value,
+        y = ~width,
+        type = "scatter",
+        mode = "lines",
+        fill = "tozeroy",
+        line = list(color = "#2F80B7", width = 1.1),
+        fillcolor = "rgba(47,128,183,0.24)",
+        hoverinfo = "skip",
+        showlegend = FALSE,
+        inherit = FALSE
+      )
+    }
+    if (nrow(dot_unselected_df)) {
+      p <- p %>% plotly::add_trace(
+        data = dot_unselected_df,
+        x = ~plot_value,
+        y = ~y,
+        # This compact chart is intentionally SVG-only. Full cell-level data
+        # remains present, while avoiding a WebGL layer that can cover the
+        # horizontal density trace in a static, height-constrained widget.
+        type = "scatter",
+        mode = "markers",
+        marker = list(color = "rgba(47,128,183,0.42)", size = 2),
+        hoverinfo = "skip",
+        showlegend = FALSE,
+        inherit = FALSE
+      )
+    }
+    if (nrow(dot_selected_df)) {
+      p <- p %>% plotly::add_trace(
+        data = dot_selected_df,
+        x = ~plot_value,
+        y = ~y,
+        type = "scatter",
+        mode = "markers",
+        marker = list(color = "#2F80B7", size = 2.25),
+        hoverinfo = "skip",
+        showlegend = FALSE,
+        inherit = FALSE
+      )
+    }
+
+    p %>%
+      plotly::layout(
+        xaxis = list(
+          # Formula-mapped traces otherwise make Plotly infer an x/y title
+          # from the data-frame column names. Slider owns visible values.
+          title = "",
+          range = display_rng,
+          showgrid = FALSE,
+          zeroline = FALSE,
+          ticks = "",
+          showticklabels = FALSE,
+          nticks = 6L,
+          automargin = FALSE,
+          tickfont = list(size = 9)
+        ),
+        yaxis = list(
+          title = "",
+          range = c(-plot_y_max * 0.08, plot_y_max),
+          showgrid = FALSE,
+          showticklabels = FALSE,
+          zeroline = FALSE
+        ),
+        annotations = list(list(
+          text = sprintf("%s expression range", active$gene),
+          x = 0.995,
+          y = 0.93,
+          xref = "paper",
+          yref = "paper",
+          xanchor = "right",
+          yanchor = "top",
+          align = "right",
+          showarrow = FALSE,
+          bgcolor = "rgba(255,255,255,0.72)",
+          borderpad = 2,
+          font = list(size = 12, color = "#6b7280")
+        )),
+        shapes = c(zero_shape, cutoff_shapes),
+        # Zero plot margins are intentional: the plot and slider share the
+        # same full-width range box, so their value endpoints stay aligned.
+        # IonRangeSlider maps numeric values between handle centers, which are
+        # inset by half the 20 px handle width from the visible rail edges.
+        margin = list(l = 10, r = 10, t = 16, b = 8, pad = 0, autoexpand = FALSE),
+        showlegend = FALSE,
+        plot_bgcolor = "#ffffff",
+        paper_bgcolor = "#ffffff"
+      ) %>%
+      plotly::config(
+        # Agent note: this histogram is intentionally static. UMAP, scatter,
+        # rule, TCR, and other Plotly outputs must retain their full toolbars.
+        displayModeBar = FALSE,
+        scrollZoom = FALSE,
+        doubleClick = FALSE,
+        staticPlot = TRUE,
+        responsive = TRUE
+      )
+  })
+
+  # The distribution is mounted dynamically inside an expression group. Keep
+  # its server render alive while its parent details/card changes visibility so
+  # first landing cannot retain the schema-valid empty placeholder.
+  outputOptions(output, "recluster_new_expr_active_distribution", suspendWhenHidden = FALSE)
+
   observeEvent(input$recluster_new_expr_limit_population, {
+    if (!.recluster_new_event_allowed("expr_limit_population")) return(invisible(NULL))
     state <- .expr_state_normalize(recluster_new_data$expr_selection)
     inherit_population <- isTRUE(input$recluster_new_expr_limit_population)
     if (identical(isTRUE(state$inherit_population), inherit_population)) {
       return(invisible(NULL))
     }
     state$inherit_population <- inherit_population
+    if (nzchar(.scalar_chr(state$active_group_id, default = ""))) {
+      .set_selection_owner("expression", "expr_population_limit")
+    }
     .expr_set_state(state)
   }, ignoreInit = TRUE)
 
@@ -3590,27 +6221,76 @@ recluster_new_server <- function(input, output, session, shared_data) {
     ))
   }
 
+  .recluster_new_contextual_picker_footer <- function(reset_id, apply_id, apply_label, object_name, context_revision) {
+    contextual_attrs <- list(
+      class = "recluster-new-contextual-modal-action",
+      `data-recluster-modal-object` = .scalar_chr(object_name, default = ""),
+      `data-recluster-modal-revision` = as.character(context_revision %||% "")
+    )
+    append_attrs <- function(tag) {
+      do.call(htmltools::tagAppendAttributes, c(list(tag), contextual_attrs))
+    }
+    tagList(
+      append_attrs(actionButton(reset_id, "Reset", class = "btn btn-outline-secondary")),
+      modalButton("Cancel"),
+      append_attrs(actionButton(apply_id, apply_label, class = "btn btn-primary"))
+    )
+  }
+
   observeEvent(input$recluster_new_expr_add_group_btn, {
+    if (!.recluster_new_event_allowed("expr_add_group")) return(invisible(NULL))
     state <- .expr_state_normalize(recluster_new_data$expr_selection)
     idx <- suppressWarnings(as.integer(state$next_group_index %||% 1L))
     if (!is.finite(idx) || is.na(idx) || idx < 1L) idx <- length(state$groups %||% list()) + 1L
     gid <- sprintf("g%03d", idx)
     default_name <- sprintf("Expression group %d", idx)
+    state$groups[[length(state$groups %||% list()) + 1L]] <- list(
+      id = gid,
+      name = default_name,
+      open = FALSE,
+      require_all = FALSE,
+      invert = FALSE,
+      active_gene_id = "",
+      genes = list()
+    )
+    state$next_group_index <- idx + 1L
+    state <- .expr_set_active_group(state, gid)
+    .set_selection_owner("expression", "expr_group_created")
+    object_name <- .recluster_new_canonical_object_name()
+    persisted <- !is.null(recluster_new_data$seurat_obj) &&
+      inherits(recluster_new_data$seurat_obj, "Seurat") &&
+      nzchar(object_name)
+    .expr_set_state(state)
+    .db_dbg(
+      "expr_group_created",
+      sprintf(
+        "object=%s group=%s name=%s groups=%d persisted=%s",
+        object_name,
+        gid,
+        default_name,
+        length(state$groups %||% list()),
+        as.character(persisted)
+      )
+    )
     session$userData$recluster_new_expr_group_name_context <- list(
-      mode = "create",
+      mode = "rename",
       group_id = gid,
-      index = idx,
-      default_name = default_name
+      default_name = default_name,
+      object_name = object_name,
+      context_revision = .recluster_new_context_revision()
     )
     .show_expr_group_name_modal(
       title = RECLUSTER_NEW_UI_TEXT$t_btn_expr_add_group,
+      value = default_name,
       placeholder = default_name
     )
   }, ignoreInit = TRUE)
 
   observeEvent(input$recluster_new_expr_open_group, {
+    if (!.recluster_new_event_allowed("expr_open_group")) return(invisible(NULL))
     request <- input$recluster_new_expr_open_group
     if (!is.list(request)) return(invisible(NULL))
+    if (!.recluster_new_payload_context_matches(request)) return(invisible(NULL))
     gid <- .safe_key(.scalar_chr(request$group_id, default = ""))
     if (!nzchar(gid)) return(invisible(NULL))
     state <- .expr_state_normalize(recluster_new_data$expr_selection)
@@ -3624,6 +6304,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     )
     if (isTRUE(request$open)) {
       state <- .expr_set_active_group(state, gid)
+      .set_selection_owner("expression", "expr_group_open")
     } else {
       state$groups[[gi]]$open <- FALSE
     }
@@ -3631,8 +6312,10 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }, ignoreInit = TRUE, priority = 1000)
 
   observeEvent(input$recluster_new_expr_active_range_commit, {
-    if (isTRUE(input$recluster_new_expr_slider_dragging %||% FALSE)) return(invisible(NULL))
-    rng <- suppressWarnings(as.numeric(input$recluster_new_expr_active_range_commit %||% numeric(0)))
+    if (!.recluster_new_event_allowed("expr_active_range")) return(invisible(NULL))
+    request <- input$recluster_new_expr_active_range_commit
+    if (!.recluster_new_payload_context_matches(request)) return(invisible(NULL))
+    rng <- suppressWarnings(as.numeric(request$range %||% numeric(0)))
     rng <- rng[is.finite(rng)]
     if (length(rng) < 2L) return(invisible(NULL))
     state <- .expr_state_normalize(recluster_new_data$expr_selection)
@@ -3643,15 +6326,28 @@ recluster_new_server <- function(input, output, session, shared_data) {
     gene_i <- .expr_gene_index(state$groups[[gi]], active$gene_id)
     if (is.na(gene_i)) return(invisible(NULL))
     state$groups[[gi]]$genes[[gene_i]]$range <- sort(rng[seq_len(2L)])
+    .set_selection_owner("expression", "expr_range_commit")
+    .db_dbg(
+      "expr_range_commit",
+      sprintf(
+        "object=%s group=%s gene=%s range=%s",
+        .recluster_new_canonical_object_name(),
+        active$group_id,
+        active$gene,
+        paste(signif(sort(rng[seq_len(2L)]), 6), collapse = ",")
+      )
+    )
     .expr_set_state(state)
   }, ignoreInit = TRUE)
 
   # Agent note: Group headers are native details toggles; keep rename separate.
-  # Dynamic rename/create modal events need explicit context and nonces so every
+  # Dynamic rename modal events need explicit object context and nonces so every
   # group and repeated modal session remains deterministic.
   observeEvent(input$recluster_new_expr_group_rename, {
+    if (!.recluster_new_event_allowed("expr_group_rename_open")) return(invisible(NULL))
     request <- input$recluster_new_expr_group_rename
     if (!is.list(request)) return(invisible(NULL))
+    if (!.recluster_new_payload_context_matches(request)) return(invisible(NULL))
     gid <- .safe_key(.scalar_chr(request$group_id, default = ""))
     if (!nzchar(gid)) return(invisible(NULL))
     state <- .expr_state_normalize(recluster_new_data$expr_selection)
@@ -3660,7 +6356,9 @@ recluster_new_server <- function(input, output, session, shared_data) {
     session$userData$recluster_new_expr_group_name_context <- list(
       mode = "rename",
       group_id = gid,
-      default_name = sprintf("Expression group %d", gi)
+      default_name = sprintf("Expression group %d", gi),
+      object_name = .recluster_new_canonical_object_name(),
+      context_revision = .recluster_new_context_revision()
     )
     .show_expr_group_name_modal(
       title = RECLUSTER_NEW_UI_TEXT$t_btn_expr_rename_group,
@@ -3669,35 +6367,44 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }, ignoreInit = TRUE)
 
   observeEvent(input$recluster_new_expr_group_name_save, {
+    if (!.recluster_new_event_allowed("expr_group_name_save")) return(invisible(NULL))
     save_request <- input$recluster_new_expr_group_name_save
     if (!is.list(save_request)) return(invisible(NULL))
+    if (!.recluster_new_payload_context_matches(save_request)) return(invisible(NULL))
     context <- session$userData$recluster_new_expr_group_name_context
     if (!is.list(context)) return(invisible(NULL))
     mode <- .scalar_chr(context$mode, default = "")
     gid <- .safe_key(.scalar_chr(context$group_id, default = ""))
     if (!nzchar(gid)) return(invisible(NULL))
+    context_object <- .scalar_chr(context$object_name, default = "")
+    context_revision <- suppressWarnings(as.integer(context$context_revision %||% NA_integer_))
+    current_revision <- .recluster_new_context_revision()
+    current_object <- .recluster_new_canonical_object_name()
+    active_object <- .scalar_chr(shared_data$active_object_name, default = "")
+    wrong_active_object <- nzchar(active_object) && !identical(context_object, active_object)
+    wrong_revision <- !is.finite(context_revision) || is.na(context_revision) || !identical(context_revision, current_revision)
+    if (nzchar(context_object) && (!identical(context_object, current_object) || wrong_active_object || wrong_revision)) {
+      .db_dbg(
+        "expr_group_name_save_ignored_wrong_object",
+        sprintf(
+          "group=%s context_object=%s current_object=%s active_object=%s context_revision=%s current_revision=%s",
+          gid,
+          context_object,
+          current_object,
+          active_object,
+          as.character(context_revision),
+          as.character(current_revision)
+        )
+      )
+      session$userData$recluster_new_expr_group_name_context <- NULL
+      removeModal()
+      return(invisible(NULL))
+    }
     state <- .expr_state_normalize(recluster_new_data$expr_selection)
     nm <- trimws(.scalar_chr(save_request$name, default = ""))
     default_name <- .scalar_chr(context$default_name, default = "Expression group")
     name_to_use <- if (nzchar(nm)) nm else default_name
-    if (identical(mode, "create")) {
-      idx <- suppressWarnings(as.integer(context$index))
-      if (!is.finite(idx) || is.na(idx) || idx < 1L) return(invisible(NULL))
-      if (!is.na(.expr_group_index(state, gid))) return(invisible(NULL))
-      state$groups[[length(state$groups %||% list()) + 1L]] <- list(
-        id = gid,
-        name = name_to_use,
-        open = FALSE,
-        require_all = FALSE,
-        invert = FALSE,
-        active_gene_id = "",
-        genes = list()
-      )
-      next_idx <- suppressWarnings(as.integer(state$next_group_index %||% 1L))
-      if (!is.finite(next_idx) || is.na(next_idx) || next_idx < 1L) next_idx <- 1L
-      state$next_group_index <- max(next_idx, idx + 1L)
-      state <- .expr_set_active_group(state, gid)
-    } else if (identical(mode, "rename")) {
+    if (identical(mode, "rename")) {
       gi <- .expr_group_index(state, gid)
       if (is.na(gi)) return(invisible(NULL))
       state$groups[[gi]]$name <- name_to_use
@@ -3710,30 +6417,58 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }, ignoreInit = TRUE)
 
   observeEvent(input$recluster_new_expr_group_name_cancel, {
+    if (!.recluster_new_event_allowed("expr_group_name_cancel")) return(invisible(NULL))
     cancel_request <- input$recluster_new_expr_group_name_cancel
     if (!is.list(cancel_request)) return(invisible(NULL))
+    if (!.recluster_new_payload_context_matches(cancel_request)) return(invisible(NULL))
     session$userData$recluster_new_expr_group_name_context <- NULL
     removeModal()
   }, ignoreInit = TRUE)
 
-  observe({
-    state <- .expr_state_normalize(recluster_new_data$expr_selection)
-    groups <- state$groups %||% list()
-    all_genes <- character(0)
-    obj <- recluster_new_data$seurat_obj
-    if (!is.null(obj) && inherits(obj, "Seurat")) {
-      assay_now <- .scalar_chr(input$recluster_new_assay_select, default = "")
-      all_genes <- .assay_feature_names(obj, assay_now)
+  observeEvent(input[[.expr_gene_delete_event_id()]], {
+    request <- input[[.expr_gene_delete_event_id()]]
+    if (!is.list(request)) return(invisible(NULL))
+    if (!.recluster_new_payload_context_matches(request)) {
+      .db_dbg("expr_gene_delete_ignored_context", "payload context does not match current object")
+      return(invisible(NULL))
     }
-    bound <- .expr_bound_inputs()
+    gid <- .safe_key(.scalar_chr(request$group_id, default = ""))
+    gene_id <- .safe_key(.scalar_chr(request$gene_id, default = ""))
+    if (!nzchar(gid) || !nzchar(gene_id)) return(invisible(NULL))
+    state2 <- .expr_state_normalize(recluster_new_data$expr_selection)
+    gi <- .expr_group_index(state2, gid)
+    if (is.na(gi)) return(invisible(NULL))
+    gene_i <- .expr_gene_index(state2$groups[[gi]], gene_id)
+    if (is.na(gene_i)) return(invisible(NULL))
+    .db_dbg(
+      "expr_gene_delete_received",
+      sprintf("group=%s gene=%s", gid, gene_id)
+    )
+    state2$groups[[gi]]$genes[[gene_i]] <- NULL
+    if (identical(
+      .scalar_chr(state2$groups[[gi]]$active_gene_id, default = ""),
+      gene_id
+    )) state2$groups[[gi]]$active_gene_id <- ""
+    active_gid2 <- .scalar_chr(state2$active_group_id, default = "")
+    if (nzchar(active_gid2)) {
+      .set_selection_owner("expression", paste0("expr_control:", .expr_gene_delete_event_id()))
+    } else if (identical(.scalar_chr(selection_owner_state(), default = "none"), "expression")) {
+      .set_selection_owner("none", paste0("expr_control:", .expr_gene_delete_event_id()))
+    }
+    .expr_set_state(state2)
+  }, ignoreInit = TRUE, priority = 1000)
+
+  observe({
+    structure_key <- recluster_new_data$expr_ui_structure_key
+    if (!nzchar(structure_key)) return(invisible(NULL))
+    state <- .expr_state_normalize(isolate(recluster_new_data$expr_selection))
+    groups <- state$groups %||% list()
+    bound <- isolate(.expr_bound_inputs())
     next_bound <- bound
     for (g in groups) {
       gid <- .scalar_chr(g$id, default = "")
       if (!nzchar(gid)) next
       add_id <- .expr_group_add_gene_input_id(gid)
-      if (length(all_genes)) {
-        wl_update_gene_selectize(session, add_id, all_genes, selected = character(0))
-      }
       input_ids <- c(
         .expr_group_open_input_id(gid),
         .expr_group_require_all_input_id(gid),
@@ -3750,30 +6485,9 @@ recluster_new_server <- function(input, output, session, shared_data) {
           gid_local <- gid
           observeEvent(input[[id_local]], {
             state2 <- .expr_state_normalize(recluster_new_data$expr_selection)
+            stage_added_gene <- FALSE
             gi <- .expr_group_index(state2, gid_local)
             if (is.na(gi)) return(invisible(NULL))
-            body_input <- id_local %in% c(
-              .expr_group_require_all_input_id(gid_local),
-              .expr_group_invert_input_id(gid_local),
-              .expr_group_select_all_input_id(gid_local),
-              .expr_group_add_gene_input_id(gid_local)
-            )
-            if (
-              isTRUE(body_input) &&
-              (
-                !identical(.scalar_chr(state2$active_group_id, default = ""), gid_local) ||
-                !isTRUE(state2$groups[[gi]]$open)
-              )
-            ) {
-              # Agent note: Dynamic Shiny inputs emit value events again when
-              # renderUI rebinds. Closed-group echoes must never steal active
-              # expression ownership from the group the user just opened.
-              .db_dbg(
-                "expr_stale_group_input_ignored",
-                sprintf("input=%s group=%s active=%s", id_local, gid_local, .scalar_chr(state2$active_group_id, default = ""))
-              )
-              return(invisible(NULL))
-            }
             if (identical(id_local, .expr_group_open_input_id(gid_local))) {
               if (isTRUE(input[[id_local]])) {
                 state2 <- .expr_set_active_group(state2, gid_local)
@@ -3814,18 +6528,17 @@ recluster_new_server <- function(input, output, session, shared_data) {
                 state2$groups[[gi]]$genes[[k]]$checked <- target_checked
               }
               gene_ids_now <- gene_ids_now[nzchar(gene_ids_now)]
-              if (isTRUE(target_checked) && length(gene_ids_now)) state2 <- .expr_set_active_gene_id(state2, gid_local, gene_ids_now[[1]])
             } else if (identical(id_local, .expr_group_add_gene_input_id(gid_local))) {
               gene <- trimws(.scalar_chr(input[[id_local]], default = ""))
               if (!nzchar(gene)) return(invisible(NULL))
               obj_now <- recluster_new_data$seurat_obj
               all_genes_now <- character(0)
               if (!is.null(obj_now) && inherits(obj_now, "Seurat")) {
-                all_genes_now <- .assay_feature_names(obj_now, .scalar_chr(input$recluster_new_assay_select, default = ""))
+                all_genes_now <- .assay_feature_names(obj_now, .expr_assay_name(obj_now))
               }
               existing <- vapply(state2$groups[[gi]]$genes %||% list(), function(gr) tolower(.scalar_chr(gr$gene, default = "")), character(1))
               if (tolower(gene) %in% existing) {
-                wl_update_gene_selectize(session, id_local, all_genes_now, selected = character(0))
+                .db_update_gene_selectize(id_local, all_genes_now, selected = character(0))
                 return(invisible(NULL))
               }
               gene_idx <- suppressWarnings(as.integer(state2$next_gene_index %||% 1L))
@@ -3835,7 +6548,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
               if (!is.null(obj_now) && inherits(obj_now, "Seurat")) {
                 vals_now <- .fetch_gene_values(
                   obj_now,
-                  .scalar_chr(input$recluster_new_assay_select, default = ""),
+                  .expr_assay_name(obj_now),
                   gene,
                   .expr_selection_slot()
                 )
@@ -3848,11 +6561,44 @@ recluster_new_server <- function(input, output, session, shared_data) {
                 checked = TRUE,
                 range = default_range
               )
-              state2 <- .expr_set_active_gene_id(state2, gid_local, gene_id)
+              # Agent note: A newly added gene owns expression focus so its
+              # orange UMAP outline and range distribution appear immediately.
+              state2$groups[[gi]]$active_gene_id <- gene_id
               state2$next_gene_index <- gene_idx + 1L
-              wl_update_gene_selectize(session, id_local, all_genes_now, selected = character(0))
+              .db_update_gene_selectize(id_local, all_genes_now, selected = character(0))
+              stage_added_gene <- TRUE
             }
-            .expr_set_state(state2)
+            active_gid2 <- .scalar_chr(state2$active_group_id, default = "")
+            if (nzchar(active_gid2)) {
+              .set_selection_owner("expression", paste0("expr_control:", id_local))
+            } else if (identical(.scalar_chr(selection_owner_state(), default = "none"), "expression")) {
+              .set_selection_owner("none", paste0("expr_control:", id_local))
+            }
+            if (isTRUE(stage_added_gene)) {
+              staged_object <- .recluster_new_canonical_object_name()
+              staged_revision <- .recluster_new_context_revision()
+              .expr_stage_added_gene_ui(state2)
+              .db_dbg(
+                "expr_add_gene_ui_staged",
+                sprintf("object=%s revision=%d group=%s", staged_object, staged_revision, gid_local)
+              )
+              session$onFlushed(function() {
+                isolate({
+                if (!identical(staged_object, .recluster_new_canonical_object_name()) ||
+                    !identical(staged_revision, .recluster_new_context_revision())) {
+                  stop("Expression gene commit context changed before post-flush persistence.", call. = FALSE)
+                }
+                recluster_new_data$expr_ui_staged_state <- NULL
+                .expr_set_state(state2)
+                .db_dbg(
+                  "expr_add_gene_state_committed",
+                  sprintf("object=%s revision=%d group=%s", staged_object, staged_revision, gid_local)
+                )
+                })
+              }, once = TRUE)
+            } else {
+              .expr_set_state(state2)
+            }
           }, ignoreInit = TRUE)
         })
       }
@@ -3861,8 +6607,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
         if (!nzchar(gene_id)) next
         gene_ids <- c(
           .expr_gene_check_input_id(gid, gene_id),
-          .expr_gene_active_input_id(gid, gene_id),
-          .expr_gene_delete_input_id(gid, gene_id)
+          .expr_gene_active_input_id(gid, gene_id)
         )
         for (id in gene_ids) {
           if (id %in% next_bound) next
@@ -3875,18 +6620,6 @@ recluster_new_server <- function(input, output, session, shared_data) {
               state2 <- .expr_state_normalize(recluster_new_data$expr_selection)
               gi <- .expr_group_index(state2, gid_local)
               if (is.na(gi)) return(invisible(NULL))
-              if (
-                !identical(.scalar_chr(state2$active_group_id, default = ""), gid_local) ||
-                !isTRUE(state2$groups[[gi]]$open)
-              ) {
-                # Agent note: Gene input rebind echoes are not user actions.
-                # Only current open group may mutate gene state or ownership.
-                .db_dbg(
-                  "expr_stale_gene_input_ignored",
-                  sprintf("input=%s group=%s active=%s", id_local, gid_local, .scalar_chr(state2$active_group_id, default = ""))
-                )
-                return(invisible(NULL))
-              }
               gene_i <- .expr_gene_index(state2$groups[[gi]], gene_id_local)
               if (is.na(gene_i)) return(invisible(NULL))
               if (identical(id_local, .expr_gene_check_input_id(gid_local, gene_id_local))) {
@@ -3895,7 +6628,6 @@ recluster_new_server <- function(input, output, session, shared_data) {
                   return(invisible(NULL))
                 }
                 state2$groups[[gi]]$genes[[gene_i]]$checked <- gene_checked
-                state2 <- .expr_set_active_gene_id(state2, gid_local, gene_id_local)
               } else if (identical(id_local, .expr_gene_active_input_id(gid_local, gene_id_local))) {
                 active_gene_id <- .scalar_chr(state2$groups[[gi]]$active_gene_id, default = "")
                 state2 <- .expr_set_active_gene_id(
@@ -3907,10 +6639,12 @@ recluster_new_server <- function(input, output, session, shared_data) {
                   "expr_active_gene_toggle",
                   sprintf("group=%s gene=%s active=%s", gid_local, gene_id_local, !identical(active_gene_id, gene_id_local))
                 )
-              } else if (identical(id_local, .expr_gene_delete_input_id(gid_local, gene_id_local))) {
-                state2$groups[[gi]]$genes[[gene_i]] <- NULL
-                remaining_ids <- vapply(state2$groups[[gi]]$genes %||% list(), function(x) .scalar_chr(x$id, default = ""), character(1))
-                state2$groups[[gi]]$active_gene_id <- if (length(remaining_ids)) remaining_ids[[1]] else ""
+              }
+              active_gid2 <- .scalar_chr(state2$active_group_id, default = "")
+              if (nzchar(active_gid2)) {
+                .set_selection_owner("expression", paste0("expr_control:", id_local))
+              } else if (identical(.scalar_chr(selection_owner_state(), default = "none"), "expression")) {
+                .set_selection_owner("none", paste0("expr_control:", id_local))
               }
               .expr_set_state(state2)
             }, ignoreInit = TRUE)
@@ -3922,17 +6656,22 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   observeEvent(input$recluster_new_tabs, {
+    if (!.recluster_new_event_allowed("plot_tabs")) return(invisible(NULL))
     tab_key <- .norm_plot_tab(input$recluster_new_tabs)
     if (identical(.active_plot_tab(), tab_key)) return(invisible(NULL))
+    .recluster_new_overlay_cancel("plot_tab_changed")
     .active_plot_tab(tab_key)
   }, ignoreInit = FALSE, priority = 1000)
   observeEvent(input$recluster_new_tabs_click, {
+    if (!.recluster_new_event_allowed("plot_tabs_click")) return(invisible(NULL))
     tab_key <- .norm_plot_tab(input$recluster_new_tabs_click)
     if (identical(.active_plot_tab(), tab_key)) return(invisible(NULL))
+    .recluster_new_overlay_cancel("plot_tab_changed")
     .active_plot_tab(tab_key)
   }, ignoreInit = TRUE, priority = 1001)
 
   observeEvent(input$recluster_new_expr_tabs, {
+    if (!.recluster_new_event_allowed("expr_tabs")) return(invisible(NULL))
     tab_raw <- .scalar_chr(input$recluster_new_expr_tabs, default = "")
     if (!nzchar(tab_raw)) return(invisible(NULL))
     tab_key <- .norm_expr_tab(tab_raw)
@@ -3940,6 +6679,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     .active_expr_tab(tab_key)
   }, ignoreInit = FALSE, priority = 1000)
   observeEvent(input$recluster_new_expr_tabs_click, {
+    if (!.recluster_new_event_allowed("expr_tabs_click")) return(invisible(NULL))
     tab_raw <- .scalar_chr(input$recluster_new_expr_tabs_click, default = "")
     if (!nzchar(tab_raw)) return(invisible(NULL))
     tab_key <- .norm_expr_tab(tab_raw)
@@ -3948,11 +6688,13 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }, ignoreInit = TRUE, priority = 1001)
 
   observeEvent(input$recluster_new_rule_plot_tabs, {
+    if (!.recluster_new_event_allowed("rule_plot_tabs")) return(invisible(NULL))
     tab_key <- .norm_rule_plot_tab(input$recluster_new_rule_plot_tabs)
     if (identical(.active_rule_plot_tab(), tab_key)) return(invisible(NULL))
     .active_rule_plot_tab(tab_key)
   }, ignoreInit = FALSE, priority = 1000)
   observeEvent(input$recluster_new_rule_plot_tabs_click, {
+    if (!.recluster_new_event_allowed("rule_plot_tabs_click")) return(invisible(NULL))
     tab_key <- .norm_rule_plot_tab(input$recluster_new_rule_plot_tabs_click)
     if (identical(.active_rule_plot_tab(), tab_key)) return(invisible(NULL))
     .active_rule_plot_tab(tab_key)
@@ -4003,8 +6745,17 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   output$recluster_new_violin_panel_ui <- renderUI({
+    if (!.recluster_new_context_is_settled()) return(NULL)
     expr_tab <- .current_expr_tab()
     if (identical(expr_tab, "pseudobulk")) {
+      pb_choices <- names(recluster_new_data$metadata_profiles %||% list())
+      pb_selected <- .scalar_chr(isolate(input$recluster_new_pb_meta_col), default = "")
+      if (!(pb_selected %in% pb_choices)) {
+        pb_selected <- .scalar_chr(recluster_new_data$metadata_open_column, default = "")
+      }
+      if (!(pb_selected %in% pb_choices)) {
+        pb_selected <- if (length(pb_choices)) pb_choices[[1]] else ""
+      }
       return(
         div(
           class = "recluster-new-violin-wrap",
@@ -4015,8 +6766,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
               selectInput(
                 "recluster_new_pb_meta_col",
                 RECLUSTER_NEW_UI_TEXT$t_label_group_by_column,
-                choices = names(recluster_new_data$metadata_profiles %||% list()),
-                selected = .scalar_chr(recluster_new_data$metadata_open_column, default = "")
+                choices = pb_choices,
+                selected = pb_selected
               )
             ),
             column(
@@ -4088,42 +6839,124 @@ recluster_new_server <- function(input, output, session, shared_data) {
     if (tab_key %in% c("scatter", "gene scatter plot")) "recluster_new_scatter_plot" else "recluster_new_umap_plot"
   }
 
+  .recluster_new_overlay_context <- function(tab_now = "") {
+    isolate({
+      tab_seed <- .scalar_chr(tab_now, default = "")
+      if (!nzchar(tab_seed)) tab_seed <- .scalar_chr(input$recluster_new_tabs, default = "umap")
+      tab_key <- .norm_plot_tab(tab_seed)
+      if (!nzchar(tab_key)) tab_key <- "umap"
+      list(
+        active = .db_tab_is_active(),
+        object = .recluster_new_canonical_object_name(),
+        revision = .recluster_new_context_revision(),
+        tab = tab_key
+      )
+    })
+  }
+
+  .recluster_new_overlay_begin <- function(msg = "Preparing plot...", tab_now = "", reason = "") {
+    context <- .recluster_new_overlay_context(tab_now)
+    if (!isTRUE(context$active) || !nzchar(context$object)) return(invisible(FALSE))
+    current_state <- isolate(recluster_new_overlay_state())
+    if (is.list(current_state) && isTRUE(current_state$pending) &&
+        identical(.scalar_chr(current_state$object, default = ""), context$object) &&
+        identical(as.integer(current_state$revision %||% NA_integer_), as.integer(context$revision)) &&
+        identical(.scalar_chr(current_state$tab, default = ""), context$tab)) {
+      # Landing activation and post-flush settlement can both announce the
+      # same request. Keep one request identity so that announcement itself
+      # cannot schedule duplicate heavy plot renders.
+      .db_dbg(
+        "overlay_begin_reused",
+        sprintf("request=%s object=%s revision=%d tab=%s reason=%s", as.character(current_state$request_id %||% ""), context$object, context$revision, context$tab, .scalar_chr(reason, default = ""))
+      )
+      try(overlay_show(msg), silent = TRUE)
+      return(invisible(TRUE))
+    }
+    request_id <- suppressWarnings(as.integer(isolate(recluster_new_overlay_request_id()) %||% 0L))
+    if (!is.finite(request_id) || is.na(request_id) || request_id < 0L) request_id <- 0L
+    request_id <- request_id + 1L
+    recluster_new_overlay_request_id(request_id)
+    recluster_new_overlay_state(list(
+      pending = TRUE,
+      request_id = request_id,
+      object = context$object,
+      revision = context$revision,
+      tab = context$tab,
+      status = "pending"
+    ))
+    .db_dbg(
+      "overlay_begin",
+      sprintf("request=%d object=%s revision=%d tab=%s reason=%s", request_id, context$object, context$revision, context$tab, .scalar_chr(reason, default = ""))
+    )
+    try(overlay_show(msg), silent = TRUE)
+    invisible(TRUE)
+  }
+
+  .recluster_new_overlay_cancel <- function(reason = "") {
+    state <- isolate(recluster_new_overlay_state())
+    if (!is.list(state) || !isTRUE(state$pending)) return(invisible(FALSE))
+    .db_dbg(
+      "overlay_cancel",
+      sprintf("request=%s reason=%s", as.character(state$request_id %||% ""), .scalar_chr(reason, default = ""))
+    )
+    recluster_new_overlay_state(modifyList(state, list(pending = FALSE, status = "cancelled")))
+    try(overlay_hide(), silent = TRUE)
+    invisible(TRUE)
+  }
+
+  .recluster_new_overlay_finish <- function(tab_now = "", status = "ready", reason = "") {
+    state <- isolate(recluster_new_overlay_state())
+    if (!is.list(state) || !isTRUE(state$pending)) return(invisible(FALSE))
+    context <- .recluster_new_overlay_context(tab_now)
+    if (!isTRUE(context$active) ||
+        !identical(.scalar_chr(state$object, default = ""), context$object) ||
+        !identical(as.integer(state$revision %||% NA_integer_), as.integer(context$revision)) ||
+        !identical(.scalar_chr(state$tab, default = ""), context$tab)) {
+      return(invisible(FALSE))
+    }
+    status <- .scalar_chr(status, default = "ready")
+    recluster_new_overlay_state(modifyList(state, list(pending = FALSE, status = status)))
+    .db_dbg(
+      "overlay_finish",
+      sprintf("request=%s object=%s revision=%d tab=%s status=%s reason=%s", as.character(state$request_id %||% ""), context$object, context$revision, context$tab, status, .scalar_chr(reason, default = ""))
+    )
+    try(overlay_hide(), silent = TRUE)
+    invisible(TRUE)
+  }
+
   .recluster_new_overlay_show_plot <- function(msg = "Preparing plot...", tab_now = "") {
     if (is.null(isolate(recluster_new_data$seurat_obj))) {
-      try(overlay_hide(), silent = TRUE)
+      .recluster_new_overlay_cancel("no_object")
       return(invisible(NULL))
     }
-    
-    # Check if target tab is UMAP and UMAP plot is already cached.
+
     tab_seed <- .scalar_chr(tab_now, default = "")
     if (!nzchar(tab_seed)) tab_seed <- "umap"
     tab_key <- .norm_plot_tab(tab_seed)
+    if (!nzchar(tab_key)) tab_key <- "umap"
+    .recluster_new_overlay_begin(msg, tab_key, reason = "plot_request")
+
     if (tab_key == "umap") {
-      plot_cache_sig <- ""
-      try({
-        plot_cache_sig <- .umap_plot_cache_signature()
-      }, silent = TRUE)
+      # This helper is also called by the onFlushed settlement callback. Keep
+      # its cache inspection outside reactive dependency tracking so first-page
+      # activation cannot abort while checking whether a plot is already ready.
+      plot_cache_sig <- isolate(.umap_plot_cache_signature())
       stored_sig <- isolate(recluster_new_data$umap_plot_cache_sig)
       stored_cache <- isolate(recluster_new_data$umap_plot_cache)
       plot_cached <- nzchar(plot_cache_sig) && identical(plot_cache_sig, stored_sig) && inherits(stored_cache, "plotly")
       if (plot_cached) {
-        try(overlay_hide(), silent = TRUE)
-        return(invisible(NULL))
+        .recluster_new_overlay_finish(tab_key, status = "ready", reason = "cache_hit")
       }
-    }
-    
-    try(overlay_show(msg), silent = TRUE)
-    plot_id <- .scalar_chr(.recluster_new_plot_output_id_from_tab(tab_now), default = "")
-    if (nzchar(plot_id)) {
-      try(overlay_hide_when_output_ready(plot_id, timeout_ms = 120000L), silent = TRUE)
-    } else {
-      try(overlay_hide(), silent = TRUE)
     }
     invisible(NULL)
   }
 
   observeEvent(input$main_navbar, {
-    if (!.db_tab_is_active()) return(invisible(NULL))
+    if (!.db_tab_is_active()) {
+      .recluster_new_overlay_cancel("page_left")
+      .recluster_new_clear_page_context("page_left")
+      return(invisible(NULL))
+    }
     recluster_new_page_activating(TRUE)
     recluster_new_dataset_syncing(TRUE)
     tab_now <- .scalar_chr(input$recluster_new_tabs, default = "umap")
@@ -4131,34 +6964,71 @@ recluster_new_server <- function(input, output, session, shared_data) {
     has_objs <- length(shared_data$all_seurat_objects) > 0L
     active_nm <- .scalar_chr(shared_data$active_object_name, default = "")
     loaded_now <- .scalar_chr(recluster_new_loaded_object_name(), default = "")
+    load_failure_signature <- recluster_new_load_failure_source_signature()
+    load_failure_matches <- nzchar(load_failure_signature) &&
+      identical(.recluster_new_load_source_signature(active_nm), load_failure_signature)
     if (has_objs && nzchar(active_nm)) {
-      # Agent note: Always emit the landing overlay before page initialization; onFlushed confirms cache/output readiness and hides it.
-      .db_dbg("landing_overlay_show", sprintf("active=%s loaded=%s", active_nm, loaded_now))
-      try(overlay_show("Preparing Data Browser plot..."), silent = TRUE)
+      if (isTRUE(load_failure_matches)) {
+        .db_dbg(
+          "landing_overlay_suppressed_terminal_failure",
+          sprintf("active=%s source=%s", active_nm, load_failure_signature)
+        )
+        .recluster_new_overlay_cancel("terminal_load_failure")
+      } else {
+        # Agent note: Always emit the landing overlay before page initialization;
+        # server plot completion owns its release after the next settled render.
+        .db_dbg("landing_overlay_show", sprintf("active=%s loaded=%s", active_nm, loaded_now))
+        .recluster_new_overlay_begin("Preparing Data Browser plot...", tab_now, reason = "page_activation")
+      }
     } else {
       .db_dbg("landing_overlay_hide", sprintf("has_objects=%s active=%s", has_objs, active_nm))
-      try(overlay_hide(), silent = TRUE)
+      .recluster_new_overlay_cancel("empty_workspace")
     }
     
     try(bslib::toggle_sidebar("app_right_sidebar", open = FALSE, session = session), silent = TRUE)
     loaded_now <- .scalar_chr(recluster_new_loaded_object_name(), default = "")
     recluster_new_object_loading(TRUE)
     on.exit(recluster_new_object_loading(FALSE), add = TRUE)
-    if (!identical(loaded_now, active_nm) || is.null(recluster_new_data$seurat_obj)) {
-      .load_active_recluster_new_object(active_nm)
+    needs_object_load <- !identical(loaded_now, active_nm) || is.null(recluster_new_data$seurat_obj)
+    if (!needs_object_load && nzchar(active_nm)) {
+      needs_object_load <- .recluster_new_expression_state_needs_reload(active_nm)
     }
-    suppressWarnings(try(updateTabsetPanel(session, "recluster_new_tabs", selected = tab_now), silent = TRUE))
-    session$onFlushed(function() {
-      recluster_new_page_activating(FALSE)
-      recluster_new_dataset_syncing(FALSE) # Safety guard: ensure syncing flag is cleared when page loads
-      .recluster_new_overlay_show_plot("Preparing Data Browser plot...", tab_now = tab_now)
-    }, once = TRUE)
+    if (isTRUE(needs_object_load) && identical(loaded_now, active_nm) && nzchar(active_nm)) {
+      .db_dbg(
+        "workspace_expression_state_reload",
+        sprintf("object=%s local_groups=%d", active_nm, length(recluster_new_data$expr_selection$groups %||% list()))
+      )
+    }
+    if (isTRUE(needs_object_load)) {
+      if (isTRUE(load_failure_matches)) {
+        .db_dbg(
+          "object_load_blocked_terminal_failure",
+          sprintf("active=%s source=%s", active_nm, load_failure_signature)
+        )
+        .recluster_new_schedule_context_settle(
+          .recluster_new_context_revision(),
+          message = "Preparing Data Browser plot...",
+          tab_now = tab_now
+        )
+      } else {
+        .load_active_recluster_new_object(active_nm, settle_message = "Preparing Data Browser plot...")
+      }
+    } else {
+      .recluster_new_schedule_context_settle(
+        .recluster_new_context_revision(),
+        message = "Preparing Data Browser plot...",
+        tab_now = tab_now
+      )
+    }
+    if (!identical(.scalar_chr(input$recluster_new_tabs, default = ""), tab_now)) {
+      suppressWarnings(try(updateTabsetPanel(session, "recluster_new_tabs", selected = tab_now), silent = TRUE))
+    }
     invisible(NULL)
   }, ignoreInit = FALSE, priority = 1000)
 
   # Agent note: Registry deletion and sidebar object switches are canonical.
-  # Keep guard values reactive so a transition blocked during page loading is
-  # retried when loading finishes; selector input may still show the old object.
+  # Reconcile only after explicit object-loading transition completes; selector
+  # input is a view and may still show its previous value during that transition.
   observe({
     nm <- .scalar_chr(shared_data$active_object_name, default = "")
     registry_sig <- recluster_new_object_selector$choices_signature()
@@ -4177,39 +7047,41 @@ recluster_new_server <- function(input, output, session, shared_data) {
     if (identical(nm, loaded_now)) {
       return(invisible(NULL))
     }
+    load_failure_signature <- recluster_new_load_failure_source_signature()
+    if (nzchar(load_failure_signature) &&
+        identical(.recluster_new_load_source_signature(nm), load_failure_signature)) {
+      .db_dbg(
+        "canonical_object_load_blocked_terminal_failure",
+        sprintf("active=%s source=%s", nm, load_failure_signature)
+      )
+      return(invisible(NULL))
+    }
     .db_dbg(
       "canonical_object_transition",
       sprintf("active=%s loaded=%s registry_sig=%s", nm, loaded_now, registry_sig)
     )
     .load_active_recluster_new_object(nm)
-    tab_now <- .scalar_chr(input$recluster_new_tabs, default = "umap")
-    session$onFlushed(function() {
-      .recluster_new_overlay_show_plot("Loading selected dataset plot...", tab_now = tab_now)
-    }, once = TRUE)
     invisible(NULL)
   })
 
   observeEvent(input$recluster_new_umap_reduction_select, {
+    if (!.recluster_new_event_allowed("umap_reduction")) return(invisible(NULL))
     obj <- recluster_new_data$seurat_obj
     if (is.null(obj) || !inherits(obj, "Seurat")) return(invisible(NULL))
     if (!isTRUE(.recluster_new_on_page())) return(invisible(NULL))
     red <- .scalar_chr(input$recluster_new_umap_reduction_select, default = "")
-    if (isTRUE(.consume_pending_control("recluster_new_umap_reduction_select", red))) {
-      .db_dbg("input_echo_ignored", sprintf("id=recluster_new_umap_reduction_select value=%s", red))
-      return(invisible(NULL))
-    }
     reduction_choices <- .embedding_reduction_choices(obj)
-    if (nzchar(red) && red %in% reduction_choices) {
-      recluster_new_data$umap_reduction_choice <- red
-      recluster_new_data$final_plot_cache_sig <- ""
-      recluster_new_data$final_plot_cache <- NULL
-      recluster_new_data$umap_plot_cache_sig <- ""
-      recluster_new_data$umap_plot_cache <- NULL
-      umap_plot_rendered(NULL)
-    } else {
-      .db_dbg("input_echo_ignored", sprintf("id=recluster_new_umap_reduction_select stale_value=%s", red))
+    if (!(nzchar(red) && red %in% reduction_choices)) return(invisible(NULL))
+    if (identical(red, .scalar_chr(recluster_new_data$umap_reduction_choice, default = ""))) {
       return(invisible(NULL))
     }
+    recluster_new_data$umap_reduction_choice <- red
+    .remember_visual_settings(umap_reduction_choice = red)
+    recluster_new_data$final_plot_cache_sig <- ""
+    recluster_new_data$final_plot_cache <- NULL
+    recluster_new_data$umap_plot_cache_sig <- ""
+    recluster_new_data$umap_plot_cache <- NULL
+    umap_plot_rendered(NULL)
     axis_choices <- .axis_index_choices(obj, red)
     if (!length(axis_choices)) return(invisible(NULL))
     axis_vals <- as.character(axis_choices)
@@ -4218,10 +7090,12 @@ recluster_new_server <- function(input, output, session, shared_data) {
     x_sel <- if (nzchar(x_now) && x_now %in% axis_vals) x_now else axis_vals[[1]]
     y_sel <- if (nzchar(y_now) && y_now %in% axis_vals && y_now != x_sel) y_now else if (length(axis_vals) >= 2L) axis_vals[[2]] else x_sel
     if (identical(x_now, x_sel) && identical(y_now, y_sel)) return(invisible(NULL))
-    recluster_new_data$umap_control_syncing <- TRUE
-    on.exit(recluster_new_data$umap_control_syncing <- FALSE, add = TRUE)
-    updateSelectInput(session, "recluster_new_umap_axis_x_select", choices = axis_choices, selected = x_sel)
-    updateSelectInput(session, "recluster_new_umap_axis_y_select", choices = axis_choices, selected = y_sel)
+    if (!identical(x_now, x_sel)) {
+      updateSelectInput(session, "recluster_new_umap_axis_x_select", choices = axis_choices, selected = x_sel)
+    }
+    if (!identical(y_now, y_sel)) {
+      updateSelectInput(session, "recluster_new_umap_axis_y_select", choices = axis_choices, selected = y_sel)
+    }
   }, ignoreInit = TRUE)
 
   observe({
@@ -4232,6 +7106,33 @@ recluster_new_server <- function(input, output, session, shared_data) {
     if (!nzchar(nm)) return(invisible(NULL))
     entry <- tryCatch(shared_data$all_seurat_objects[[nm]], error = function(e) NULL)
     shared_obj <- if (is.list(entry) && !is.null(entry$obj)) entry$obj else entry
+    shared_object_state <- .object_owned_state(shared_obj)
+    local_object_state <- .object_owned_state(recluster_new_data$seurat_obj)
+    if (!identical(shared_object_state, local_object_state)) {
+      .db_dbg(
+        "reload_object_owned_state_changed",
+        sprintf(
+          "object=%s shared_expr_groups=%d local_expr_groups=%d shared_active=%s local_active=%s",
+          nm,
+          length(shared_object_state$expression_selection$groups %||% list()),
+          length(local_object_state$expression_selection$groups %||% list()),
+          .scalar_chr(shared_object_state$expression_selection$active_group_id, default = ""),
+          .scalar_chr(local_object_state$expression_selection$active_group_id, default = "")
+        )
+      )
+      .load_active_recluster_new_object(nm)
+      return(invisible(NULL))
+    }
+    shared_controls_key <- .viz_controls_structure_key(shared_obj, nm)
+    local_controls_key <- .scalar_chr(recluster_new_data$viz_controls_structure_key, default = "")
+    if (nzchar(shared_controls_key) && !identical(shared_controls_key, local_controls_key)) {
+      .db_dbg(
+        "reload_embedding_state_changed",
+        sprintf("object=%s shared=%s local=%s", nm, shared_controls_key, local_controls_key)
+      )
+      .load_active_recluster_new_object(nm)
+      return(invisible(NULL))
+    }
     shared_sig <- .reduction_shape_signature(shared_obj)
     local_sig <- .reduction_shape_signature(recluster_new_data$seurat_obj)
     if (!nzchar(shared_sig) || identical(shared_sig, local_sig)) return(invisible(NULL))
@@ -4240,55 +7141,68 @@ recluster_new_server <- function(input, output, session, shared_data) {
     invisible(NULL)
   }, priority = 900)
 
-  observeEvent(recluster_new_loaded_object_name(), {
-    .db_dbg("seurat_obj_observer", sprintf("loaded object name changed to=%s", recluster_new_loaded_object_name()))
-    .sync_assay_gene_inputs(force = TRUE)
-    .sync_rule_assay_gene_inputs(force = TRUE)
-  }, ignoreInit = TRUE, priority = 950)
+  observe({
+    loaded_now <- recluster_new_loaded_object_name()
+    if (!.recluster_new_event_allowed("loaded_object_sync")) return(invisible(NULL))
+    .db_dbg("seurat_obj_observer", sprintf("loaded object name changed to=%s", loaded_now))
+    # Track only context settlement here. Catalog reads/writes stay isolated so
+    # selecting a gene or changing a plot control cannot re-enter this loader.
+    isolate({
+      .sync_assay_gene_inputs(force = TRUE)
+      .sync_rule_assay_gene_inputs(force = TRUE)
+    })
+  }, priority = 950)
 
   observeEvent(input$recluster_new_assay_select, {
+    if (!.recluster_new_event_allowed("umap_assay")) return(invisible(NULL))
     assay_event <- .scalar_chr(input$recluster_new_assay_select, default = "")
-    .db_dbg("assay_select_observer", sprintf("received value=%s, pending=%s", assay_event, .scalar_chr(recluster_new_data$pending_umap_assay_choice, default = "")))
-    if (isTRUE(.consume_pending_control("recluster_new_assay_select", assay_event))) {
-      .db_dbg("input_echo_ignored", sprintf("id=recluster_new_assay_select value=%s", assay_event))
-      return(invisible(NULL))
-    }
+    assay_changed <- FALSE
     obj <- recluster_new_data$seurat_obj
-    if (!is.null(obj) && inherits(obj, "Seurat") && !isTRUE(recluster_new_data$umap_control_syncing)) {
+    if (!is.null(obj) && inherits(obj, "Seurat")) {
       assay_choices <- .safe_assay_choices(obj)
       assay_now <- assay_event
       if (nzchar(assay_now) && assay_now %in% assay_choices) {
-        recluster_new_data$umap_assay_choice <- assay_now
+        assay_stored <- .scalar_chr(recluster_new_data$umap_assay_choice, default = "")
+        assay_changed <- !identical(assay_now, assay_stored)
+        if (isTRUE(assay_changed)) {
+          recluster_new_data$umap_assay_choice <- assay_now
+        }
       } else {
-        .db_dbg("input_echo_ignored", sprintf("id=recluster_new_assay_select stale_value=%s", assay_event))
         return(invisible(NULL))
       }
     }
-    .sync_assay_gene_inputs(force = FALSE)
+    .sync_assay_gene_inputs(force = assay_changed)
+    .remember_visual_settings(
+      umap_assay_choice = .scalar_chr(recluster_new_data$umap_assay_choice, default = assay_event)
+    )
   }, ignoreInit = TRUE, priority = 940)
 
   observeEvent(input$recluster_new_rule_assay_select, {
+    if (!.recluster_new_event_allowed("rule_assay")) return(invisible(NULL))
     assay_event <- .scalar_chr(input$recluster_new_rule_assay_select, default = "")
-    .db_dbg("rule_assay_select_observer", sprintf("received value=%s, pending=%s", assay_event, .scalar_chr(recluster_new_data$pending_rule_assay_choice, default = "")))
-    if (isTRUE(.consume_pending_control("recluster_new_rule_assay_select", assay_event))) {
-      .db_dbg("input_echo_ignored", sprintf("id=recluster_new_rule_assay_select value=%s", assay_event))
-      return(invisible(NULL))
-    }
+    assay_changed <- FALSE
     obj <- recluster_new_data$seurat_obj
-    if (!is.null(obj) && inherits(obj, "Seurat") && !isTRUE(recluster_new_data$umap_control_syncing)) {
+    if (!is.null(obj) && inherits(obj, "Seurat")) {
       assay_choices <- .safe_assay_choices(obj)
       assay_now <- assay_event
       if (nzchar(assay_now) && assay_now %in% assay_choices) {
-        recluster_new_data$rule_assay_choice <- assay_now
+        assay_stored <- .scalar_chr(recluster_new_data$rule_assay_choice, default = "")
+        assay_changed <- !identical(assay_now, assay_stored)
+        if (isTRUE(assay_changed)) {
+          recluster_new_data$rule_assay_choice <- assay_now
+        }
       } else {
-        .db_dbg("input_echo_ignored", sprintf("id=recluster_new_rule_assay_select stale_value=%s", assay_event))
         return(invisible(NULL))
       }
     }
-    .sync_rule_assay_gene_inputs(force = FALSE)
+    .sync_rule_assay_gene_inputs(force = assay_changed)
+    .remember_visual_settings(
+      rule_assay_choice = .scalar_chr(recluster_new_data$rule_assay_choice, default = assay_event)
+    )
   }, ignoreInit = TRUE, priority = 940)
 
   observeEvent(input$recluster_new_update_viz_btn, {
+    if (!.recluster_new_event_allowed("update_viz")) return(invisible(NULL))
     tab_now <- .scalar_chr(input$recluster_new_tabs, default = "umap")
     .recluster_new_overlay_show_plot("Updating plot...", tab_now = tab_now)
   }, ignoreInit = TRUE)
@@ -4303,6 +7217,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     if (seed %in% .workspace_tabs) seed else RECLUSTER_NEW_UI_TEXT$t_tab_selection_workspace
   })
   observeEvent(input$recluster_new_workspace_tabs, {
+    if (!.recluster_new_event_allowed("workspace_tabs")) return(invisible(NULL))
     tab_now <- .scalar_chr(input$recluster_new_workspace_tabs, default = "")
     if (!(tab_now %in% .workspace_tabs)) return(invisible(NULL))
     if (identical(.last_workspace_tab(), tab_now) &&
@@ -4317,7 +7232,9 @@ recluster_new_server <- function(input, output, session, shared_data) {
     if (!.db_tab_is_active()) return(invisible(NULL))
     tab_target <- .scalar_chr(.last_workspace_tab(), default = RECLUSTER_NEW_UI_TEXT$t_tab_selection_workspace)
     if (!(tab_target %in% .workspace_tabs)) tab_target <- RECLUSTER_NEW_UI_TEXT$t_tab_selection_workspace
-    suppressWarnings(try(updateTabsetPanel(session, "recluster_new_workspace_tabs", selected = tab_target), silent = TRUE))
+    if (!identical(.scalar_chr(input$recluster_new_workspace_tabs, default = ""), tab_target)) {
+      suppressWarnings(try(updateTabsetPanel(session, "recluster_new_workspace_tabs", selected = tab_target), silent = TRUE))
+    }
     invisible(NULL)
   }, ignoreInit = FALSE)
 
@@ -4340,16 +7257,23 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   output$recluster_new_source_col_ui <- renderUI({
+    if (!.recluster_new_context_is_settled()) return(NULL)
     cols <- .meta_cols()
     if (!length(cols)) return(helpText("No source metadata column available."))
-    selectInput("recluster_new_source_col", RECLUSTER_NEW_UI_TEXT$t_label_source_column, choices = cols, selected = cols[[1]])
+    selected <- .scalar_chr(isolate(input$recluster_new_source_col), default = "")
+    if (!(selected %in% cols)) selected <- cols[[1]]
+    selectInput("recluster_new_source_col", RECLUSTER_NEW_UI_TEXT$t_label_source_column, choices = cols, selected = selected)
   })
   output$recluster_new_group_col_ui <- renderUI({
+    if (!.recluster_new_context_is_settled()) return(NULL)
     cols <- .meta_cols()
     if (!length(cols)) return(helpText("No grouping column available."))
-    selectInput("recluster_new_group_col", RECLUSTER_NEW_UI_TEXT$t_label_group_by_column, choices = cols, selected = cols[[1]])
+    selected <- .scalar_chr(isolate(input$recluster_new_group_col), default = "")
+    if (!(selected %in% cols)) selected <- cols[[1]]
+    selectInput("recluster_new_group_col", RECLUSTER_NEW_UI_TEXT$t_label_group_by_column, choices = cols, selected = selected)
   })
   output$recluster_new_group_level_ui <- renderUI({
+    if (!.recluster_new_context_is_settled()) return(NULL)
     obj <- recluster_new_data$seurat_obj
     req(obj)
     gc <- .scalar_chr(input$recluster_new_group_col, default = "")
@@ -4357,11 +7281,14 @@ recluster_new_server <- function(input, output, session, shared_data) {
     lv <- sort(unique(as.character(obj@meta.data[[gc]] %||% character(0))), method = "radix")
     lv <- lv[nzchar(lv)]
     if (!length(lv)) return(helpText("No values in selected group column."))
-    selectInput("recluster_new_group_level", RECLUSTER_NEW_UI_TEXT$t_label_group_value, choices = lv, selected = lv[[1]])
+    selected <- .scalar_chr(isolate(input$recluster_new_group_level), default = "")
+    if (!(selected %in% lv)) selected <- lv[[1]]
+    selectInput("recluster_new_group_level", RECLUSTER_NEW_UI_TEXT$t_label_group_value, choices = lv, selected = selected)
   })
   output$recluster_new_relabel_target_col_ui <- renderUI({
+    if (!.recluster_new_context_is_settled()) return(NULL)
     cols <- .meta_cols()
-    selected <- .scalar_chr(input$recluster_new_relabel_target_col, default = "user_manual_label")
+    selected <- .scalar_chr(isolate(input$recluster_new_relabel_target_col), default = "user_manual_label")
     selectizeInput(
       "recluster_new_relabel_target_col",
       RECLUSTER_NEW_UI_TEXT$t_label_target_column,
@@ -4371,8 +7298,9 @@ recluster_new_server <- function(input, output, session, shared_data) {
     )
   })
   output$recluster_new_cell_target_col_ui <- renderUI({
+    if (!.recluster_new_context_is_settled()) return(NULL)
     cols <- .meta_cols()
-    selected <- .scalar_chr(input$recluster_new_cell_target_col, default = "user_manual_label")
+    selected <- .scalar_chr(isolate(input$recluster_new_cell_target_col), default = "user_manual_label")
     selectizeInput(
       "recluster_new_cell_target_col",
       RECLUSTER_NEW_UI_TEXT$t_label_target_column,
@@ -4383,22 +7311,18 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   output$recluster_new_viz_controls_ui <- renderUI({
-    req(recluster_new_data$seurat_obj)
-    obj <- recluster_new_data$seurat_obj
+    if (!.recluster_new_context_is_settled()) return(NULL)
+    structure_key <- recluster_new_data$viz_controls_structure_key
+    if (!nzchar(structure_key)) return(NULL)
+    obj <- isolate(recluster_new_data$seurat_obj)
+    if (is.null(obj) || !inherits(obj, "Seurat")) return(NULL)
     cur_tab <- .current_plot_tab()
-    cache_sig <- .viz_controls_cache_sig(obj, cur_tab)
+    cache_sig <- paste(structure_key, .scalar_chr(cur_tab, default = ""), sep = "::")
     stored_sig <- isolate(recluster_new_data$viz_controls_cache_sig)
     stored_cache <- isolate(recluster_new_data$viz_controls_cache)
-    if (identical(cache_sig, stored_sig) && !is.null(stored_cache)) {
-      return(stored_cache)
-    }
-    # Freeze the managed inputs before recreating DOM nodes so that the
-    # browser's echo from DOM destruction/recreation is silently discarded by
-    # Shiny. This is the correct fix for renderUI-induced input echo loops.
-    freezeReactiveValue(input, "recluster_new_assay_select")
-    freezeReactiveValue(input, "recluster_new_umap_reduction_select")
+    # Controls rebuild only when their object/assay/reduction structure changes.
     is_scatter_tab <- identical(cur_tab, "scatter")
-    available_cols <- names(recluster_new_data$metadata_profiles %||% list())
+    available_cols <- names(isolate(recluster_new_data$metadata_profiles) %||% list())
     assay_choices <- .safe_assay_choices(obj)
     assay_sel <- isolate(.current_umap_assay(obj))
     if (!nzchar(assay_sel) || !(assay_sel %in% assay_choices)) {
@@ -4409,6 +7333,24 @@ recluster_new_server <- function(input, output, session, shared_data) {
     all_genes <- .assay_feature_names(obj, assay_sel)
     all_genes <- as.character(all_genes %||% character(0))
     all_genes <- all_genes[!is.na(all_genes) & nzchar(all_genes)]
+    .schedule_gene_selectize_hydration(
+      if (is_scatter_tab) {
+        c("recluster_new_scatter_gene_x", "recluster_new_scatter_gene_y")
+      } else {
+        c(
+          "recluster_new_gene_expr_select_1",
+          "recluster_new_gene_expr_select_2",
+          "recluster_new_gene_expr_select_3"
+        )
+      },
+      all_genes,
+      .recluster_new_canonical_object_name(),
+      .recluster_new_context_revision(),
+      source = "viz_controls_ui"
+    )
+    if (identical(cache_sig, stored_sig) && !is.null(stored_cache)) {
+      return(stored_cache)
+    }
     stored_umap_genes <- isolate(as.character(recluster_new_data$umap_gene_values %||% c("", "", "")))
     length(stored_umap_genes) <- 3L
     stored_umap_genes[is.na(stored_umap_genes)] <- ""
@@ -4422,6 +7364,11 @@ recluster_new_server <- function(input, output, session, shared_data) {
     if (!(nzchar(scatter_x_sel) && scatter_x_sel %in% all_genes)) scatter_x_sel <- if (length(all_genes)) all_genes[[1]] else ""
     if (!(nzchar(scatter_y_sel) && scatter_y_sel %in% all_genes)) scatter_y_sel <- if (length(all_genes) >= 2) all_genes[[2]] else scatter_x_sel
     split_choices <- available_cols
+    scatter_color_choices <- c("None", available_cols)
+    scatter_color_sel <- isolate(.scalar_chr(input$recluster_new_scatter_color_by, default = ""))
+    if (!(scatter_color_sel %in% scatter_color_choices)) {
+      scatter_color_sel <- if (length(available_cols)) available_cols[[1]] else "None"
+    }
     color_choices <- c("Single Gene Expression", available_cols, "None")
     stroke_choices <- c("black", "white", "grey50")
     reduction_choices <- .embedding_reduction_choices(obj)
@@ -4432,7 +7379,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     }
     red_sel_now <- isolate(.current_umap_reduction(obj))
     if (!nzchar(red_sel_now) || !(red_sel_now %in% reduction_choices)) {
-      red_sel_now <- .preferred_embedding_reduction(obj)
+      red_sel_now <- .preferred_embedding_reduction(obj, entry = .current_reduction_entry())
     }
     axis_choices_now <- .axis_index_choices(obj, red_sel_now)
     axis_vals_now <- as.character(axis_choices_now)
@@ -4449,7 +7396,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     stroke_sel <- isolate(.scalar_chr(input$recluster_new_stroke_color, default = "black"))
     if (!(stroke_sel %in% stroke_choices)) stroke_sel <- "black"
 
-    visual_settings <- .current_visual_settings()
+    visual_settings <- isolate(.current_visual_settings())
     dot_size_sel <- suppressWarnings(as.numeric(visual_settings$dot_size %||% isolate(input$recluster_new_dot_size) %||% 1.0))
     dot_alpha_sel <- isolate(suppressWarnings(as.numeric(input$recluster_new_dot_alpha %||% 0.8)))
     stroke_w_sel <- suppressWarnings(as.numeric(visual_settings$stroke_width %||% isolate(input$recluster_new_stroke_width) %||% 0.1))
@@ -4477,9 +7424,9 @@ recluster_new_server <- function(input, output, session, shared_data) {
         div(
           class = "recluster-new-controls-row",
           fluidRow(
-            column(4, div(class = "recluster-new-controls-item", wl_gene_selectize_input("recluster_new_scatter_gene_x", RECLUSTER_NEW_UI_TEXT$t_label_scatter_gene_x, selected = scatter_x_sel, placeholder = "Type to search gene"))),
-            column(4, div(class = "recluster-new-controls-item", wl_gene_selectize_input("recluster_new_scatter_gene_y", RECLUSTER_NEW_UI_TEXT$t_label_scatter_gene_y, selected = scatter_y_sel, placeholder = "Type to search gene"))),
-            column(4, div(class = "recluster-new-controls-item", selectInput("recluster_new_scatter_color_by", RECLUSTER_NEW_UI_TEXT$t_label_scatter_color, choices = c("None", available_cols), selected = isolate(.scalar_chr(input$recluster_new_scatter_color_by, default = if (length(available_cols)) available_cols[[1]] else "None")))))
+            column(4, div(class = "recluster-new-controls-item", wl_gene_selectize_input("recluster_new_scatter_gene_x", RECLUSTER_NEW_UI_TEXT$t_label_scatter_gene_x, selected = scatter_x_sel, placeholder = "Type to search gene", min_chars = 0L, open_on_focus = TRUE, preload = TRUE, choices = all_genes, defer_choices = TRUE))),
+            column(4, div(class = "recluster-new-controls-item", wl_gene_selectize_input("recluster_new_scatter_gene_y", RECLUSTER_NEW_UI_TEXT$t_label_scatter_gene_y, selected = scatter_y_sel, placeholder = "Type to search gene", min_chars = 0L, open_on_focus = TRUE, preload = TRUE, choices = all_genes, defer_choices = TRUE))),
+            column(4, div(class = "recluster-new-controls-item", selectInput("recluster_new_scatter_color_by", RECLUSTER_NEW_UI_TEXT$t_label_scatter_color, choices = scatter_color_choices, selected = scatter_color_sel)))
           )
         ),
         div(
@@ -4521,9 +7468,9 @@ recluster_new_server <- function(input, output, session, shared_data) {
         div(
           class = "recluster-new-controls-row",
           fluidRow(
-            column(4, div(class = "recluster-new-controls-item", wl_gene_selectize_input("recluster_new_gene_expr_select_1", RECLUSTER_NEW_UI_TEXT$t_label_gene_1, selected = gene_sel, placeholder = "Type to search gene"))),
-            column(4, div(class = "recluster-new-controls-item", wl_gene_selectize_input("recluster_new_gene_expr_select_2", RECLUSTER_NEW_UI_TEXT$t_label_gene_2, selected = gene2_sel, placeholder = "Type to search gene"))),
-            column(4, div(class = "recluster-new-controls-item", wl_gene_selectize_input("recluster_new_gene_expr_select_3", RECLUSTER_NEW_UI_TEXT$t_label_gene_3, selected = gene3_sel, placeholder = "Type to search gene")))
+            column(4, div(class = "recluster-new-controls-item", wl_gene_selectize_input("recluster_new_gene_expr_select_1", RECLUSTER_NEW_UI_TEXT$t_label_gene_1, selected = gene_sel, placeholder = "Type to search gene", min_chars = 0L, open_on_focus = TRUE, preload = TRUE, choices = all_genes, defer_choices = TRUE))),
+            column(4, div(class = "recluster-new-controls-item", wl_gene_selectize_input("recluster_new_gene_expr_select_2", RECLUSTER_NEW_UI_TEXT$t_label_gene_2, selected = gene2_sel, placeholder = "Type to search gene", min_chars = 0L, open_on_focus = TRUE, preload = TRUE, choices = all_genes, defer_choices = TRUE))),
+            column(4, div(class = "recluster-new-controls-item", wl_gene_selectize_input("recluster_new_gene_expr_select_3", RECLUSTER_NEW_UI_TEXT$t_label_gene_3, selected = gene3_sel, placeholder = "Type to search gene", min_chars = 0L, open_on_focus = TRUE, preload = TRUE, choices = all_genes, defer_choices = TRUE)))
           )
         ),
         div(
@@ -4540,46 +7487,22 @@ recluster_new_server <- function(input, output, session, shared_data) {
       recluster_new_data$viz_controls_cache_sig <- cache_sig
       recluster_new_data$viz_controls_cache <- controls_ui
     })
-    if (!isTRUE(is_scatter_tab)) {
-      # Agent note: renderUI replaces these server-backed selectize bindings.
-      # Hydrate after Shiny binds replacement DOM; earlier updates are discarded.
-      genes_after_bind <- all_genes
-      selected_after_bind <- c(gene_sel, gene2_sel, gene3_sel)
-      session$onFlushed(function() {
-        for (i in seq_len(3L)) {
-          selected_i <- selected_after_bind[[i]]
-          wl_update_gene_selectize(
-            session,
-            sprintf("recluster_new_gene_expr_select_%d", i),
-            genes_after_bind,
-            selected = if (nzchar(selected_i) && selected_i %in% genes_after_bind) selected_i else character(0)
-          )
-        }
-        .db_dbg(
-          "viz_gene_selectize_hydrated",
-          sprintf("assay=%s genes=%d selected=%s", assay_sel, length(genes_after_bind), paste(selected_after_bind[nzchar(selected_after_bind)], collapse = ","))
-        )
-      }, once = TRUE)
-    }
     controls_ui
   })
 
   output$recluster_new_rule_viz_controls_ui <- renderUI({
-    req(recluster_new_data$seurat_obj)
-    obj <- recluster_new_data$seurat_obj
+    if (!.recluster_new_context_is_settled()) return(NULL)
+    structure_key <- recluster_new_data$viz_controls_structure_key
+    if (!nzchar(structure_key)) return(NULL)
+    obj <- isolate(recluster_new_data$seurat_obj)
+    if (is.null(obj) || !inherits(obj, "Seurat")) return(NULL)
     cur_tab <- .current_rule_plot_tab()
-    cache_sig <- .viz_controls_cache_sig(obj, paste0("rule:", cur_tab))
+    cache_sig <- paste(structure_key, paste0("rule:", .scalar_chr(cur_tab, default = "")), sep = "::")
     stored_sig <- isolate(recluster_new_data$rule_viz_controls_cache_sig)
     stored_cache <- isolate(recluster_new_data$rule_viz_controls_cache)
-    if (identical(cache_sig, stored_sig) && !is.null(stored_cache)) {
-      return(stored_cache)
-    }
-    # Freeze the managed inputs before recreating DOM nodes (same reason as
-    # in the main viz_controls_ui renderUI above).
-    freezeReactiveValue(input, "recluster_new_rule_assay_select")
-    freezeReactiveValue(input, "recluster_new_rule_umap_reduction_select")
+    # Controls rebuild only when their object/assay/reduction structure changes.
     is_scatter_tab <- identical(cur_tab, "rule_scatter")
-    available_cols <- names(recluster_new_data$metadata_profiles %||% list())
+    available_cols <- names(isolate(recluster_new_data$metadata_profiles) %||% list())
     assay_choices <- .safe_assay_choices(obj)
     assay_sel <- isolate(.current_rule_assay(obj))
     if (!nzchar(assay_sel) || !(assay_sel %in% assay_choices)) {
@@ -4590,6 +7513,20 @@ recluster_new_server <- function(input, output, session, shared_data) {
     all_genes <- .assay_feature_names(obj, assay_sel)
     all_genes <- as.character(all_genes %||% character(0))
     all_genes <- all_genes[!is.na(all_genes) & nzchar(all_genes)]
+    .schedule_gene_selectize_hydration(
+      if (is_scatter_tab) {
+        c("recluster_new_rule_scatter_gene_x", "recluster_new_rule_scatter_gene_y")
+      } else {
+        "recluster_new_rule_gene_expr_select_1"
+      },
+      all_genes,
+      .recluster_new_canonical_object_name(),
+      .recluster_new_context_revision(),
+      source = "rule_viz_controls_ui"
+    )
+    if (identical(cache_sig, stored_sig) && !is.null(stored_cache)) {
+      return(stored_cache)
+    }
     gene_sel <- isolate(.scalar_chr(input$recluster_new_rule_gene_expr_select_1, default = ""))
     if (!(nzchar(gene_sel) && gene_sel %in% all_genes)) gene_sel <- ""
     scatter_x_sel <- isolate(.scalar_chr(input$recluster_new_rule_scatter_gene_x, default = ""))
@@ -4597,6 +7534,11 @@ recluster_new_server <- function(input, output, session, shared_data) {
     if (!(nzchar(scatter_x_sel) && scatter_x_sel %in% all_genes)) scatter_x_sel <- if (length(all_genes)) all_genes[[1]] else ""
     if (!(nzchar(scatter_y_sel) && scatter_y_sel %in% all_genes)) scatter_y_sel <- if (length(all_genes) >= 2) all_genes[[2]] else scatter_x_sel
     split_choices <- available_cols
+    rule_scatter_color_choices <- c("None", available_cols)
+    rule_scatter_color_sel <- isolate(.scalar_chr(input$recluster_new_rule_scatter_color_by, default = ""))
+    if (!(rule_scatter_color_sel %in% rule_scatter_color_choices)) {
+      rule_scatter_color_sel <- if (length(available_cols)) available_cols[[1]] else "None"
+    }
     color_choices <- c("Single Gene Expression", available_cols, "None")
     stroke_choices <- c("black", "white", "grey50")
     reduction_choices <- .embedding_reduction_choices(obj)
@@ -4607,7 +7549,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     }
     red_sel_now <- isolate(.current_rule_reduction(obj))
     if (!nzchar(red_sel_now) || !(red_sel_now %in% reduction_choices)) {
-      red_sel_now <- .preferred_embedding_reduction(obj)
+      red_sel_now <- .preferred_embedding_reduction(obj, entry = .current_reduction_entry())
     }
     axis_choices_now <- .axis_index_choices(obj, red_sel_now)
     axis_vals_now <- as.character(axis_choices_now)
@@ -4654,10 +7596,10 @@ recluster_new_server <- function(input, output, session, shared_data) {
         div(
           class = "recluster-new-controls-row",
           fluidRow(
-            column(3, div(class = "recluster-new-controls-item", wl_gene_selectize_input("recluster_new_rule_scatter_gene_x", RECLUSTER_NEW_UI_TEXT$t_label_scatter_gene_x, selected = scatter_x_sel, placeholder = "Type to search gene"))),
-            column(3, div(class = "recluster-new-controls-item", wl_gene_selectize_input("recluster_new_rule_scatter_gene_y", RECLUSTER_NEW_UI_TEXT$t_label_scatter_gene_y, selected = scatter_y_sel, placeholder = "Type to search gene"))),
+            column(3, div(class = "recluster-new-controls-item", wl_gene_selectize_input("recluster_new_rule_scatter_gene_x", RECLUSTER_NEW_UI_TEXT$t_label_scatter_gene_x, selected = scatter_x_sel, placeholder = "Type to search gene", min_chars = 0L, open_on_focus = TRUE, preload = TRUE, choices = all_genes, defer_choices = TRUE))),
+            column(3, div(class = "recluster-new-controls-item", wl_gene_selectize_input("recluster_new_rule_scatter_gene_y", RECLUSTER_NEW_UI_TEXT$t_label_scatter_gene_y, selected = scatter_y_sel, placeholder = "Type to search gene", min_chars = 0L, open_on_focus = TRUE, preload = TRUE, choices = all_genes, defer_choices = TRUE))),
             column(3, div(class = "recluster-new-controls-item", checkboxGroupInput("recluster_new_rule_scatter_log_scale", RECLUSTER_NEW_UI_TEXT$t_label_scatter_axis_scale, choices = c("Log Scale X-axis", "Log Scale Y-axis")))),
-            column(3, div(class = "recluster-new-controls-item", selectInput("recluster_new_rule_scatter_color_by", RECLUSTER_NEW_UI_TEXT$t_label_scatter_color, choices = c("None", available_cols), selected = isolate(.scalar_chr(input$recluster_new_rule_scatter_color_by, default = if (length(available_cols)) available_cols[[1]] else "None")))))
+            column(3, div(class = "recluster-new-controls-item", selectInput("recluster_new_rule_scatter_color_by", RECLUSTER_NEW_UI_TEXT$t_label_scatter_color, choices = rule_scatter_color_choices, selected = rule_scatter_color_sel)))
           )
         )
       )
@@ -4686,7 +7628,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
           fluidRow(
             column(3, div(class = "recluster-new-controls-item", selectInput("recluster_new_rule_assay_select", RECLUSTER_NEW_UI_TEXT$t_label_assay, choices = assay_choices, selected = assay_sel))),
             column(2, div(class = "recluster-new-controls-item", selectInput("recluster_new_rule_slot_select", RECLUSTER_NEW_UI_TEXT$t_label_slot, choices = c("data", "counts", "scale.data"), selected = rule_slot_sel))),
-            column(4, div(class = "recluster-new-controls-item", wl_gene_selectize_input("recluster_new_rule_gene_expr_select_1", RECLUSTER_NEW_UI_TEXT$t_label_gene_shared, selected = gene_sel, placeholder = "Type to search gene"))),
+            column(4, div(class = "recluster-new-controls-item", wl_gene_selectize_input("recluster_new_rule_gene_expr_select_1", RECLUSTER_NEW_UI_TEXT$t_label_gene_shared, selected = gene_sel, placeholder = "Type to search gene", min_chars = 0L, open_on_focus = TRUE, preload = TRUE, choices = all_genes, defer_choices = TRUE))),
             column(3, div(class = "recluster-new-controls-item", uiOutput("recluster_new_rule_gene_expr_range_ui")))
           )
         ),
@@ -4708,6 +7650,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   output$recluster_new_rule_gene_expr_range_ui <- renderUI({
+    if (!.recluster_new_context_is_settled()) return(NULL)
     obj <- recluster_new_data$seurat_obj
     req(obj)
     gene_now <- .scalar_chr(input$recluster_new_rule_gene_expr_select_1, default = "")
@@ -4721,7 +7664,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     if (!all(is.finite(rng)) || rng[[1]] >= rng[[2]]) {
       return(div(class = "text-muted app-secondary-status", "Range unavailable"))
     }
-    cur <- suppressWarnings(as.numeric(input$recluster_new_rule_gene_expr_range %||% c(rng[[1]], rng[[2]])))
+    cur <- suppressWarnings(as.numeric(isolate(input$recluster_new_rule_gene_expr_range) %||% c(rng[[1]], rng[[2]])))
     if (length(cur) != 2 || any(!is.finite(cur))) cur <- rng
     cur[[1]] <- max(rng[[1]], min(cur[[1]], rng[[2]]))
     cur[[2]] <- max(cur[[1]], min(cur[[2]], rng[[2]]))
@@ -4757,6 +7700,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   observeEvent(input$recluster_new_rule_update_viz_btn, {
+    if (!.recluster_new_event_allowed("rule_update_viz")) return(invisible(NULL))
     invisible(NULL)
   }, ignoreInit = TRUE)
 
@@ -4769,13 +7713,19 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   observeEvent(list(recluster_new_data$seurat_obj, .rule_meta_cols()), {
+    if (!.recluster_new_event_allowed("rule_metadata_choices")) return(invisible(NULL))
     cols <- .rule_meta_cols()
-    a_now <- .scalar_chr(input$recluster_new_rule_a_col, default = "")
-    b_now <- .scalar_chr(input$recluster_new_rule_b_col, default = "")
-    g_now <- .scalar_chr(input$recluster_new_rule_group_col, default = "")
+    a_now <- .scalar_chr(isolate(input$recluster_new_rule_a_col), default = "")
+    b_now <- .scalar_chr(isolate(input$recluster_new_rule_b_col), default = "")
+    g_now <- .scalar_chr(isolate(input$recluster_new_rule_group_col), default = "")
     a_sel <- if (nzchar(a_now) && a_now %in% cols) a_now else if (length(cols)) cols[[1]] else ""
     b_sel <- if (nzchar(b_now) && b_now %in% cols) b_now else if (length(cols) >= 2) cols[[2]] else a_sel
     g_sel <- if (nzchar(g_now) && g_now %in% cols) g_now else if ("seurat_clusters" %in% cols) "seurat_clusters" else if (length(cols)) cols[[1]] else ""
+    choices_sig <- paste(c(cols, a_sel, b_sel, g_sel), collapse = "\u001f")
+    if (identical(.scalar_chr(recluster_new_data$rule_meta_choices_sig, default = ""), choices_sig)) {
+      return(invisible(NULL))
+    }
+    recluster_new_data$rule_meta_choices_sig <- choices_sig
     updateSelectInput(session, "recluster_new_rule_a_col", choices = cols, selected = a_sel)
     updateSelectInput(session, "recluster_new_rule_b_col", choices = cols, selected = b_sel)
     updateSelectInput(session, "recluster_new_rule_group_col", choices = cols, selected = g_sel)
@@ -4783,6 +7733,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }, ignoreInit = FALSE)
 
   output$recluster_new_rule_a_value_ui <- renderUI({
+    if (!.recluster_new_context_is_settled()) return(NULL)
     obj <- recluster_new_data$seurat_obj
     req(obj)
     col_a <- .scalar_chr(input$recluster_new_rule_a_col, default = "")
@@ -4792,7 +7743,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
       vv <- suppressWarnings(as.numeric(vec))
       rng <- range(vv[is.finite(vv)], na.rm = TRUE)
       if (!all(is.finite(rng))) return(helpText("No finite numeric values available."))
-      cur <- suppressWarnings(as.numeric(input$recluster_new_rule_a_range %||% rng))
+      cur <- suppressWarnings(as.numeric(isolate(input$recluster_new_rule_a_range) %||% rng))
       if (length(cur) != 2 || any(!is.finite(cur))) cur <- rng
       sliderInput("recluster_new_rule_a_range", "Rule A range", min = rng[[1]], max = rng[[2]], value = cur, step = max((rng[[2]] - rng[[1]]) / 200, 1e-9))
     } else {
@@ -4800,13 +7751,14 @@ recluster_new_server <- function(input, output, session, shared_data) {
       vals <- vals[!is.na(vals) & nzchar(vals)]
       lv <- .sort_numeric_first(unique(vals))
       auto <- .likely_positive_values(lv, col_name = col_a)
-      selected_now <- as.character(input$recluster_new_rule_a_values %||% auto)
+      selected_now <- as.character(isolate(input$recluster_new_rule_a_values) %||% auto)
       if (!length(selected_now)) selected_now <- auto
       checkboxGroupInput("recluster_new_rule_a_values", "Rule A values interpreted as TRUE", choices = lv, selected = intersect(selected_now, lv))
     }
   })
 
   output$recluster_new_rule_b_value_ui <- renderUI({
+    if (!.recluster_new_context_is_settled()) return(NULL)
     obj <- recluster_new_data$seurat_obj
     req(obj)
     col_b <- .scalar_chr(input$recluster_new_rule_b_col, default = "")
@@ -4816,7 +7768,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
       vv <- suppressWarnings(as.numeric(vec))
       rng <- range(vv[is.finite(vv)], na.rm = TRUE)
       if (!all(is.finite(rng))) return(helpText("No finite numeric values available."))
-      cur <- suppressWarnings(as.numeric(input$recluster_new_rule_b_range %||% rng))
+      cur <- suppressWarnings(as.numeric(isolate(input$recluster_new_rule_b_range) %||% rng))
       if (length(cur) != 2 || any(!is.finite(cur))) cur <- rng
       sliderInput("recluster_new_rule_b_range", "Rule B range", min = rng[[1]], max = rng[[2]], value = cur, step = max((rng[[2]] - rng[[1]]) / 200, 1e-9))
     } else {
@@ -4824,13 +7776,14 @@ recluster_new_server <- function(input, output, session, shared_data) {
       vals <- vals[!is.na(vals) & nzchar(vals)]
       lv <- .sort_numeric_first(unique(vals))
       auto <- .likely_positive_values(lv, col_name = col_b)
-      selected_now <- as.character(input$recluster_new_rule_b_values %||% auto)
+      selected_now <- as.character(isolate(input$recluster_new_rule_b_values) %||% auto)
       if (!length(selected_now)) selected_now <- auto
       checkboxGroupInput("recluster_new_rule_b_values", "Rule B values interpreted as TRUE", choices = lv, selected = intersect(selected_now, lv))
     }
   })
 
   observeEvent(input$recluster_new_rule_color_preset, {
+    if (!.recluster_new_event_allowed("rule_color_preset")) return(invisible(NULL))
     preset_key <- .scalar_chr(input$recluster_new_rule_color_preset, default = "default")
     presets <- .rule_color_presets()
     pal <- presets[[preset_key]]
@@ -4843,7 +7796,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     invisible(NULL)
   }, ignoreInit = TRUE)
 
-  rule_overlap_df <- reactive({
+  .rule_definition_state <- reactive({
     obj <- recluster_new_data$seurat_obj
     req(obj)
     md <- obj@meta.data
@@ -4854,11 +7807,59 @@ recluster_new_server <- function(input, output, session, shared_data) {
     md_cols <- colnames(md)
     cols_ready <- nzchar(col_a) && nzchar(col_b) && col_a %in% md_cols && col_b %in% md_cols
     if (!isTRUE(cols_ready)) {
-      diag_sig <- sprintf("A=%s|B=%s|md_cols=%d", col_a, col_b, length(md_cols))
-      if (!identical(recluster_new_data$debug_rule_overlap_state, diag_sig)) {
-        message(sprintf("[RULE_BROWSER][INIT_GUARD] Rule columns not ready yet: %s", diag_sig))
-        recluster_new_data$debug_rule_overlap_state <- diag_sig
+      return(list(
+        ready = FALSE,
+        definitions = list(
+          A = list(type = "unresolved", column = col_a),
+          B = list(type = "unresolved", column = col_b)
+        ),
+        diagnostic = sprintf("A=%s|B=%s|md_cols=%d", col_a, col_b, length(md_cols))
+      ))
+    }
+
+    vec_a <- md[[col_a]]
+    vec_b <- md[[col_b]]
+    def_a <- if (.is_numeric_rule_column(vec_a)) {
+      list(type = "numeric", column = col_a, range = as.numeric(input$recluster_new_rule_a_range %||% c(NA_real_, NA_real_)))
+    } else {
+      list(type = "categorical", column = col_a, selected = as.character(input$recluster_new_rule_a_values %||% character(0)))
+    }
+    def_b <- if (.is_numeric_rule_column(vec_b)) {
+      list(type = "numeric", column = col_b, range = as.numeric(input$recluster_new_rule_b_range %||% c(NA_real_, NA_real_)))
+    } else {
+      list(type = "categorical", column = col_b, selected = as.character(input$recluster_new_rule_b_values %||% character(0)))
+    }
+    list(
+      ready = TRUE,
+      definitions = list(A = def_a, B = def_b),
+      diagnostic = ""
+    )
+  })
+
+  observeEvent(.rule_definition_state(), {
+    if (!.recluster_new_event_allowed("rule_definition")) return(invisible(NULL))
+    state_now <- .rule_definition_state()
+    definitions_now <- state_now$definitions %||% list()
+    if (!identical(recluster_new_data$rule_definitions, definitions_now)) {
+      recluster_new_data$rule_definitions <- definitions_now
+    }
+    diagnostic_now <- .scalar_chr(state_now$diagnostic, default = "")
+    if (!identical(recluster_new_data$debug_rule_overlap_state, diagnostic_now)) {
+      if (nzchar(diagnostic_now)) {
+        .db_dbg("rule_columns_not_ready", diagnostic_now)
       }
+      recluster_new_data$debug_rule_overlap_state <- diagnostic_now
+    }
+  }, ignoreInit = FALSE)
+
+  rule_overlap_df <- reactive({
+    obj <- recluster_new_data$seurat_obj
+    req(obj)
+    md <- obj@meta.data
+    req(is.data.frame(md), nrow(md))
+
+    definition_state <- .rule_definition_state()
+    if (!isTRUE(definition_state$ready)) {
       cell_ids <- rownames(md)
       if (!length(cell_ids)) cell_ids <- as.character(seq_len(nrow(md)))
       unresolved <- data.frame(
@@ -4869,31 +7870,16 @@ recluster_new_server <- function(input, output, session, shared_data) {
         stringsAsFactors = FALSE
       )
       unresolved$overlap_group <- factor(unresolved$overlap_group, levels = c("A_only", "B_only", "A_B", "Neither", "Missing"))
-      recluster_new_data$rule_definitions <- list(
-        A = list(type = "unresolved", column = col_a),
-        B = list(type = "unresolved", column = col_b)
-      )
       return(unresolved)
     }
-    if (nzchar(recluster_new_data$debug_rule_overlap_state %||% "")) {
-      recluster_new_data$debug_rule_overlap_state <- ""
-    }
 
+    definitions <- definition_state$definitions
+    col_a <- .scalar_chr(definitions$A$column, default = "")
+    col_b <- .scalar_chr(definitions$B$column, default = "")
     vec_a <- md[[col_a]]
     vec_b <- md[[col_b]]
-    is_num_a <- .is_numeric_rule_column(vec_a)
-    is_num_b <- .is_numeric_rule_column(vec_b)
-    def_a <- if (is_num_a) {
-      list(type = "numeric", column = col_a, range = as.numeric(input$recluster_new_rule_a_range %||% c(NA_real_, NA_real_)))
-    } else {
-      list(type = "categorical", column = col_a, selected = as.character(input$recluster_new_rule_a_values %||% character(0)))
-    }
-    def_b <- if (is_num_b) {
-      list(type = "numeric", column = col_b, range = as.numeric(input$recluster_new_rule_b_range %||% c(NA_real_, NA_real_)))
-    } else {
-      list(type = "categorical", column = col_b, selected = as.character(input$recluster_new_rule_b_values %||% character(0)))
-    }
-    recluster_new_data$rule_definitions <- list(A = def_a, B = def_b)
+    def_a <- definitions$A
+    def_b <- definitions$B
 
     a_state <- .classify_rule_column(vec_a, def_a)
     b_state <- .classify_rule_column(vec_b, def_b)
@@ -4918,53 +7904,110 @@ recluster_new_server <- function(input, output, session, shared_data) {
     as.character(rdf$cell_id[rdf$overlap_group == grp])
   })
 
+  .plotly_selection_key_prefix <- function() {
+    paste0("dbctx:", .recluster_new_context_revision(), "::")
+  }
+
+  .plotly_selection_keys <- function(cell_ids) {
+    paste0(.plotly_selection_key_prefix(), as.character(cell_ids %||% character(0)))
+  }
+
   .plotly_selected_keys <- function(ev, source_name) {
     if (is.null(ev) || (is.list(ev) && length(ev) == 0L)) return(character(0))
     if (!is.data.frame(ev)) {
-      message(sprintf(
-        "[Data Browser] Ignored malformed plotly_selected payload from %s: class=%s length=%d",
-        source_name,
-        paste(class(ev), collapse = "/"),
-        length(ev)
-      ))
+      .db_dbg(
+        "plotly_selected_malformed",
+        sprintf(
+          "source=%s class=%s length=%d",
+          source_name,
+          paste(class(ev), collapse = "/"),
+          length(ev)
+        )
+      )
       return(character(0))
     }
-    if (nrow(ev) == 0L || !("key" %in% names(ev))) return(character(0))
+    # Plotly emits an empty data frame or a payload without keys while a graph
+    # is being rebound/redrawn. That is transport state, not explicit user
+    # deselection; only explicit double-click or workflow actions clear state.
+    if (nrow(ev) == 0L || !("key" %in% names(ev))) return(NULL)
     keys <- as.character(ev[["key"]])
+    keys <- keys[!is.na(keys) & nzchar(keys)]
+    if (!length(keys)) return(NULL)
+    prefix <- .plotly_selection_key_prefix()
+    if (any(substr(keys, 1L, nchar(prefix)) != prefix)) {
+      .db_dbg(
+        "plotly_selected_stale",
+        sprintf("source=%s expected_context=%s", source_name, prefix)
+      )
+      return(NULL)
+    }
+    keys <- substr(keys, nchar(prefix) + 1L, nchar(keys))
     unique(keys[!is.na(keys) & nzchar(keys)])
   }
 
-  observeEvent(event_data("plotly_selected", source = "recluster_new_rule_plot_source"), {
-    ev <- event_data("plotly_selected", source = "recluster_new_rule_plot_source")
+  .clear_main_plot_selection <- function(source = "") {
+    if (!.recluster_new_event_allowed(source)) return(invisible(NULL))
+    previous <- isolate(lasso_selected_cells_state())
+    if (length(previous)) lasso_selected_cells_state(character(0))
+    if (identical(.scalar_chr(selection_owner_state(), default = "none"), "manual")) {
+      .restore_selection_owner_after_manual_clear(source)
+    }
+    .db_dbg("manual_selection_clear", sprintf("source=%s cells=%d", source, length(previous)))
+    invisible(NULL)
+  }
+
+  .clear_rule_plot_selection <- function(source = "") {
+    if (!.recluster_new_event_allowed(source)) return(invisible(NULL))
+    previous <- isolate(rule_lasso_cells_state())
+    if (length(previous)) rule_lasso_cells_state(character(0))
+    .db_dbg("rule_selection_clear", sprintf("source=%s cells=%d", source, length(previous)))
+    invisible(NULL)
+  }
+
+  observeEvent(.plotly_selection_event_data("plotly_selected", "recluster_new_rule_plot_source"), {
+    if (!.recluster_new_event_allowed("rule_plot_selection")) return(invisible(NULL))
+    ev <- .plotly_selection_event_data("plotly_selected", "recluster_new_rule_plot_source")
     next_cells <- .plotly_selected_keys(ev, "recluster_new_rule_plot_source")
+    if (is.null(next_cells)) return(invisible(NULL))
     if (!identical(sort(next_cells), sort(isolate(rule_lasso_cells_state())))) {
       rule_lasso_cells_state(next_cells)
     }
     invisible(NULL)
-  }, ignoreInit = TRUE)
+  }, ignoreInit = TRUE, ignoreNULL = TRUE)
 
-  observeEvent(event_data("plotly_selected", source = "recluster_new_plot_source"), {
-    ev <- event_data("plotly_selected", source = "recluster_new_plot_source")
+  observeEvent(.plotly_selection_event_data("plotly_doubleclick", "recluster_new_rule_plot_source"), {
+    .clear_rule_plot_selection("rule_plot_doubleclick")
+  }, ignoreInit = TRUE, ignoreNULL = TRUE)
+
+  observeEvent(.plotly_selection_event_data("plotly_selected", "recluster_new_plot_source"), {
+    if (!.recluster_new_event_allowed("plot_selection")) return(invisible(NULL))
+    ev <- .plotly_selection_event_data("plotly_selected", "recluster_new_plot_source")
     next_cells <- .plotly_selected_keys(ev, "recluster_new_plot_source")
-    if (length(next_cells)) {
-      expr_state <- .expr_state_normalize(recluster_new_data$expr_selection)
-      active_group_id <- .scalar_chr(expr_state$active_group_id, default = "")
-      if (nzchar(active_group_id)) {
-        # Agent note: Direct lasso is an explicit replacement selection.
-        # Preserve saved group definition, but deactivate its cell contribution.
-        expr_state$active_group_id <- ""
-        .expr_set_state(expr_state)
-        .db_dbg(
-          "lasso_deactivate_expr_group",
-          sprintf("group_id=%s selected_cells=%d", active_group_id, length(next_cells))
-        )
-      }
-    }
+    if (is.null(next_cells)) return(invisible(NULL))
     if (!identical(sort(next_cells), sort(isolate(lasso_selected_cells_state())))) {
       lasso_selected_cells_state(next_cells)
     }
+    if (length(next_cells)) {
+      .set_selection_owner("manual", "plotly_selected")
+    } else if (identical(.scalar_chr(selection_owner_state(), default = "none"), "manual")) {
+      remaining_manual <- unique(c(
+        as.character(recluster_new_data$selected_cells %||% character(0)),
+        as.character(enabled_group_cells() %||% character(0))
+      ))
+      remaining_manual <- remaining_manual[nzchar(remaining_manual)]
+      if (!length(remaining_manual)) .restore_selection_owner_after_manual_clear("plotly_deselected")
+    }
+    .db_dbg(
+      "manual_selection_event",
+      sprintf("source=plotly_selected cells=%d expression_active=%s", length(next_cells),
+              nzchar(.scalar_chr(recluster_new_data$expr_selection$active_group_id, default = "")))
+    )
     invisible(NULL)
-  }, ignoreInit = TRUE)
+  }, ignoreInit = TRUE, ignoreNULL = TRUE)
+
+  observeEvent(.plotly_selection_event_data("plotly_doubleclick", "recluster_new_plot_source"), {
+    .clear_main_plot_selection("plot_doubleclick")
+  }, ignoreInit = TRUE, ignoreNULL = TRUE)
 
   rule_lasso_cells <- reactive({
     rule_lasso_cells_state()
@@ -4974,30 +8017,70 @@ recluster_new_server <- function(input, output, session, shared_data) {
     lasso_selected_cells_state()
   })
 
+  output$recluster_new_lasso_selection_count <- renderText({
+    sprintf("%d cells selected by lasso", length(lasso_selected_cells()))
+  })
+  outputOptions(output, "recluster_new_lasso_selection_count", suspendWhenHidden = FALSE)
+
+  observeEvent(input$recluster_new_clear_lasso_btn, {
+    .clear_main_plot_selection("clear_lasso_button")
+  }, ignoreInit = TRUE)
+
   observe({
+    if (!.recluster_new_event_allowed("manual_card_highlight")) return(invisible(NULL))
     lasso_cells <- lasso_selected_cells_state()
-    expr_state <- .expr_state_normalize(recluster_new_data$expr_selection)
-    active_group_id <- .scalar_chr(expr_state$active_group_id, default = "")
-    if (length(lasso_cells) > 0L && nzchar(active_group_id)) {
-      # Agent note: Lasso has strict precedence over expression groups. Watch
-      # both states so later group activation cannot produce two active cards.
-      expr_state$active_group_id <- ""
-      .expr_set_state(expr_state)
-      .db_dbg(
-        "lasso_precedence_reconciled",
-        sprintf("group_id=%s selected_cells=%d", active_group_id, length(lasso_cells))
-      )
-    }
-    enabled <- length(lasso_cells) > 0L
+    owner_now <- .scalar_chr(selection_owner_state(), default = "none")
+    enabled <- identical(owner_now, "manual") && length(lasso_cells) > 0L
     session$sendCustomMessage(
       "recluster-new-toggle-class",
       list(
-        id = "recluster_new_advanced_manual_card",
+        object = .recluster_new_canonical_object_name(),
+        context_revision = .recluster_new_context_revision(),
+        id = "recluster_new_lasso_selection_card",
         className = "is-violet-highlight-source",
         enabled = enabled
       )
     )
-    .db_dbg("lasso_card_highlight", sprintf("enabled=%s", enabled))
+    .db_dbg("lasso_card_highlight", sprintf("enabled=%s owner=%s lasso_cells=%d", enabled, owner_now, length(lasso_cells)))
+  })
+
+  observe({
+    if (!.recluster_new_event_allowed("saved_group_card_highlight")) return(invisible(NULL))
+    owner_now <- .scalar_chr(selection_owner_state(), default = "none")
+    group_cells <- as.character(enabled_group_cells() %||% character(0))
+    lasso_cells <- as.character(lasso_selected_cells_state() %||% character(0))
+    enabled <- identical(owner_now, "manual") && length(group_cells) > 0L && !length(lasso_cells)
+    class_message <- list(
+      object = .recluster_new_canonical_object_name(),
+      context_revision = .recluster_new_context_revision(),
+      id = "recluster_new_saved_groups_card",
+      className = "is-cyan-highlight-source",
+      enabled = enabled
+    )
+    session$sendCustomMessage("recluster-new-toggle-class", class_message)
+    if (isTRUE(enabled)) {
+      # Saved-group ownership is exclusive with violet manual-card emphasis.
+      session$sendCustomMessage(
+        "recluster-new-toggle-class",
+        modifyList(class_message, list(
+          id = "recluster_new_lasso_selection_card",
+          className = "is-violet-highlight-source",
+          enabled = FALSE
+        ))
+      )
+      session$sendCustomMessage(
+        "recluster-new-toggle-class",
+        modifyList(class_message, list(
+          id = "recluster_new_advanced_manual_card",
+          className = "is-violet-highlight-source",
+          enabled = FALSE
+        ))
+      )
+    }
+    .db_dbg(
+      "saved_group_card_highlight",
+      sprintf("enabled=%s owner=%s group_cells=%d lasso_cells=%d", enabled, owner_now, length(group_cells), length(lasso_cells))
+    )
   })
 
   rule_combined_cells <- reactive({
@@ -5015,17 +8098,26 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   observe({
+    if (!.recluster_new_event_allowed("rule_selection_state")) return(invisible(NULL))
     grp <- .scalar_chr(input$recluster_new_rule_selected_group, default = "All")
     mode_now <- .scalar_chr(input$recluster_new_rule_manual_mode, default = "union")
     if (!grp %in% c("A_only", "B_only", "A_B", "Neither", "Missing", "All")) grp <- "All"
     if (!mode_now %in% c("union", "intersection")) mode_now <- "union"
-    recluster_new_data$rule_selected_group <- grp
-    recluster_new_data$rule_manual_combine_mode <- mode_now
-    recluster_new_data$rule_active_cells <- unique(as.character(rule_combined_cells() %||% character(0)))
+    if (!identical(.scalar_chr(recluster_new_data$rule_selected_group, default = "All"), grp)) {
+      recluster_new_data$rule_selected_group <- grp
+    }
+    if (!identical(.scalar_chr(recluster_new_data$rule_manual_combine_mode, default = "union"), mode_now)) {
+      recluster_new_data$rule_manual_combine_mode <- mode_now
+    }
+    next_active_cells <- unique(as.character(rule_combined_cells() %||% character(0)))
+    if (!identical(as.character(recluster_new_data$rule_active_cells %||% character(0)), next_active_cells)) {
+      recluster_new_data$rule_active_cells <- next_active_cells
+    }
     invisible(NULL)
   })
 
   observeEvent(input$recluster_new_tabs, {
+    if (!.recluster_new_event_allowed("scatter_tab_hydrate")) return(invisible(NULL))
     if (!identical(.current_plot_tab(), "scatter")) return(invisible(NULL))
     obj <- recluster_new_data$seurat_obj
     req(obj)
@@ -5039,11 +8131,16 @@ recluster_new_server <- function(input, output, session, shared_data) {
     scatter_y_now <- .scalar_chr(input$recluster_new_scatter_gene_y, default = "")
     x_sel <- if (nzchar(scatter_x_now) && scatter_x_now %in% all_genes) scatter_x_now else if (length(all_genes)) all_genes[[1]] else character(0)
     y_sel <- if (nzchar(scatter_y_now) && scatter_y_now %in% all_genes) scatter_y_now else if (length(all_genes) >= 2) all_genes[[2]] else x_sel
-    wl_update_gene_selectize(session, "recluster_new_scatter_gene_x", all_genes, selected = x_sel)
-    wl_update_gene_selectize(session, "recluster_new_scatter_gene_y", all_genes, selected = y_sel)
+    if (!identical(scatter_x_now, x_sel)) {
+      .db_update_gene_selectize("recluster_new_scatter_gene_x", all_genes, selected = x_sel)
+    }
+    if (!identical(scatter_y_now, y_sel)) {
+      .db_update_gene_selectize("recluster_new_scatter_gene_y", all_genes, selected = y_sel)
+    }
   }, ignoreInit = TRUE)
 
   observeEvent(input$recluster_new_rule_plot_tabs, {
+    if (!.recluster_new_event_allowed("rule_scatter_tab_hydrate")) return(invisible(NULL))
     if (!identical(.current_rule_plot_tab(), "rule_scatter")) return(invisible(NULL))
     obj <- recluster_new_data$seurat_obj
     req(obj)
@@ -5057,25 +8154,26 @@ recluster_new_server <- function(input, output, session, shared_data) {
     scatter_y_now <- .scalar_chr(input$recluster_new_rule_scatter_gene_y, default = "")
     x_sel <- if (nzchar(scatter_x_now) && scatter_x_now %in% all_genes) scatter_x_now else if (length(all_genes)) all_genes[[1]] else character(0)
     y_sel <- if (nzchar(scatter_y_now) && scatter_y_now %in% all_genes) scatter_y_now else if (length(all_genes) >= 2) all_genes[[2]] else x_sel
-    wl_update_gene_selectize(session, "recluster_new_rule_scatter_gene_x", all_genes, selected = x_sel)
-    wl_update_gene_selectize(session, "recluster_new_rule_scatter_gene_y", all_genes, selected = y_sel)
+    if (!identical(scatter_x_now, x_sel)) {
+      .db_update_gene_selectize("recluster_new_rule_scatter_gene_x", all_genes, selected = x_sel)
+    }
+    if (!identical(scatter_y_now, y_sel)) {
+      .db_update_gene_selectize("recluster_new_rule_scatter_gene_y", all_genes, selected = y_sel)
+    }
   }, ignoreInit = TRUE)
 
   observeEvent(input$recluster_new_rule_umap_reduction_select, {
+    if (!.recluster_new_event_allowed("rule_reduction")) return(invisible(NULL))
     obj <- recluster_new_data$seurat_obj
     if (is.null(obj) || !inherits(obj, "Seurat")) return(invisible(NULL))
     red <- .scalar_chr(input$recluster_new_rule_umap_reduction_select, default = "")
-    if (isTRUE(.consume_pending_control("recluster_new_rule_umap_reduction_select", red))) {
-      .db_dbg("input_echo_ignored", sprintf("id=recluster_new_rule_umap_reduction_select value=%s", red))
-      return(invisible(NULL))
-    }
     reduction_choices <- .embedding_reduction_choices(obj)
-    if (nzchar(red) && red %in% reduction_choices) {
-      recluster_new_data$rule_reduction_choice <- red
-    } else {
-      .db_dbg("input_echo_ignored", sprintf("id=recluster_new_rule_umap_reduction_select stale_value=%s", red))
+    if (!(nzchar(red) && red %in% reduction_choices)) return(invisible(NULL))
+    if (identical(red, .scalar_chr(recluster_new_data$rule_reduction_choice, default = ""))) {
       return(invisible(NULL))
     }
+    recluster_new_data$rule_reduction_choice <- red
+    .remember_visual_settings(rule_reduction_choice = red)
     axis_choices <- .axis_index_choices(obj, red)
     if (!length(axis_choices)) return(invisible(NULL))
     axis_vals <- as.character(axis_choices)
@@ -5083,8 +8181,12 @@ recluster_new_server <- function(input, output, session, shared_data) {
     y_now <- .scalar_chr(input$recluster_new_rule_umap_axis_y_select, default = "")
     x_sel <- if (nzchar(x_now) && x_now %in% axis_vals) x_now else axis_vals[[1]]
     y_sel <- if (nzchar(y_now) && y_now %in% axis_vals && y_now != x_sel) y_now else if (length(axis_vals) >= 2L) axis_vals[[2]] else x_sel
-    updateSelectInput(session, "recluster_new_rule_umap_axis_x_select", choices = axis_choices, selected = x_sel)
-    updateSelectInput(session, "recluster_new_rule_umap_axis_y_select", choices = axis_choices, selected = y_sel)
+    if (!identical(x_now, x_sel)) {
+      updateSelectInput(session, "recluster_new_rule_umap_axis_x_select", choices = axis_choices, selected = x_sel)
+    }
+    if (!identical(y_now, y_sel)) {
+      updateSelectInput(session, "recluster_new_rule_umap_axis_y_select", choices = axis_choices, selected = y_sel)
+    }
   }, ignoreInit = TRUE)
 
   output$recluster_new_legend_panel_ui <- renderUI({ NULL })
@@ -5117,6 +8219,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }
 
   observeEvent(recluster_new_data$metadata_profiles, {
+    if (!.recluster_new_event_allowed("metadata_profiles")) return(invisible(NULL))
     profiles <- recluster_new_data$metadata_profiles
     if (!length(profiles)) return(invisible(NULL))
     col_now <- .resolve_metadata_browser_column(.scalar_chr(recluster_new_data$metadata_open_column, default = ""), names(profiles))
@@ -5134,8 +8237,13 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }, ignoreInit = TRUE)
 
   output$recluster_new_metadata_selector_ui <- renderUI({
-    profiles <- recluster_new_data$metadata_profiles
+    if (!.recluster_new_context_is_settled()) return(NULL)
+    structure_key <- recluster_new_data$metadata_selector_structure_key
+    if (!nzchar(structure_key)) return(NULL)
+    profiles <- isolate(recluster_new_data$metadata_profiles)
+    obj_for_colors <- isolate(recluster_new_data$seurat_obj)
     if (!length(profiles)) return(helpText(RECLUSTER_NEW_UI_TEXT$t_text_no_metadata))
+    object_name_now <- .recluster_new_canonical_object_name()
 
     buckets <- split(names(profiles), vapply(profiles, function(p) p$bucket, character(1)))
     norm_state <- .normalize_metadata_open_state(
@@ -5159,10 +8267,17 @@ recluster_new_server <- function(input, output, session, shared_data) {
         if (isTRUE(p$numeric_like)) mode_choices <- c(mode_choices, "range" = RECLUSTER_NEW_UI_TEXT$t_mode_range)
 
         control_ui <- if (isTRUE(is_open_col)) {
-          mode_choice <- isolate(.scalar_chr(input[[mode_id]], default = p$default_mode %||% "category"))
+          # Mode changes alter control shape (category checkboxes vs range
+          # slider). Keep mode as a direct dependency so this UI remounts only
+          # for that structural transition; range/checkbox values stay
+          # isolated and therefore do not remount on every value change.
+          mode_choice <- .scalar_chr(input[[mode_id]], default = p$default_mode %||% "category")
           mode_now <- .resolved_mode(p, mode_choice)
           mode_selected <- if (mode_now %in% names(mode_choices)) mode_now else "category"
           core_ui <- if (identical(mode_now, "range") && isTRUE(p$numeric_like) && is.finite(p$min_val) && is.finite(p$max_val) && (p$min_val < p$max_val)) {
+            range_now <- suppressWarnings(as.numeric(isolate(input[[rng_id]]) %||% c(p$min_val, p$max_val)))
+            if (length(range_now) != 2L || any(!is.finite(range_now))) range_now <- c(p$min_val, p$max_val)
+            range_now <- sort(pmax(p$min_val, pmin(p$max_val, range_now[seq_len(2L)])))
             tagList(
               div(
                 class = "recluster-new-range-legend",
@@ -5178,71 +8293,137 @@ recluster_new_server <- function(input, output, session, shared_data) {
                 label = col_name,
                 min = p$min_val,
                 max = p$max_val,
-                value = c(p$min_val, p$max_val),
+                value = range_now,
                 step = max((p$max_val - p$min_val) / 200, 1e-9)
               )
             )
           } else {
-            level_colors <- .level_color_map(recluster_new_data$seurat_obj, col_name, p$levels)
+            level_colors <- .level_color_map(obj_for_colors, col_name, p$levels)
             tagList(
               div(
                 class = "recluster-new-metadata-color-toolbar",
-                style = "margin-bottom:8px;",
+                style = "display:flex;gap:6px;margin-bottom:8px;",
                 actionButton(
                   "recluster_new_metadata_color_popup",
                   RECLUSTER_NEW_UI_TEXT$t_btn_metadata_customize_colors,
-                  icon = icon("paint-brush"),
+                  icon = .recluster_new_bootstrap_icon(
+                    "palette",
+                    class = "recluster-new-bootstrap-icon recluster-new-palette-icon"
+                  ),
+                  class = "btn btn-default btn-sm"
+                ),
+                actionButton(
+                  "recluster_new_metadata_undo_rename",
+                  RECLUSTER_NEW_UI_TEXT$t_btn_metadata_undo_rename,
+                  icon = icon("undo"),
                   class = "btn btn-default btn-sm"
                 )
               ),
-              lapply(p$levels, function(level_name) {
-                checked_now <- isolate(isTRUE(input[[.cat_level_input_id(col_name, level_name)]] %||% TRUE))
+              lapply(seq_along(p$levels), function(level_index) {
+                level_name <- p$levels[[level_index]]
+                checked_now <- .metadata_level_checked(col_name, level_name, isolate_input = TRUE)
                 color_now <- toupper(.scalar_chr(level_colors[[level_name]], default = "#4B5563"))
                 if (!.is_hex_color(color_now)) color_now <- "#4B5563"
+                rename_input_id <- .metadata_level_rename_input_id(col_name, level_name, level_index)
+                rename_editor_id <- paste0(rename_input_id, "__editor")
                 level_focus_click <- sprintf(
-                  "event.preventDefault();event.stopPropagation();Shiny.setInputValue('recluster_new_meta_level_highlight',{col:%s,level:%s,nonce:Date.now()},{priority:'event'});return false;",
+                  "event.preventDefault();event.stopPropagation();Shiny.setInputValue('recluster_new_meta_level_highlight',{col:%s,level:%s,object:%s,context_revision:%s,nonce:Date.now()},{priority:'event'});return false;",
                   jsonlite::toJSON(col_name, auto_unbox = TRUE),
-                  jsonlite::toJSON(level_name, auto_unbox = TRUE)
+                  jsonlite::toJSON(level_name, auto_unbox = TRUE),
+                  jsonlite::toJSON(object_name_now, auto_unbox = TRUE),
+                  jsonlite::toJSON(.recluster_new_context_revision(), auto_unbox = TRUE)
                 )
                 level_focus_hover <- sprintf(
-                  "window.__reclusterNewHoverLevel && window.__reclusterNewHoverLevel(%s,%s);",
+                  "window.__reclusterNewHoverLevel && window.__reclusterNewHoverLevel(%s,%s,%s,%s);",
                   jsonlite::toJSON(col_name, auto_unbox = TRUE),
-                  jsonlite::toJSON(level_name, auto_unbox = TRUE)
+                  jsonlite::toJSON(level_name, auto_unbox = TRUE),
+                  jsonlite::toJSON(object_name_now, auto_unbox = TRUE),
+                  jsonlite::toJSON(.recluster_new_context_revision(), auto_unbox = TRUE)
                 )
                 color_swatch_click <- sprintf(
-                  "event.preventDefault();event.stopPropagation();Shiny.setInputValue('recluster_new_metadata_single_color_popup',{col:%s,level:%s,nonce:Date.now()},{priority:'event'});return false;",
+                  "event.preventDefault();event.stopPropagation();Shiny.setInputValue('recluster_new_metadata_single_color_popup',{col:%s,level:%s,object:%s,context_revision:%s,nonce:Date.now()},{priority:'event'});return false;",
                   jsonlite::toJSON(col_name, auto_unbox = TRUE),
-                  jsonlite::toJSON(level_name, auto_unbox = TRUE)
+                  jsonlite::toJSON(level_name, auto_unbox = TRUE),
+                  jsonlite::toJSON(object_name_now, auto_unbox = TRUE),
+                  jsonlite::toJSON(.recluster_new_context_revision(), auto_unbox = TRUE)
+                )
+                rename_toggle_click <- sprintf(
+                  "event.preventDefault();event.stopPropagation();var x=document.getElementById(%s);if(x){x.hidden=!x.hidden;if(!x.hidden){var i=document.getElementById(%s);if(i){i.focus();i.select();}}}return false;",
+                  jsonlite::toJSON(rename_editor_id, auto_unbox = TRUE),
+                  jsonlite::toJSON(rename_input_id, auto_unbox = TRUE)
+                )
+                rename_save_click <- sprintf(
+                  "event.preventDefault();event.stopPropagation();var i=document.getElementById(%s);if(i){Shiny.setInputValue('recluster_new_metadata_level_rename',{col:%s,level:%s,value:i.value,object:%s,context_revision:%s,nonce:Date.now()},{priority:'event'});}return false;",
+                  jsonlite::toJSON(rename_input_id, auto_unbox = TRUE),
+                  jsonlite::toJSON(col_name, auto_unbox = TRUE),
+                  jsonlite::toJSON(level_name, auto_unbox = TRUE),
+                  jsonlite::toJSON(object_name_now, auto_unbox = TRUE),
+                  jsonlite::toJSON(.recluster_new_context_revision(), auto_unbox = TRUE)
                 )
                 div(
                   class = "recluster-new-level-row",
+                  style = "grid-template-columns:minmax(0,1fr) 22px;",
                   onmouseenter = level_focus_hover,
                   onmouseleave = "window.__reclusterNewClearHoverLevel && window.__reclusterNewClearHoverLevel();",
                   div(
-                    class = "recluster-new-level-checkbox",
-                    checkboxInput(
-                      inputId = .cat_level_input_id(col_name, level_name),
-                      label = tags$span(
-                        class = "recluster-new-level-name app-text-clamp-1",
-                        title = level_name,
-                        onmouseenter = level_focus_hover,
-                        onclick = level_focus_click,
-                        level_name
-                      ),
-                      value = checked_now,
-                      width = "100%"
+                    class = "recluster-new-level-main",
+                    div(
+                      class = "recluster-new-level-checkbox",
+                      checkboxInput(
+                        inputId = .cat_level_input_id(col_name, level_name),
+                        label = tags$span(
+                          class = "recluster-new-level-name app-text-clamp-1",
+                          title = level_name,
+                          onmouseenter = level_focus_hover,
+                          onclick = level_focus_click,
+                          level_name
+                        ),
+                        value = checked_now,
+                        width = "100%"
+                      )
+                    ),
+                    div(
+                      class = "recluster-new-level-rename",
+                      tags$button(
+                        type = "button",
+                        class = "recluster-new-level-rename-button",
+                        title = RECLUSTER_NEW_UI_TEXT$t_btn_metadata_rename,
+                        `aria-label` = sprintf("%s: %s", RECLUSTER_NEW_UI_TEXT$t_btn_metadata_rename, level_name),
+                        onclick = rename_toggle_click,
+                        .recluster_new_bootstrap_icon("input-cursor-text")
+                      )
                     )
                   ),
                   div(
                     class = "recluster-new-level-color",
                     tags$span(
                       class = "recluster-new-level-color-swatch",
-                      style = sprintf("background-color:%s;border:1px solid #808080;border-radius:50%%;display:inline-block;height:20px;width:20px;", color_now),
+                      `data-metadata-color-column` = col_name,
+                      `data-metadata-color-level` = level_name,
+                      style = sprintf("background-color:%s;border:0;border-radius:50%%;display:inline-block;height:20px;width:20px;", color_now),
                       title = sprintf("Change %s color (%s)", level_name, color_now),
                       onclick = color_swatch_click,
                       role = "button",
                       tabindex = "0",
                       `aria-label` = sprintf("%s: %s", level_name, color_now)
+                    )
+                  ),
+                  div(
+                    id = rename_editor_id,
+                    hidden = NA,
+                    style = "grid-column:1 / -1;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;padding:3px 0 6px 26px;",
+                    tags$input(
+                      id = rename_input_id,
+                      type = "text",
+                      value = level_name,
+                      class = "form-control input-sm",
+                      `aria-label` = sprintf("New name for %s", level_name)
+                    ),
+                    tags$button(
+                      type = "button",
+                      class = "btn btn-primary btn-sm",
+                      onclick = rename_save_click,
+                      RECLUSTER_NEW_UI_TEXT$t_btn_metadata_save_rename
                     )
                   )
                 )
@@ -5270,11 +8451,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
         tags$details(
           class = "recluster-new-metadata-col app-accordion",
           `data-accordion-group` = "recluster-new-meta-cols",
+          `data-metadata-open-column` = col_name,
           open = if (identical(col_name, open_col)) NA else NULL,
-          ontoggle = sprintf(
-            "if(this.open && event && event.isTrusted){Shiny.setInputValue('recluster_new_open_col', %s, {priority:'event'});}",
-            jsonlite::toJSON(col_name, auto_unbox = TRUE)
-          ),
           tags$summary(
             tags$span(
               class = "app-text-clamp-1",
@@ -5292,11 +8470,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
       tags$details(
         class = "recluster-new-metadata-bucket app-accordion",
         `data-accordion-group` = "recluster-new-meta-buckets",
+        `data-metadata-open-bucket` = bucket_name,
         open = if (identical(bucket_name, open_bucket)) NA else NULL,
-        ontoggle = sprintf(
-          "if(this.open && event && event.isTrusted){Shiny.setInputValue('recluster_new_open_bucket', %s, {priority:'event'});}",
-          jsonlite::toJSON(bucket_name, auto_unbox = TRUE)
-        ),
         tags$summary(
           tags$span(
             class = "app-text-clamp-1",
@@ -5308,27 +8483,43 @@ recluster_new_server <- function(input, output, session, shared_data) {
       )
     })
 
-    tagList(bucket_ui)
+    div(
+      class = "recluster-new-metadata-selector-root",
+      `data-recluster-object-context` = object_name_now,
+      `data-recluster-object-context-revision` = .recluster_new_context_revision(),
+      tagList(bucket_ui)
+    )
   })
 
+  # Agent note: These outputs live inside native details. Keep them rendered
+  # while collapsed so opening the fold cannot leave a blank recalculating UI.
+  outputOptions(output, "recluster_new_metadata_selector_ui", suspendWhenHidden = FALSE)
+
   observeEvent(input$recluster_new_open_col, {
-    col_now <- .scalar_chr(input$recluster_new_open_col, default = "")
+    if (!.recluster_new_event_allowed("metadata_open_column")) return(invisible(NULL))
+    request <- input$recluster_new_open_col
+    if (!.recluster_new_payload_context_matches(request)) return(invisible(NULL))
+    col_now <- .scalar_chr(request$value, default = "")
     profiles <- recluster_new_data$metadata_profiles
     if (!nzchar(col_now) || !length(profiles) || !(col_now %in% names(profiles))) return(invisible(NULL))
     if (identical(.scalar_chr(recluster_new_data$metadata_open_column, default = ""), col_now)) return(invisible(NULL))
     old_col <- .scalar_chr(recluster_new_data$metadata_open_column, default = "")
     recluster_new_data$metadata_open_column <- col_now
     recluster_new_data$debug_meta_switch_count <- as.integer(recluster_new_data$debug_meta_switch_count %||% 0L) + 1L
-    message(sprintf(
-      "[DB_META_SWITCH] #%d open_col: %s -> %s",
-      as.integer(recluster_new_data$debug_meta_switch_count %||% 0L),
-      if (nzchar(old_col)) old_col else "<none>",
-      col_now
-    ))
+    .db_dbg(
+      "meta_switch",
+      sprintf(
+        "#%d open_col: %s -> %s",
+        as.integer(recluster_new_data$debug_meta_switch_count %||% 0L),
+        if (nzchar(old_col)) old_col else "<none>",
+        col_now
+      )
+    )
     invisible(NULL)
   }, ignoreInit = TRUE, priority = 1000)
 
   observeEvent(recluster_new_data$metadata_open_column, {
+    if (!.recluster_new_event_allowed("metadata_open_state")) return(invisible(NULL))
     col_now <- .scalar_chr(recluster_new_data$metadata_open_column, default = "")
     profiles <- recluster_new_data$metadata_profiles
     if (!nzchar(col_now) || !length(profiles) || is.null(profiles[[col_now]])) return(invisible(NULL))
@@ -5344,21 +8535,13 @@ recluster_new_server <- function(input, output, session, shared_data) {
     }
 
     available_cols <- names(profiles)
-    genes_now <- .umap_gene_selection()$genes
-    color_now <- .scalar_chr(recluster_new_data$umap_color_choice, default = "")
-    display_now <- .scalar_chr(recluster_new_data$umap_display_mode, default = "metadata")
-    .db_dbg("meta_open", sprintf(
-      "open_col=%s genes=%s color_now=%s display=%s",
-      col_now,
-      paste(genes_now, collapse = ","),
-      color_now,
-      display_now
+    # Metadata accordion state is independent from UMAP display/color state.
+    # Opening a metadata section must never force gene expression back to
+    # category coloring or rewrite the user's UMAP radio selection.
+    .db_dbg("meta_open", sprintf("open_col=%s display=%s color=%s", col_now,
+      .scalar_chr(recluster_new_data$umap_display_mode, default = "metadata"),
+      .scalar_chr(recluster_new_data$umap_color_choice, default = "")
     ))
-    if (!identical(display_now, "gene")) {
-      recluster_new_data$umap_display_mode <- "metadata"
-      updateRadioButtons(session, "recluster_new_umap_display_mode", selected = "metadata")
-      .set_umap_color_choice(col_now, choices = c("Single Gene Expression", available_cols, "None"))
-    }
     pb_col_now <- .scalar_chr(input$recluster_new_pb_meta_col, default = "")
     if (!identical(pb_col_now, col_now)) {
       updateSelectInput(
@@ -5372,13 +8555,49 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }, ignoreInit = TRUE, priority = 900)
 
   observeEvent(input$recluster_new_open_bucket, {
-    bucket_now <- .scalar_chr(input$recluster_new_open_bucket, default = "")
-    if (nzchar(bucket_now)) recluster_new_data$metadata_open_bucket <- bucket_now
+    if (!.recluster_new_event_allowed("metadata_open_bucket")) return(invisible(NULL))
+    request <- input$recluster_new_open_bucket
+    if (!.recluster_new_payload_context_matches(request)) return(invisible(NULL))
+    bucket_now <- .scalar_chr(request$value, default = "")
+    if (nzchar(bucket_now) && !identical(.scalar_chr(recluster_new_data$metadata_open_bucket, default = ""), bucket_now)) {
+      recluster_new_data$metadata_open_bucket <- bucket_now
+    }
     invisible(NULL)
   }, ignoreInit = TRUE, priority = 1000)
 
+  .metadata_filter_definition_signature <- function() {
+    profiles <- isolate(recluster_new_data$metadata_profiles)
+    open_col <- .scalar_chr(isolate(recluster_new_data$metadata_open_column), default = "")
+    if (!length(profiles) || !nzchar(open_col) || is.null(profiles[[open_col]])) {
+      return(paste("empty", open_col, sep = "::"))
+    }
+    profile <- profiles[[open_col]]
+    mode_id <- .mode_input_id(open_col)
+    mode_now <- .resolved_mode(
+      profile,
+      .scalar_chr(isolate(input[[mode_id]]), default = profile$default_mode %||% "category")
+    )
+    if (identical(mode_now, "range") && isTRUE(profile$numeric_like)) {
+      range_id <- .rng_input_id(open_col)
+      range_now <- suppressWarnings(as.numeric(isolate(input[[range_id]]) %||% c(profile$min_val, profile$max_val)))
+      if (length(range_now) != 2L || any(!is.finite(range_now))) {
+        range_now <- c(profile$min_val, profile$max_val)
+      }
+      return(paste(open_col, mode_now, paste(range_now, collapse = ","), sep = "::"))
+    }
+    levels <- as.character(profile$levels %||% character(0))
+    checked <- vapply(
+      levels,
+      function(level_name) .metadata_level_checked(open_col, level_name, isolate_input = TRUE),
+      logical(1)
+    )
+    paste(open_col, mode_now, paste(levels[checked], collapse = "\u001f"), sep = "::")
+  }
+
   observeEvent(input$recluster_new_meta_level_highlight, {
+    if (!.recluster_new_event_allowed("metadata_level_highlight")) return(invisible(NULL))
     payload <- input$recluster_new_meta_level_highlight
+    if (!.recluster_new_payload_context_matches(payload)) return(invisible(NULL))
     col_now <- .scalar_chr(payload$col, default = "")
     level_now <- .scalar_chr(payload$level, default = "")
     obj <- recluster_new_data$seurat_obj
@@ -5393,20 +8612,32 @@ recluster_new_server <- function(input, output, session, shared_data) {
     # Level-name click is transient highlight only (does not mutate checkbox/filter state).
     recluster_new_data$metadata_hover_active <- TRUE
     recluster_new_data$selected_cells <- hit
+    .set_selection_owner("manual", "metadata_level_highlight")
     invisible(NULL)
   }, ignoreInit = TRUE, priority = 1100)
 
   observeEvent(input$recluster_new_meta_level_highlight_clear, {
+    if (!.recluster_new_event_allowed("metadata_level_highlight_clear")) return(invisible(NULL))
+    if (!.recluster_new_payload_context_matches(input$recluster_new_meta_level_highlight_clear, allow_empty = TRUE)) {
+      return(invisible(NULL))
+    }
     if (isTRUE(recluster_new_data$metadata_hover_active)) {
       recluster_new_data$metadata_hover_active <- FALSE
       recluster_new_data$selected_cells <- character(0)
+      if (identical(.scalar_chr(selection_owner_state(), default = "none"), "manual") &&
+          !length(lasso_selected_cells_state())) {
+        .restore_selection_owner_after_manual_clear("metadata_level_highlight_clear")
+      }
     }
     invisible(NULL)
   }, ignoreInit = TRUE, priority = 1090)
 
   metadata_filter_result <- reactive({
-    obj <- recluster_new_data$seurat_obj
-    profiles <- recluster_new_data$metadata_profiles
+    structure_key <- recluster_new_data$metadata_selector_structure_key
+    data_revision <- recluster_new_data$metadata_filter_data_revision
+    if (!nzchar(structure_key)) return(list(cells = character(0), active_cols = character(0), group_col = "", filter_state = "all"))
+    obj <- isolate(recluster_new_data$seurat_obj)
+    profiles <- isolate(recluster_new_data$metadata_profiles)
     req(obj, length(profiles))
 
     md <- obj@meta.data
@@ -5454,7 +8685,17 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   observeEvent(metadata_filter_result(), {
+    if (!.recluster_new_event_allowed("metadata_filter_result")) return(invisible(NULL))
     res <- metadata_filter_result()
+    filter_definition_sig <- .metadata_filter_definition_signature()
+    previous_filter_definition_sig <- .scalar_chr(
+      isolate(recluster_new_data$metadata_filter_definition_signature),
+      default = ""
+    )
+    filter_definition_changed <- !identical(filter_definition_sig, previous_filter_definition_sig)
+    if (filter_definition_changed) {
+      recluster_new_data$metadata_filter_definition_signature <- filter_definition_sig
+    }
     next_active_col <- .scalar_chr(recluster_new_data$metadata_open_column, default = "")
     next_active_cells <- character(0)
     if (length(res$active_cols)) {
@@ -5475,24 +8716,49 @@ recluster_new_server <- function(input, output, session, shared_data) {
     if (!identical(.scalar_chr(recluster_new_data$metadata_filter_state, default = "all"), filter_state_now)) {
       recluster_new_data$metadata_filter_state <- filter_state_now
     }
-    if (length(res$active_cols) && !identical(filter_state_now, "all") && length(recluster_new_data$selected_cells)) {
+    if (filter_definition_changed && length(res$active_cols) &&
+        !identical(filter_state_now, "all") && length(recluster_new_data$selected_cells)) {
       recluster_new_data$selected_cells <- character(0)
+      .restore_selection_owner_after_manual_clear("metadata_filter_changed")
     }
   }, ignoreInit = TRUE)
 
   checked_population_cells <- reactive({
-    res <- metadata_filter_result()
-    if (!length(res$active_cols) || identical(.scalar_chr(res$filter_state, default = "none"), "none")) {
-      return(character(0))
+    # Agent note: New-object membership comes only from cyan checked saved
+    # groups. Violet cells are the staging selection for saving a group and
+    # must never enter a new object until that group is checked.
+    selected <- unique(as.character(enabled_group_cells() %||% character(0)))
+    selected <- selected[!is.na(selected) & nzchar(selected)]
+    obj <- recluster_new_data$seurat_obj
+    if (!is.null(obj) && inherits(obj, "Seurat")) {
+      selected <- intersect(selected, colnames(obj))
     }
-    cells <- unique(as.character(res$cells %||% character(0)))
-    cells[nzchar(cells)]
+    selected
   })
+
+  # Agent note: Save-group membership is intentionally limited to violet
+  # highlight cells. Cyan saved-group cells are an existing display source and
+  # must never become new membership merely because their checkbox is checked.
+  .saved_group_capture_cells <- function() {
+    selected <- unique(as.character(violet_selection_highlight_cells() %||% character(0)))
+    selected <- selected[!is.na(selected) & nzchar(selected)]
+    .db_dbg(
+      "saved_group_capture_source",
+      sprintf(
+        "source=violet_highlight owner=%s cells=%d cyan_cells=%d",
+        .scalar_chr(selection_owner_state(), default = "none"),
+        length(selected),
+        length(saved_group_highlight_cells())
+      )
+    )
+    selected
+  }
 
   # Agent note: Population colors use Figure Studio's popup picker. Keep the
   # metadata level order in this context so palette positions remain stable
   # if the dynamic filter UI re-renders while the modal is open.
   observeEvent(input$recluster_new_metadata_color_popup, {
+    if (!.recluster_new_event_allowed("metadata_palette_open")) return(invisible(NULL))
     obj <- recluster_new_data$seurat_obj
     profiles <- recluster_new_data$metadata_profiles
     req(obj, length(profiles))
@@ -5515,6 +8781,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
     }, character(1))
     seed <- figure_palette_seed(fallback, fallback = fallback[[1]])
     session$userData$recluster_new_metadata_palette_context <- list(
+      object_name = .recluster_new_canonical_object_name(),
+      context_revision = .recluster_new_context_revision(),
       column = col_name,
       levels = levels,
       fallback = fallback
@@ -5524,10 +8792,12 @@ recluster_new_server <- function(input, output, session, shared_data) {
       title = sprintf("%s: %s", RECLUSTER_NEW_UI_TEXT$t_title_metadata_customize_colors, col_name),
       size = "l",
       easyClose = TRUE,
-      footer = figure_picker_modal_footer(
+      footer = .recluster_new_contextual_picker_footer(
         reset_id = "recluster_new_metadata_palette_reset",
         apply_id = "recluster_new_metadata_palette_apply",
-        apply_label = RECLUSTER_NEW_UI_TEXT$t_btn_metadata_apply_colors
+        apply_label = RECLUSTER_NEW_UI_TEXT$t_btn_metadata_apply_colors,
+        object_name = .recluster_new_canonical_object_name(),
+        context_revision = .recluster_new_context_revision()
       ),
       figure_curve_palette_modal_body(
         picker_id = "recluster_new_metadata_palette_picker",
@@ -5540,12 +8810,25 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }, ignoreInit = TRUE)
 
   observeEvent(input$recluster_new_metadata_palette_apply, {
+    if (!.recluster_new_event_allowed("metadata_palette_apply")) return(invisible(NULL))
+    apply_payload <- input$recluster_new_metadata_palette_apply
+    if (!.recluster_new_payload_context_matches(apply_payload)) return(invisible(NULL))
     context <- session$userData$recluster_new_metadata_palette_context
     if (!is.list(context)) return(invisible(NULL))
     col_name <- .scalar_chr(context$column, default = "")
     levels <- as.character(context$levels %||% character(0))
     fallback <- toupper(as.character(context$fallback %||% character(0)))
     if (!nzchar(col_name) || !length(levels)) return(invisible(NULL))
+    context_payload <- list(
+      object = context$object_name,
+      context_revision = context$context_revision
+    )
+    if (!.recluster_new_payload_context_matches(context_payload)) {
+      showNotification("Dataset changed while color editor was open. Reopen it for current dataset.", type = "warning", duration = 6)
+      session$userData$recluster_new_metadata_palette_context <- NULL
+      removeModal()
+      return(invisible(NULL))
+    }
 
     obj <- recluster_new_data$seurat_obj
     if (is.null(obj) || !inherits(obj, "Seurat")) return(invisible(NULL))
@@ -5563,6 +8846,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
       recluster_new_data$seurat_obj <- obj
       .persist_active_object(obj)
       .sync_metadata_profiles_from_object(obj)
+      .send_metadata_colors_to_ui(obj, col_name, levels)
       recluster_new_data$umap_color_tick <- isolate(recluster_new_data$umap_color_tick) + 1L
     }
     session$userData$recluster_new_metadata_palette_context <- NULL
@@ -5570,7 +8854,9 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }, ignoreInit = TRUE)
 
   observeEvent(input$recluster_new_metadata_single_color_popup, {
+    if (!.recluster_new_event_allowed("metadata_single_color_open")) return(invisible(NULL))
     payload <- input$recluster_new_metadata_single_color_popup
+    if (!.recluster_new_payload_context_matches(payload)) return(invisible(NULL))
     col_name <- .scalar_chr(payload$col, default = "")
     level_name <- .scalar_chr(payload$level, default = "")
     obj <- recluster_new_data$seurat_obj
@@ -5585,6 +8871,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
     initial_hex <- toupper(.scalar_chr(level_map[[level_name]], default = "#4B5563"))
     if (!.is_hex_color(initial_hex)) initial_hex <- "#4B5563"
     session$userData$recluster_new_metadata_single_color_context <- list(
+      object_name = .recluster_new_canonical_object_name(),
+      context_revision = .recluster_new_context_revision(),
       column = col_name,
       level = level_name
     )
@@ -5592,10 +8880,12 @@ recluster_new_server <- function(input, output, session, shared_data) {
       title = sprintf("Color: %s", level_name),
       size = "m",
       easyClose = TRUE,
-      footer = figure_picker_modal_footer(
+      footer = .recluster_new_contextual_picker_footer(
         reset_id = "recluster_new_metadata_single_color_reset",
         apply_id = "recluster_new_metadata_single_color_apply",
-        apply_label = "Apply color"
+        apply_label = "Apply color",
+        object_name = .recluster_new_canonical_object_name(),
+        context_revision = .recluster_new_context_revision()
       ),
           motion_color_picker_ui(
         "recluster_new_metadata_single_color_picker",
@@ -5608,10 +8898,23 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }, ignoreInit = TRUE)
 
   observeEvent(input$recluster_new_metadata_single_color_apply, {
+    if (!.recluster_new_event_allowed("metadata_single_color_apply")) return(invisible(NULL))
+    apply_payload <- input$recluster_new_metadata_single_color_apply
+    if (!.recluster_new_payload_context_matches(apply_payload)) return(invisible(NULL))
     context <- session$userData$recluster_new_metadata_single_color_context
     if (!is.list(context)) return(invisible(NULL))
     col_name <- .scalar_chr(context$column, default = "")
     level_name <- .scalar_chr(context$level, default = "")
+    context_payload <- list(
+      object = context$object_name,
+      context_revision = context$context_revision
+    )
+    if (!.recluster_new_payload_context_matches(context_payload)) {
+      showNotification("Dataset changed while color editor was open. Reopen it for current dataset.", type = "warning", duration = 6)
+      session$userData$recluster_new_metadata_single_color_context <- NULL
+      removeModal()
+      return(invisible(NULL))
+    }
     obj <- recluster_new_data$seurat_obj
     profiles <- recluster_new_data$metadata_profiles
     p <- profiles[[col_name]]
@@ -5620,7 +8923,18 @@ recluster_new_server <- function(input, output, session, shared_data) {
     }
     levels <- as.character(p$levels %||% character(0))
     if (!(level_name %in% levels)) return(invisible(NULL))
-    next_color <- toupper(.scalar_chr(metadata_single_color_picker()$hex, default = ""))
+    picker_payload <- metadata_single_color_picker()
+    next_color <- toupper(.scalar_chr(picker_payload$hex, default = ""))
+    .db_dbg(
+      "metadata_single_color_apply",
+      sprintf(
+        "column=%s level=%s picker_hex=%s valid=%s",
+        col_name,
+        level_name,
+        next_color,
+        as.character(.is_hex_color(next_color))
+      )
+    )
     if (!.is_hex_color(next_color)) return(invisible(NULL))
     next_map <- .level_color_map(obj, col_name, levels)
     next_map[[level_name]] <- next_color
@@ -5628,9 +8942,152 @@ recluster_new_server <- function(input, output, session, shared_data) {
     recluster_new_data$seurat_obj <- obj
     .persist_active_object(obj)
     .sync_metadata_profiles_from_object(obj)
+    .send_metadata_colors_to_ui(obj, col_name, levels)
+    persisted_obj <- tryCatch(shared_data$all_seurat_objects[[.recluster_new_canonical_object_name()]], error = function(e) NULL)
+    persisted_obj <- if (is.list(persisted_obj) && !is.null(persisted_obj$obj)) persisted_obj$obj else persisted_obj
+    persisted_map <- tryCatch(.read_metadata_level_colors(persisted_obj, col_name), error = function(e) list())
+    .db_dbg(
+      "metadata_single_color_persisted",
+      sprintf(
+        "column=%s level=%s stored=%s",
+        col_name,
+        level_name,
+        .scalar_chr(persisted_map[[level_name]], default = "")
+      )
+    )
     recluster_new_data$umap_color_tick <- isolate(recluster_new_data$umap_color_tick) + 1L
     session$userData$recluster_new_metadata_single_color_context <- NULL
     removeModal()
+  }, ignoreInit = TRUE)
+
+  # Agent note: Rename history stores exact column vectors and palette entries.
+  # This makes session undo deterministic without adding backup metadata columns.
+  observeEvent(input$recluster_new_metadata_level_rename, {
+    if (!.recluster_new_event_allowed("metadata_level_rename")) return(invisible(NULL))
+    payload <- input$recluster_new_metadata_level_rename
+    if (!.recluster_new_payload_context_matches(payload)) return(invisible(NULL))
+    col_name <- .scalar_chr(payload$col, default = "")
+    old_label <- .scalar_chr(payload$level, default = "")
+    new_label <- trimws(.scalar_chr(payload$value, default = ""))
+    obj <- recluster_new_data$seurat_obj
+
+    if (!nzchar(new_label)) {
+      showNotification(RECLUSTER_NEW_UI_TEXT$t_text_metadata_rename_empty, type = "warning", duration = 4)
+      return(invisible(NULL))
+    }
+    if (!grepl("^[ -~]+$", new_label)) {
+      showNotification(RECLUSTER_NEW_UI_TEXT$t_text_metadata_rename_ascii, type = "warning", duration = 4)
+      return(invisible(NULL))
+    }
+    if (is.null(obj) || !inherits(obj, "Seurat") || !nzchar(col_name) ||
+        !(col_name %in% colnames(obj@meta.data)) || !nzchar(old_label)) {
+      showNotification(RECLUSTER_NEW_UI_TEXT$t_text_metadata_rename_invalid, type = "error", duration = 5)
+      return(invisible(NULL))
+    }
+    if (identical(old_label, new_label)) return(invisible(NULL))
+
+    old_column <- obj@meta.data[[col_name]]
+    old_values <- as.character(old_column)
+    old_match <- !is.na(old_values) & old_values == old_label
+    if (!any(old_match)) {
+      showNotification(RECLUSTER_NEW_UI_TEXT$t_text_metadata_rename_invalid, type = "error", duration = 5)
+      return(invisible(NULL))
+    }
+    existing_labels <- unique(old_values[!is.na(old_values) & nzchar(old_values)])
+    if (new_label %in% setdiff(existing_labels, old_label)) {
+      showNotification(RECLUSTER_NEW_UI_TEXT$t_text_metadata_rename_duplicate, type = "warning", duration = 5)
+      return(invisible(NULL))
+    }
+
+    misc_before <- tryCatch(obj@misc, error = function(e) list())
+    color_store_before <- misc_before$metadata_level_colors
+    had_color_entry <- is.list(color_store_before) && !is.null(color_store_before[[col_name]])
+    color_entry_before <- if (had_color_entry) color_store_before[[col_name]] else NULL
+    object_name <- .recluster_new_canonical_object_name()
+
+    next_values <- old_values
+    next_values[old_match] <- new_label
+    if (is.factor(old_column)) {
+      next_levels <- levels(old_column)
+      next_levels[next_levels == old_label] <- new_label
+      next_column <- factor(next_values, levels = unique(next_levels), ordered = is.ordered(old_column))
+    } else {
+      next_column <- next_values
+    }
+    obj@meta.data[[col_name]] <- next_column
+
+    displayed_levels <- unique(old_values[!is.na(old_values) & nzchar(old_values)])
+    next_colors <- .level_color_map(obj, col_name, displayed_levels)
+    if (old_label %in% names(next_colors)) {
+      next_colors[[new_label]] <- next_colors[[old_label]]
+      next_colors[[old_label]] <- NULL
+    }
+    obj <- .write_metadata_level_colors(obj, col_name, next_colors)
+
+    history <- session$userData$recluster_new_metadata_rename_history %||% list()
+    history[[length(history) + 1L]] <- list(
+      object_name = object_name,
+      context_revision = .recluster_new_context_revision(),
+      column = col_name,
+      column_before = old_column,
+      had_color_entry = had_color_entry,
+      color_entry_before = color_entry_before
+    )
+    if (length(history) > 20L) history <- tail(history, 20L)
+    session$userData$recluster_new_metadata_rename_history <- history
+
+    .commit_metadata_object_update(obj, open_col = col_name)
+    recluster_new_data$umap_color_tick <- isolate(recluster_new_data$umap_color_tick) + 1L
+    showNotification(
+      sprintf(RECLUSTER_NEW_UI_TEXT$t_text_metadata_rename_saved, old_label, new_label, col_name),
+      type = "message",
+      duration = 4
+    )
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$recluster_new_metadata_undo_rename, {
+    if (!.recluster_new_event_allowed("metadata_undo_rename")) return(invisible(NULL))
+    history <- session$userData$recluster_new_metadata_rename_history %||% list()
+    if (!length(history)) {
+      showNotification(RECLUSTER_NEW_UI_TEXT$t_text_metadata_rename_no_undo, type = "message", duration = 3)
+      return(invisible(NULL))
+    }
+    item <- history[[length(history)]]
+    object_name <- .recluster_new_canonical_object_name()
+    item_revision <- suppressWarnings(as.integer(item$context_revision %||% NA_integer_))
+    if (!identical(.scalar_chr(item$object_name, default = ""), object_name) ||
+        !is.finite(item_revision) || is.na(item_revision) ||
+        !identical(item_revision, .recluster_new_context_revision())) {
+      showNotification(RECLUSTER_NEW_UI_TEXT$t_text_metadata_rename_wrong_object, type = "warning", duration = 5)
+      return(invisible(NULL))
+    }
+    obj <- recluster_new_data$seurat_obj
+    col_name <- .scalar_chr(item$column, default = "")
+    if (is.null(obj) || !inherits(obj, "Seurat") || !(col_name %in% colnames(obj@meta.data)) ||
+        length(item$column_before) != nrow(obj@meta.data)) {
+      showNotification(RECLUSTER_NEW_UI_TEXT$t_text_metadata_rename_invalid, type = "error", duration = 5)
+      return(invisible(NULL))
+    }
+
+    obj@meta.data[[col_name]] <- item$column_before
+    misc <- tryCatch(obj@misc, error = function(e) list())
+    if (!is.list(misc$metadata_level_colors)) misc$metadata_level_colors <- list()
+    if (isTRUE(item$had_color_entry)) {
+      misc$metadata_level_colors[[col_name]] <- item$color_entry_before
+    } else {
+      misc$metadata_level_colors[[col_name]] <- NULL
+    }
+    obj@misc <- misc
+    obj <- .strip_metadata_color_mirror_columns(obj)
+
+    session$userData$recluster_new_metadata_rename_history <- history[-length(history)]
+    .commit_metadata_object_update(obj, open_col = col_name)
+    recluster_new_data$umap_color_tick <- isolate(recluster_new_data$umap_color_tick) + 1L
+    showNotification(
+      sprintf(RECLUSTER_NEW_UI_TEXT$t_text_metadata_rename_undone, col_name),
+      type = "message",
+      duration = 4
+    )
   }, ignoreInit = TRUE)
 
 
@@ -5642,40 +9099,104 @@ recluster_new_server <- function(input, output, session, shared_data) {
       sprintf("%s %s", RECLUSTER_NEW_UI_TEXT$t_text_selection_source, active_col)
     }
   })
+  outputOptions(output, "recluster_new_metadata_status_output", suspendWhenHidden = FALSE)
 
   observeEvent(input$recluster_new_add_selection_btn, {
+    if (!.recluster_new_event_allowed("saved_group_add")) return(invisible(NULL))
     group_name <- trimws(.scalar_chr(input$recluster_new_group_name, default = ""))
-    cells <- unique(as.character(all_selected_cells() %||% character(0)))
-    cells <- cells[nzchar(cells)]
     if (!nzchar(group_name)) {
       showNotification("Group name cannot be empty.", type = "warning", duration = 4)
       return(invisible(NULL))
     }
-    if (!length(cells)) {
-      showNotification("No cells are selected to save.", type = "warning", duration = 4)
+
+    obj <- recluster_new_data$seurat_obj
+    if (is.null(obj) || !inherits(obj, "Seurat")) {
+      .db_dbg(
+        "saved_group_add_rejected",
+        sprintf("object=%s reason=missing_seurat", .recluster_new_canonical_object_name())
+      )
+      showNotification("Selected dataset is not ready. Wait for the plot to finish loading, then try again.", type = "error", duration = 6)
       return(invisible(NULL))
     }
 
-    obj <- recluster_new_data$seurat_obj
-    new_col <- ""
-    if (!is.null(obj) && inherits(obj, "Seurat")) {
-      md <- obj@meta.data
-      md <- .sparsify_saved_group_metadata(md, recluster_new_data$cell_groups %||% list())
-      new_col <- .unique_metadata_col_name(md, group_name, prefix = "saved_group")
-      md[[new_col]] <- NA_character_
-      md[rownames(md) %in% cells, new_col] <- group_name
-      obj@meta.data <- md
-      .persist_active_object(obj)
-      .refresh_metadata_after_object_update(obj, open_col = new_col)
-      showNotification(sprintf("Saved group and wrote metadata column '%s'.", new_col), type = "message", duration = 4)
+    cells <- intersect(.saved_group_capture_cells(), colnames(obj))
+    if (!length(cells)) {
+      showNotification("Select violet cells before saving a group.", type = "warning", duration = 4)
+      return(invisible(NULL))
     }
-    recluster_new_data$cell_groups[[group_name]] <- list(cells = cells, enabled = FALSE, metadata_col = new_col)
+
+    render_pending <- FALSE
+    try(overlay_show("Saving population group and updating plot..."), silent = TRUE)
+    on.exit({
+      if (!isTRUE(render_pending)) try(overlay_hide(), silent = TRUE)
+    }, add = TRUE)
+
+    .db_dbg(
+      "saved_group_add_start",
+      sprintf(
+        "object=%s name=%s cells=%d lasso=%d checked=%d",
+        .recluster_new_canonical_object_name(),
+        group_name,
+        length(cells),
+        length(lasso_selected_cells_state()),
+        length(checked_population_cells())
+      )
+    )
+
+    # Agent note: Save metadata and group state as one object transaction.
+    # Set local group state before persistence so shared and local object-owned
+    # state remain identical; otherwise reconciliation reloads the object and
+    # clears the selection before the new group can be displayed.
+    groups_now <- recluster_new_data$cell_groups %||% list()
+    groups_now <- lapply(groups_now, function(group) {
+      group$enabled <- FALSE
+      group
+    })
+    md <- obj@meta.data
+    md <- .sparsify_saved_group_metadata(md, groups_now)
+    new_col <- .unique_metadata_col_name(md, group_name, prefix = "saved_group")
+    md[[new_col]] <- NA_character_
+    md[rownames(md) %in% cells, new_col] <- group_name
+    obj@meta.data <- md
+    groups_now[[group_name]] <- list(cells = cells, enabled = TRUE, metadata_col = new_col)
+    .set_cell_groups_structure(groups_now)
+    .commit_metadata_object_update(obj, open_col = new_col)
+    .clear_final_plot_cache()
+    plot_tab_now <- .norm_plot_tab(.current_plot_tab())
+    if (plot_tab_now %in% c("umap", "scatter")) {
+      render_pending <- isTRUE(.recluster_new_overlay_begin(
+        "Updating plot after saving population group...",
+        tab_now = plot_tab_now,
+        reason = "saved_group_add"
+      ))
+    }
+    .db_dbg(
+      "saved_group_add_commit",
+      sprintf(
+        "object=%s name=%s metadata_col=%s cells=%d previous_groups_disabled=%d",
+        .recluster_new_canonical_object_name(),
+        group_name,
+        new_col,
+        length(cells),
+        length(groups_now) - 1L
+      )
+    )
+    showNotification(sprintf("Saved group and wrote metadata column '%s'.", new_col), type = "message", duration = 4)
     updateTextInput(session, "recluster_new_group_name", value = "")
+    # Saving transfers transient selection into the new cyan group. Clear
+    # transient manual state explicitly; do not depend on Plotly sending a
+    # NULL selection event, because NULL also occurs during ordinary redraws.
+    .set_selection_owner("manual", "saved_group_add")
+    lasso_selected_cells_state(character(0))
+    recluster_new_data$selected_cells <- character(0)
+    recluster_new_data$metadata_hover_active <- FALSE
     runjs("Shiny.setInputValue('plotly_selected-recluster_new_plot_source', null);")
   })
 
   output$recluster_new_cell_groups_ui <- renderUI({
-    groups <- recluster_new_data$cell_groups
+    if (!.recluster_new_context_is_settled()) return(NULL)
+    structure_key <- recluster_new_data$cell_groups_structure_key
+    groups <- isolate(recluster_new_data$cell_groups)
     if (!length(groups)) return(p(RECLUSTER_NEW_UI_TEXT$t_text_no_groups))
 
     rows <- lapply(names(groups), function(name) {
@@ -5683,21 +9204,28 @@ recluster_new_server <- function(input, output, session, shared_data) {
       enabled_id <- .grp_toggle_input_id(name)
       delete_id <- .grp_delete_input_id(name)
       enabled <- isTRUE(g$enabled)
+      enabled_checkbox <- htmltools::tagQuery(
+        checkboxInput(
+          enabled_id,
+          label = HTML(sprintf(
+            "%s <span class='recluster-new-group-meta'>(%d cells)</span>",
+            htmltools::htmlEscape(name),
+            length(unique(as.character(g$cells %||% character(0))))
+          )),
+          value = enabled,
+          width = "100%"
+        )
+      )$find("input")$addAttrs(
+        autocomplete = "off",
+        `data-wl-autofill-guard` = "true"
+      )$allTags()
 
       div(
         class = "recluster-new-group-row",
         div(
           class = "recluster-new-group-toggle",
-          checkboxInput(
-            enabled_id,
-            label = HTML(sprintf(
-              "%s <span class='recluster-new-group-meta'>(%d cells)</span>",
-              htmltools::htmlEscape(name),
-              length(unique(as.character(g$cells %||% character(0))))
-            )),
-            value = enabled,
-            width = "100%"
-          )
+          `data-recluster-saved-group-canonical-enabled` = if (enabled) "1" else "0",
+          enabled_checkbox
         ),
         actionButton(delete_id, "", icon = icon("trash"), class = "btn recluster-new-saved-group-delete", title = RECLUSTER_NEW_UI_TEXT$t_btn_delete)
       )
@@ -5706,9 +9234,12 @@ recluster_new_server <- function(input, output, session, shared_data) {
     tagList(rows)
   })
 
-  # Agent note: Dynamic group checkboxes are re-created by renderUI. Keep one observer pair per group and ignore unchanged values; otherwise binding initialization feeds back into cell_groups and redraws the page indefinitely.
+  # Agent note: Checkbox enabled state is value-only state. Keep group DOM
+  # mounted while it changes; only add/delete/cell membership changes update
+  # cell_groups_structure_key and rebuild this UI.
   group_toggle_observers <- list()
   observe({
+    if (!.recluster_new_event_allowed("saved_group_observer_sync")) return(invisible(NULL))
     groups <- recluster_new_data$cell_groups %||% list()
     observer_registry <- group_toggle_observers
     group_names <- names(groups)
@@ -5728,29 +9259,61 @@ recluster_new_server <- function(input, output, session, shared_data) {
         delete_id <- .grp_delete_input_id(name)
 
         list(
-          enabled = observeEvent(input[[enabled_id]], {
+          enabled = observeEvent(input$recluster_new_saved_group_toggle_event, {
+            if (!.recluster_new_event_allowed(paste0("saved_group_toggle:", name))) return(invisible(NULL))
+            payload <- input$recluster_new_saved_group_toggle_event
+            if (!is.list(payload) || !identical(.scalar_chr(payload$id, default = ""), enabled_id)) {
+              return(invisible(NULL))
+            }
+            if (!.recluster_new_payload_context_matches(payload, allow_empty = TRUE)) {
+              .db_dbg(
+                "saved_group_toggle_ignored_context",
+                sprintf("name=%s id=%s", name, .scalar_chr(payload$id, default = ""))
+              )
+              return(invisible(NULL))
+            }
             g <- recluster_new_data$cell_groups[[name]]
             if (is.null(g)) return(invisible(NULL))
-            next_enabled <- isTRUE(input[[enabled_id]])
+            next_enabled <- isTRUE(payload$enabled)
             if (identical(isTRUE(g$enabled), next_enabled)) return(invisible(NULL))
             g$enabled <- next_enabled
-            recluster_new_data$cell_groups[[name]] <- g
+            groups_now <- recluster_new_data$cell_groups %||% list()
+            groups_now[[name]] <- g
+            recluster_new_data$cell_groups <- groups_now
+            if (!is.null(recluster_new_data$seurat_obj) && inherits(recluster_new_data$seurat_obj, "Seurat")) {
+              .persist_active_object(recluster_new_data$seurat_obj, update_local = TRUE)
+            }
+            if (next_enabled) {
+              .set_selection_owner("manual", paste0("saved_group_toggle:", name))
+            } else {
+              .restore_selection_owner_after_manual_clear(paste0("saved_group_toggle:", name))
+            }
           }, ignoreInit = TRUE),
           delete = observeEvent(input[[delete_id]], {
+            if (!.recluster_new_event_allowed(paste0("saved_group_delete:", name))) return(invisible(NULL))
             g <- recluster_new_data$cell_groups[[name]]
+            groups_now <- recluster_new_data$cell_groups %||% list()
+            groups_now[[name]] <- NULL
+            .set_cell_groups_structure(groups_now)
             obj <- recluster_new_data$seurat_obj
+            persisted_by_metadata_commit <- FALSE
             if (!is.null(obj) && inherits(obj, "Seurat")) {
               md <- obj@meta.data
               meta_col <- .saved_group_metadata_col(name, g, md)
               if (nzchar(meta_col) && meta_col %in% colnames(md)) {
                 md[[meta_col]] <- NULL
                 obj@meta.data <- md
-                .persist_active_object(obj)
-                .refresh_metadata_after_object_update(obj)
+                .commit_metadata_object_update(obj)
+                persisted_by_metadata_commit <- TRUE
                 showNotification(sprintf("Deleted saved group metadata column '%s'.", meta_col), type = "message", duration = 3)
               }
+              # A group can be object-owned without a legacy metadata mirror.
+              # Persist deletion in that case too; otherwise the group returns
+              # after the next object reload/workspace import.
+              if (!isTRUE(persisted_by_metadata_commit)) {
+                .persist_active_object(obj, update_local = TRUE)
+              }
             }
-            recluster_new_data$cell_groups[[name]] <- NULL
           }, ignoreInit = TRUE)
         )
       })
@@ -5770,6 +9333,9 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   output$recluster_new_meta_table <- renderDT({
+    if (!.recluster_new_context_is_settled()) {
+      return(datatable(data.frame(note = "Loading selected dataset..."), rownames = FALSE, options = list(dom = "t")))
+    }
     obj <- recluster_new_data$seurat_obj
     if (is.null(obj)) {
       return(datatable(data.frame(note = "Load data and select an active object first."), rownames = FALSE, options = list(dom = "t")))
@@ -5796,6 +9362,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }, server = TRUE)
 
   observeEvent(input$recluster_new_duplicate_col_btn, {
+    if (!.recluster_new_event_allowed("metadata_duplicate_column")) return(invisible(NULL))
     obj <- recluster_new_data$seurat_obj
     req(obj)
     src <- .scalar_chr(input$recluster_new_source_col, default = "")
@@ -5805,15 +9372,12 @@ recluster_new_server <- function(input, output, session, shared_data) {
     out_col <- .ensure_unique_col(md, new_col)
     md[[out_col]] <- as.character(md[[src]])
     obj@meta.data <- md
-    nm <- .scalar_chr(shared_data$active_object_name, default = "")
-    entry <- shared_data$all_seurat_objects[[nm]]
-    if (is.list(entry) && !is.null(entry$obj)) entry$obj <- obj else entry <- obj
-    shared_data$all_seurat_objects[[nm]] <- entry
-    recluster_new_data$seurat_obj <- obj
+    .commit_metadata_object_update(obj, open_col = out_col)
     showNotification(sprintf("Created duplicated column: %s", out_col), type = "message")
   }, ignoreInit = TRUE)
 
   observeEvent(input$recluster_new_create_col_btn, {
+    if (!.recluster_new_event_allowed("metadata_create_column")) return(invisible(NULL))
     obj <- recluster_new_data$seurat_obj
     req(obj)
     new_col <- .scalar_chr(input$recluster_new_new_col, default = "")
@@ -5822,15 +9386,12 @@ recluster_new_server <- function(input, output, session, shared_data) {
     out_col <- .ensure_unique_col(md, new_col)
     md[[out_col]] <- NA_character_
     obj@meta.data <- md
-    nm <- .scalar_chr(shared_data$active_object_name, default = "")
-    entry <- shared_data$all_seurat_objects[[nm]]
-    if (is.list(entry) && !is.null(entry$obj)) entry$obj <- obj else entry <- obj
-    shared_data$all_seurat_objects[[nm]] <- entry
-    recluster_new_data$seurat_obj <- obj
+    .commit_metadata_object_update(obj, open_col = out_col)
     showNotification(sprintf("Created empty column: %s", out_col), type = "message")
   }, ignoreInit = TRUE)
 
   observeEvent(input$recluster_new_apply_group_label_btn, {
+    if (!.recluster_new_event_allowed("metadata_apply_group_label")) return(invisible(NULL))
     obj <- recluster_new_data$seurat_obj
     req(obj)
     gc <- .scalar_chr(input$recluster_new_group_col, default = "")
@@ -5844,15 +9405,12 @@ recluster_new_server <- function(input, output, session, shared_data) {
     idx <- as.character(md[[gc]] %||% "") == gv
     md[idx, out_col] <- tv
     obj@meta.data <- md
-    nm <- .scalar_chr(shared_data$active_object_name, default = "")
-    entry <- shared_data$all_seurat_objects[[nm]]
-    if (is.list(entry) && !is.null(entry$obj)) entry$obj <- obj else entry <- obj
-    shared_data$all_seurat_objects[[nm]] <- entry
-    recluster_new_data$seurat_obj <- obj
+    .commit_metadata_object_update(obj, open_col = out_col)
     showNotification(sprintf("Updated %d cells in %s.", sum(idx), out_col), type = "message")
   }, ignoreInit = TRUE)
 
   observeEvent(input$recluster_new_apply_cell_label_btn, {
+    if (!.recluster_new_event_allowed("metadata_apply_cell_label")) return(invisible(NULL))
     obj <- recluster_new_data$seurat_obj
     req(obj)
     sel <- input$recluster_new_meta_table_rows_selected
@@ -5869,11 +9427,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     cells <- cells[cells %in% rownames(md)]
     md[cells, out_col] <- tv
     obj@meta.data <- md
-    nm <- .scalar_chr(shared_data$active_object_name, default = "")
-    entry <- shared_data$all_seurat_objects[[nm]]
-    if (is.list(entry) && !is.null(entry$obj)) entry$obj <- obj else entry <- obj
-    shared_data$all_seurat_objects[[nm]] <- entry
-    recluster_new_data$seurat_obj <- obj
+    .commit_metadata_object_update(obj, open_col = out_col)
     showNotification(sprintf("Updated %d selected cells in %s.", length(cells), out_col), type = "message")
   }, ignoreInit = TRUE)
 
@@ -5886,24 +9440,33 @@ recluster_new_server <- function(input, output, session, shared_data) {
     if (!nrow(tab)) return(helpText("No imported tabular files available from Data Files."))
     labels <- sprintf("%s (%s)", as.character(tab$name), basename(as.character(tab$path)))
     choices <- stats::setNames(as.character(tab$path), labels)
+    selected_now <- as.character(isolate(input$recluster_new_sidebar_barcode_paths) %||% character(0))
+    selected_now <- intersect(selected_now, unname(choices))
     selectizeInput(
       "recluster_new_sidebar_barcode_paths",
       RECLUSTER_NEW_UI_TEXT$t_label_sidebar_barcodes,
       choices = choices,
-      selected = character(0),
+      selected = selected_now,
       multiple = TRUE,
       options = list(plugins = list("remove_button"), placeholder = "Choose imported barcode files")
     )
   })
 
   observeEvent(shared_data$selected_sidebar_items, {
+    if (!.recluster_new_event_allowed("sidebar_selection_import")) return(invisible(NULL))
     items <- shared_data$selected_sidebar_items
     if (is.null(items) || !is.data.frame(items) || !nrow(items)) return(invisible(NULL))
     keys <- as.character(items$key %||% character(0))
     paths <- sub("^csv::", "", keys[grepl("^csv::", keys)])
     if (!length(paths)) return(invisible(NULL))
     current <- as.character(input$recluster_new_sidebar_barcode_paths %||% character(0))
-    updateSelectizeInput(session, "recluster_new_sidebar_barcode_paths", selected = unique(c(current, paths)), server = TRUE)
+    next_selected <- unique(c(current, paths))
+    if (!identical(current, next_selected)) {
+      # This control already owns its complete choices in the mounted UI.
+      # Updating only its selected values must not clear the catalog and start
+      # an asynchronous server-side Selectize reload.
+      updateSelectizeInput(session, "recluster_new_sidebar_barcode_paths", selected = next_selected, server = FALSE)
+    }
     invisible(NULL)
   }, ignoreInit = TRUE)
 
@@ -5919,11 +9482,13 @@ recluster_new_server <- function(input, output, session, shared_data) {
     matched <- .match_barcodes_to_cells(barcodes, all_cells)
     recluster_new_data$selected_cells <- unique(c(recluster_new_data$selected_cells, matched))
     recluster_new_data$imported_barcode_sources <- unique(c(recluster_new_data$imported_barcode_sources, source_label))
+    .set_selection_owner("manual", "barcode_import")
     showNotification(sprintf("Imported %d barcodes from %s. Matched %d cell(s).", length(barcodes), source_label, length(matched)), type = "message")
     invisible(TRUE)
   }
 
   observeEvent(input$recluster_new_import_barcodes_file, {
+    if (!.recluster_new_event_allowed("sidebar_barcode_file")) return(invisible(NULL))
     file <- input$recluster_new_import_barcodes_file
     req(file)
     tryCatch({
@@ -5935,6 +9500,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   observeEvent(input$recluster_new_import_sidebar_barcodes_btn, {
+    if (!.recluster_new_event_allowed("sidebar_barcode_import")) return(invisible(NULL))
     req(recluster_new_data$seurat_obj)
     paths <- unique(as.character(input$recluster_new_sidebar_barcode_paths %||% character(0)))
     if (!length(paths)) {
@@ -6008,6 +9574,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   observeEvent(input$recluster_new_meta_file, {
+    if (!.recluster_new_event_allowed("metadata_file")) return(invisible(NULL))
     req(input$recluster_new_meta_file)
     fp <- input$recluster_new_meta_file$datapath
     nm <- tolower(input$recluster_new_meta_file$name %||% "")
@@ -6021,6 +9588,9 @@ recluster_new_server <- function(input, output, session, shared_data) {
     }
     .import_df(df)
     .import_match(data.frame())
+    recluster_new_latest_import(data.frame())
+    recluster_new_import_match_object("")
+    recluster_new_import_match_revision(NA_integer_)
     invisible(NULL)
   }, ignoreInit = TRUE)
 
@@ -6031,6 +9601,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }, server = TRUE)
 
   observeEvent(input$recluster_new_run_match_btn, {
+    if (!.recluster_new_event_allowed("metadata_match")) return(invisible(NULL))
     obj <- recluster_new_data$seurat_obj
     req(obj)
     df <- .import_df()
@@ -6068,6 +9639,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
     mdf <- do.call(rbind, out)
     .import_match(mdf)
     recluster_new_latest_import(mdf)
+    recluster_new_import_match_object(.recluster_new_canonical_object_name())
+    recluster_new_import_match_revision(.recluster_new_context_revision())
     showNotification(sprintf("Match complete: %d matched, %d ambiguous, %d unresolved.", sum(mdf$status == "matched"), sum(mdf$status == "ambiguous"), sum(mdf$status == "unresolved")), type = "message")
   }, ignoreInit = TRUE)
 
@@ -6094,7 +9667,16 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }, server = TRUE)
 
   observeEvent(input$recluster_new_import_resolution_table_cell_edit, {
+    if (!.recluster_new_event_allowed("metadata_match_edit")) return(invisible(NULL))
     info <- input$recluster_new_import_resolution_table_cell_edit
+    match_object <- .scalar_chr(recluster_new_import_match_object(), default = "")
+    match_revision <- suppressWarnings(as.integer(recluster_new_import_match_revision() %||% NA_integer_))
+    if (!nzchar(match_object) || !identical(match_object, .recluster_new_canonical_object_name()) ||
+        is.na(match_revision) || !is.finite(match_revision) ||
+        !identical(match_revision, .recluster_new_context_revision())) {
+      showNotification("Dataset changed since barcode matching. Run matching again for current dataset.", type = "warning", duration = 6)
+      return(invisible(NULL))
+    }
     m <- .import_match()
     req(is.data.frame(m), nrow(m))
     i <- info$row
@@ -6116,12 +9698,22 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }, ignoreInit = TRUE)
 
   observeEvent(input$recluster_new_apply_import_btn, {
+    if (!.recluster_new_event_allowed("metadata_import_apply")) return(invisible(NULL))
     obj <- recluster_new_data$seurat_obj
     req(obj)
     raw_df <- .import_df()
     req(raw_df)
     mdf <- .import_match()
     req(is.data.frame(mdf), nrow(mdf) > 0)
+    match_object <- .scalar_chr(recluster_new_import_match_object(), default = "")
+    match_revision <- suppressWarnings(as.integer(recluster_new_import_match_revision() %||% NA_integer_))
+    current_object <- .recluster_new_canonical_object_name()
+    if (!nzchar(match_object) || !identical(match_object, current_object) ||
+        is.na(match_revision) || !is.finite(match_revision) ||
+        !identical(match_revision, .recluster_new_context_revision())) {
+      showNotification("Dataset changed since barcode matching. Run matching again for current dataset.", type = "error", duration = 8)
+      return(invisible(NULL))
+    }
     keep <- mdf$decision %in% c("accept", "resolved")
     mdf2 <- mdf[keep, , drop = FALSE]
     mdf2 <- mdf2[nzchar(as.character(mdf2$chosen_cell)), , drop = FALSE]
@@ -6172,11 +9764,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
       }
     }
     obj@meta.data <- md
-    nm <- .scalar_chr(shared_data$active_object_name, default = "")
-    entry <- shared_data$all_seurat_objects[[nm]]
-    if (is.list(entry) && !is.null(entry$obj)) entry$obj <- obj else entry <- obj
-    shared_data$all_seurat_objects[[nm]] <- entry
-    recluster_new_data$seurat_obj <- obj
+    .commit_metadata_object_update(obj)
     recluster_new_latest_import(mdf)
     showNotification("Applied matched metadata import.", type = "message")
   }, ignoreInit = TRUE)
@@ -6196,6 +9784,14 @@ recluster_new_server <- function(input, output, session, shared_data) {
       as.character(g$cells %||% character(0))
     }), use.names = FALSE)
     unique(out[nzchar(out)])
+  })
+
+  manual_selection_cells <- reactive({
+    unique(c(
+      as.character(lasso_selected_cells_state() %||% character(0)),
+      as.character(recluster_new_data$selected_cells %||% character(0)),
+      as.character(enabled_group_cells() %||% character(0))
+    ))
   })
 
   .visible_umap_cells <- function() {
@@ -6237,7 +9833,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     if (is.null(obj) || !inherits(obj, "Seurat") || !is.list(gene_row)) return(character(0))
     gene_name <- .scalar_chr(gene_row$gene, default = "")
     if (!nzchar(gene_name)) return(character(0))
-    assay_now <- .scalar_chr(input$recluster_new_assay_select, default = "")
+    assay_now <- .expr_assay_name(obj)
     slot_now <- .expr_selection_slot()
     base_cells <- unique(as.character(base_cells %||% character(0)))
     base_cells <- base_cells[nzchar(base_cells)]
@@ -6304,6 +9900,62 @@ recluster_new_server <- function(input, output, session, shared_data) {
     list(active = TRUE, cells = hit_cells, group_cells = merged_group_cells)
   })
 
+  observe({
+    if (!.recluster_new_event_allowed("expression_summary_sync")) return(invisible(NULL))
+    state <- .expr_state_normalize(recluster_new_data$expr_selection)
+    result <- expression_group_cells_result()
+    group_cells <- result$group_cells %||% list()
+    summaries <- list()
+    gene_details <- list()
+    obj <- recluster_new_data$seurat_obj
+    base_cells <- if (!is.null(obj) && inherits(obj, "Seurat")) {
+      if (isTRUE(state$inherit_population)) .expr_base_population_cells() else colnames(obj)
+    } else {
+      character(0)
+    }
+    for (g in state$groups %||% list()) {
+      gid <- .scalar_chr(g$id, default = "")
+      if (!nzchar(gid)) next
+      genes <- g$genes %||% list()
+      checked_n <- sum(vapply(genes, function(gr) isTRUE(gr$checked), logical(1)))
+      summaries[[gid]] <- if (length(genes)) {
+        sprintf("%d genes, %d cells", checked_n, length(group_cells[[gid]] %||% character(0)))
+      } else {
+        RECLUSTER_NEW_UI_TEXT$t_text_expr_group_summary_empty
+      }
+      for (gr in genes) {
+        gene_id <- .scalar_chr(gr$id, default = "")
+        if (!nzchar(gene_id)) next
+        gene_cells <- if (!length(base_cells)) {
+          character(0)
+        } else {
+          .expr_gene_cells(gr, base_cells = base_cells, obj = obj)
+        }
+        gene_details[[.expr_gene_detail_id(gid, gene_id)]] <- list(
+          count_text = sprintf("%d cells", length(gene_cells)),
+          range_text = .expr_format_range(gr$range)
+        )
+      }
+    }
+    object_name_now <- .recluster_new_canonical_object_name()
+    session$sendCustomMessage(
+      "recluster-new-expression-summaries",
+      list(
+        object = object_name_now,
+        context_revision = .recluster_new_context_revision(),
+        summaries = summaries
+      )
+    )
+    session$sendCustomMessage(
+      "recluster-new-expression-gene-details",
+      list(
+        object = object_name_now,
+        context_revision = .recluster_new_context_revision(),
+        details = gene_details
+      )
+    )
+  })
+
   expression_selection_result <- reactive({
     res <- expression_group_cells_result()
     list(active = isTRUE(res$active), cells = as.character(res$cells %||% character(0)))
@@ -6327,6 +9979,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     lasso_cells <- as.character(lasso_selected_cells() %||% character(0))
     manual_cells <- unique(c(lasso_cells, as.character(recluster_new_data$selected_cells %||% character(0))))
     state <- .expr_state_normalize(recluster_new_data$expr_selection)
+    owner_now <- .scalar_chr(selection_owner_state(), default = "none")
 
     if (length(visible)) {
       manual_cells <- intersect(manual_cells, visible)
@@ -6335,48 +9988,64 @@ recluster_new_server <- function(input, output, session, shared_data) {
     }
 
     expr_result <- expression_selection_result()
-    if (isTRUE(expr_result$active)) {
+    if (identical(owner_now, "expression")) {
       expr_cells <- unique(as.character(expr_result$cells %||% character(0)))
       if (isTRUE(state$inherit_population)) {
-        core <- if (length(visible)) intersect(expr_cells, visible) else character(0)
+        selected <- if (length(visible)) intersect(expr_cells, visible) else character(0)
       } else {
-        core <- expr_cells
+        selected <- expr_cells
       }
-      selected <- unique(c(core, group_cells, manual_cells))
+    } else if (identical(owner_now, "manual")) {
+      # Agent note: Manual selection sources are additive. A checked saved
+      # group and a lasso/manual selection must both remain available for
+      # highlighting and for the new-object payload.
+      selected <- unique(c(group_cells, manual_cells))
     } else {
-      if (length(manual_cells) > 0 || length(group_cells) > 0) {
-        selected <- unique(c(group_cells, manual_cells))
-      } else {
-        selected <- visible
-      }
+      selected <- visible
     }
     selected[nzchar(selected)]
   })
 
-  selection_highlight_cells <- reactive({
-    # Agent note: Violet selection fill obscures gene-expression color. Feature
-    # display owns cell fill completely; selection remains active but unpainted.
+  saved_group_highlight_cells <- reactive({
+    if (identical(.scalar_chr(recluster_new_data$umap_display_mode, default = "metadata"), "gene")) {
+      return(character(0))
+    }
+    cells <- unique(as.character(enabled_group_cells() %||% character(0)))
+    cells[!is.na(cells) & nzchar(cells)]
+  })
+
+  violet_selection_highlight_cells <- reactive({
     if (identical(.scalar_chr(recluster_new_data$umap_display_mode, default = "metadata"), "gene")) {
       return(character(0))
     }
     lasso_cells <- as.character(lasso_selected_cells() %||% character(0))
     manual_cells <- as.character(recluster_new_data$selected_cells %||% character(0))
-    group_cells <- as.character(enabled_group_cells() %||% character(0))
-    expr_result <- expression_selection_result()
-    metadata_filtered <- !identical(
+    owner_now <- .scalar_chr(selection_owner_state(), default = "none")
+    expr_state <- .expr_state_normalize(recluster_new_data$expr_selection)
+    cells <- if (identical(owner_now, "expression")) {
+      expr_cells <- as.character(expression_selection_result()$cells %||% character(0))
+      if (isTRUE(expr_state$inherit_population)) {
+        visible <- .visible_umap_cells()
+        if (length(visible)) intersect(expr_cells, visible) else character(0)
+      } else {
+        expr_cells
+      }
+    } else if (identical(owner_now, "manual")) {
+      unique(c(lasso_cells, manual_cells))
+    } else if (identical(
       .scalar_chr(recluster_new_data$metadata_filter_state, default = "all"),
-      "all"
-    )
-    has_explicit_selection <- length(lasso_cells) > 0L ||
-      length(manual_cells) > 0L ||
-      length(group_cells) > 0L ||
-      isTRUE(expr_result$active) ||
-      metadata_filtered
+      "partial"
+    )) {
+      as.character(metadata_filter_result()$cells %||% character(0))
+    } else {
+      character(0)
+    }
+    cells <- unique(as.character(cells %||% character(0)))
+    cells[!is.na(cells) & nzchar(cells)]
+  })
 
-    # Agent note: all_selected_cells() falls back to the visible population for
-    # subset workflows. Do not render that fallback as a UMAP selection highlight.
-    if (!has_explicit_selection) return(character(0))
-    as.character(all_selected_cells() %||% character(0))
+  selection_highlight_cells <- reactive({
+    unique(c(saved_group_highlight_cells(), violet_selection_highlight_cells()))
   })
 
   final_plot_df <- reactive({
@@ -6414,11 +10083,15 @@ recluster_new_server <- function(input, output, session, shared_data) {
     plot_df$embedding_x_title <- axis_titles$x
     plot_df$embedding_y_title <- axis_titles$y
 
-    umap_gene_info <- .umap_gene_selection()
+    display_mode <- .scalar_chr(recluster_new_data$umap_display_mode, default = "metadata")
+    umap_gene_info <- if (identical(display_mode, "gene")) {
+      .umap_gene_selection()
+    } else {
+      list(channels = c("", "", ""), genes = character(0), multi = FALSE)
+    }
     gene_input_1 <- if (length(umap_gene_info$genes)) umap_gene_info$genes[[1]] else ""
     violin_gene <- gene_input_1
     effective_gene_1 <- .scalar_chr(gene_input_1, default = violin_gene)
-    display_mode <- .scalar_chr(recluster_new_data$umap_display_mode, default = "metadata")
     effective_color_mode <- if (identical(display_mode, "gene") && length(umap_gene_info$genes)) "Single Gene Expression" else .active_umap_metadata_col()
     assay_to_use <- .current_umap_assay(recluster_new_data$seurat_obj)
     slot_to_use <- .scalar_chr(input$recluster_new_slot_select, default = "data")
@@ -6467,17 +10140,19 @@ recluster_new_server <- function(input, output, session, shared_data) {
 
     plot_df$selection_status <- "Unselected"
     plot_df$selection_selected <- FALSE
-    visible_cells <- .visible_umap_cells()
-    
-    message(sprintf("[DB_UMAP_DBG][%s][data_browser_debug] emb_cells=%d | plot_df_rows=%d | visible_cells=%d | open_col=%s",
-      format(Sys.time(), "%H:%M:%OS3"), length(emb_cells), nrow(plot_df), length(visible_cells), 
-      .scalar_chr(recluster_new_data$metadata_open_column, default = "<empty>")
-    ))
-    
-    if (!length(visible_cells)) {
-      plot_df <- plot_df[FALSE, , drop = FALSE]
-    } else {
-      plot_df <- plot_df[rownames(plot_df) %in% visible_cells, , drop = FALSE]
+    plot_df$selection_saved_group <- FALSE
+    plot_df$selection_violet <- FALSE
+    population_cells <- .visible_umap_cells()
+
+    # Agent note: Keep every embedding cell in the plot. Metadata checkboxes
+    # define the highlighted population and the subset payload; removing all
+    # unchecked cells makes a checked population look like an ordinary plot and
+    # prevents users from visually verifying what will enter the new object.
+    if (isTRUE(.db_diag_enabled)) {
+      message(sprintf("[DB_UMAP_DBG][%s][data_browser_population_overlay] emb_cells=%d | plot_df_rows=%d | checked_cells=%d | open_col=%s",
+        format(Sys.time(), "%H:%M:%OS3"), length(emb_cells), nrow(plot_df), length(population_cells),
+        .scalar_chr(recluster_new_data$metadata_open_column, default = "<empty>")
+      ))
     }
 
     if (!nrow(plot_df)) {
@@ -6485,12 +10160,31 @@ recluster_new_server <- function(input, output, session, shared_data) {
       return(plot_df)
     }
 
-    selected_cells_now <- selection_highlight_cells()
-    if (length(selected_cells_now) > 0) {
-      hit <- intersect(selected_cells_now, rownames(plot_df))
-      plot_df[hit, "selection_status"] <- "Selected"
-      plot_df[hit, "selection_selected"] <- TRUE
+    saved_group_cells_now <- saved_group_highlight_cells()
+    violet_cells_now <- violet_selection_highlight_cells()
+    saved_group_hit <- intersect(saved_group_cells_now, rownames(plot_df))
+    violet_hit <- intersect(violet_cells_now, rownames(plot_df))
+    selected_cells_now <- unique(c(saved_group_hit, violet_hit))
+    if (length(saved_group_hit)) {
+      plot_df[saved_group_hit, "selection_saved_group"] <- TRUE
     }
+    if (length(violet_hit)) {
+      plot_df[violet_hit, "selection_violet"] <- TRUE
+    }
+    if (length(selected_cells_now)) {
+      plot_df[selected_cells_now, "selection_status"] <- "Selected"
+      plot_df[selected_cells_now, "selection_selected"] <- TRUE
+    }
+    .db_dbg(
+      "umap_selection_overlay",
+      sprintf(
+        "owner=%s cyan_cells=%d violet_cells=%d combined_cells=%d",
+        .scalar_chr(selection_owner_state(), default = "none"),
+        length(saved_group_hit),
+        length(violet_hit),
+        length(selected_cells_now)
+      )
+    )
     active_gene_now <- expression_active_gene_result()
     if (isTRUE(active_gene_now$active) && length(active_gene_now$cells)) {
       active_hit <- intersect(active_gene_now$cells, rownames(plot_df))
@@ -6507,45 +10201,52 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   observe({
-    if (!identical(.current_plot_tab(), "umap")) {
-      return(invisible(NULL))
-    }
-    plot_cache_sig <- .umap_plot_cache_signature()
-    stored_sig <- isolate(recluster_new_data$umap_plot_cache_sig)
-    stored_cache <- isolate(recluster_new_data$umap_plot_cache)
-    if (!identical(plot_cache_sig, stored_sig) && nzchar(plot_cache_sig) && nzchar(stored_sig)) {
-      message(sprintf("[DB_UMAP_CACHE][%s] sig_len=%d | stored_len=%d | sigs_match=%s | is_plotly=%s",
-        format(Sys.time(), "%H:%M:%OS3"),
-        nchar(plot_cache_sig), nchar(stored_sig),
-        as.character(identical(plot_cache_sig, stored_sig)),
-        as.character(inherits(stored_cache, "plotly"))
-      ))
-      s1 <- strsplit(plot_cache_sig, "::")[[1]]
-      s2 <- strsplit(stored_sig, "::")[[1]]
-      min_len <- min(length(s1), length(s2))
-      diff_parts <- which(s1[seq_len(min_len)] != s2[seq_len(min_len)])
-      if (length(diff_parts)) {
-        idx <- diff_parts[[1]]
-        message(sprintf("[DB_UMAP_CACHE] first diff at part %d: NEW='%s' | OLD='%s'",
-          idx, substr(s1[[idx]], 1L, 80L), substr(s2[[idx]], 1L, 80L)))
-      } else if (length(s1) != length(s2)) {
-        message(sprintf("[DB_UMAP_CACHE] part count diff: NEW=%d OLD=%d", length(s1), length(s2)))
+    tryCatch({
+      if (!.recluster_new_event_allowed("umap_cache_render")) return(invisible(NULL))
+      # Overlay requests are explicit invalidation events. This guarantees a
+      # post-settlement request reruns the renderer even when plot inputs did
+      # not otherwise change during the page transition.
+      overlay_request_id <- recluster_new_overlay_request_id()
+      if (!identical(.current_plot_tab(), "umap")) {
+        return(invisible(NULL))
       }
-    }
-    # --- END CACHE DIAGNOSTICS ---
-    if (nzchar(plot_cache_sig) &&
-        identical(plot_cache_sig, stored_sig) &&
-        inherits(stored_cache, "plotly")) {
-      if (is.null(isolate(umap_plot_rendered()))) { # Prevent invalidation loop by isolating reactives
-        umap_plot_rendered(stored_cache)
+      plot_cache_sig <- .umap_plot_cache_signature()
+      stored_sig <- isolate(recluster_new_data$umap_plot_cache_sig)
+      stored_cache <- isolate(recluster_new_data$umap_plot_cache)
+      if (isTRUE(.db_diag_enabled) && !identical(plot_cache_sig, stored_sig) && nzchar(plot_cache_sig) && nzchar(stored_sig)) {
+        message(sprintf("[DB_UMAP_CACHE][%s] sig_len=%d | stored_len=%d | sigs_match=%s | is_plotly=%s",
+          format(Sys.time(), "%H:%M:%OS3"),
+          nchar(plot_cache_sig), nchar(stored_sig),
+          as.character(identical(plot_cache_sig, stored_sig)),
+          as.character(inherits(stored_cache, "plotly"))
+        ))
+        s1 <- strsplit(plot_cache_sig, "::")[[1]]
+        s2 <- strsplit(stored_sig, "::")[[1]]
+        min_len <- min(length(s1), length(s2))
+        diff_parts <- which(s1[seq_len(min_len)] != s2[seq_len(min_len)])
+        if (length(diff_parts)) {
+          idx <- diff_parts[[1]]
+          message(sprintf("[DB_UMAP_CACHE] first diff at part %d: NEW='%s' | OLD='%s'",
+            idx, substr(s1[[idx]], 1L, 80L), substr(s2[[idx]], 1L, 80L)))
+        } else if (length(s1) != length(s2)) {
+          message(sprintf("[DB_UMAP_CACHE] part count diff: NEW=%d OLD=%d", length(s1), length(s2)))
+        }
       }
-      return(invisible(NULL))
-    }
-    .db_dbg("umap_render", sprintf("sig=%s", substr(plot_cache_sig, 1L, 220L)))
+      # --- END CACHE DIAGNOSTICS ---
+      if (nzchar(plot_cache_sig) &&
+          identical(plot_cache_sig, stored_sig) &&
+          inherits(stored_cache, "plotly")) {
+        if (is.null(isolate(umap_plot_rendered()))) { # Prevent invalidation loop by isolating reactives
+          umap_plot_rendered(stored_cache)
+        }
+        .recluster_new_overlay_finish("umap", status = "ready", reason = "cache_render")
+        return(invisible(NULL))
+      }
+      .db_dbg("umap_render", sprintf("request=%s sig=%s", as.character(overlay_request_id), substr(plot_cache_sig, 1L, 220L)))
 
-    plot_df <- final_plot_df()
-    if (!nrow(plot_df)) {
-      p_empty <- plot_ly(source = "recluster_new_plot_source") %>%
+      plot_df <- final_plot_df()
+      if (!nrow(plot_df)) {
+        p_empty <- plot_ly(source = "recluster_new_plot_source") %>%
         add_trace(type = "scattergl", mode = "markers", x = numeric(0), y = numeric(0), hoverinfo = "skip", showlegend = FALSE) %>%
         layout(
           xaxis = list(visible = FALSE),
@@ -6558,9 +10259,10 @@ recluster_new_server <- function(input, output, session, shared_data) {
           margin = list(l = 20, r = 20, t = 40, b = 20)
         ) %>%
         .plotly_touch_zoom()
-      umap_plot_rendered(p_empty)
-      return(invisible(NULL))
-    }
+        umap_plot_rendered(p_empty)
+        .recluster_new_overlay_finish("umap", status = "ready", reason = "empty_render")
+        return(invisible(NULL))
+      }
 
     umap_gene_info <- .umap_gene_selection()
     display_mode <- .scalar_chr(recluster_new_data$umap_display_mode, default = "metadata")
@@ -6570,9 +10272,10 @@ recluster_new_server <- function(input, output, session, shared_data) {
     split_by <- .scalar_chr(input$recluster_new_split_by_select, default = "None")
     violin_gene <- if (length(umap_gene_info$genes)) umap_gene_info$genes[[1]] else ""
 
-    dot_size <- suppressWarnings(as.numeric(input$recluster_new_dot_size %||% 1.0))
+    visual_settings <- .current_visual_settings()
+    dot_size <- suppressWarnings(as.numeric(visual_settings$dot_size %||% input$recluster_new_dot_size %||% 1.0))
     dot_alpha <- suppressWarnings(as.numeric(input$recluster_new_dot_alpha %||% 0.8))
-    highlight_stroke_alpha <- suppressWarnings(as.numeric(input$recluster_new_stroke_width %||% 0.1))
+    highlight_stroke_alpha <- suppressWarnings(as.numeric(visual_settings$stroke_width %||% input$recluster_new_stroke_width %||% 0.1))
     if (!is.finite(dot_size) || dot_size <= 0) dot_size <- 1.0
     if (!is.finite(dot_alpha) || dot_alpha <= 0) dot_alpha <- 0.8
     if (!is.finite(highlight_stroke_alpha)) highlight_stroke_alpha <- 0.1
@@ -6585,6 +10288,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
     # by exactly the rendered highlight stroke width.
     highlight_size <- base_marker_size + highlight_width
     stroke_color <- .scalar_chr(input$recluster_new_stroke_color, default = "black")
+    saved_group_highlight_color <- "#06B6D4"
+    violet_selection_highlight_color <- "#7C3AED"
 
     .split_values <- function(df, split_col) {
       if (!isTruthy(split_col) || identical(split_col, "None") || !(split_col %in% names(df))) {
@@ -6672,7 +10377,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
         mode = "markers",
         x = x_vals,
         y = y_vals,
-        key = df_use$cell_id,
+        key = .plotly_selection_keys(df_use$cell_id),
         hoverinfo = hover,
         marker = marker_list,
         name = name %||% "",
@@ -6766,16 +10471,32 @@ recluster_new_server <- function(input, output, session, shared_data) {
         )
       }
 
-      # Agent note: Keep combined selection membership separate from active-gene
-      # status so orange outlines can overlay selected violet-filled cells.
-      sel_panel <- df_panel[df_panel$selection_selected %in% TRUE, , drop = FALSE]
+      # Agent note: Keep saved-group cyan and other-selection violet in separate
+      # traces. Violet is drawn second when cell sets overlap so an active lasso
+      # or expression selection remains visible without changing saved membership.
+      saved_group_panel <- df_panel[df_panel$selection_saved_group %in% TRUE, , drop = FALSE]
+      violet_panel <- df_panel[df_panel$selection_violet %in% TRUE, , drop = FALSE]
       active_panel <- df_panel[df_panel$selection_status == "ActiveGene", , drop = FALSE]
-      if (nrow(sel_panel)) {
+      if (nrow(saved_group_panel)) {
         p <- .add_marker_trace(
-          p, sel_panel,
+          p, saved_group_panel,
           marker_list = list(
             symbol = "circle",
-            color = "#7C3AED",
+            color = saved_group_highlight_color,
+            size = highlight_size,
+            opacity = 0.82,
+            line = list(width = 0)
+          ),
+          name = "Saved group",
+          show_legend = FALSE
+        )
+      }
+      if (nrow(violet_panel)) {
+        p <- .add_marker_trace(
+          p, violet_panel,
+          marker_list = list(
+            symbol = "circle",
+            color = violet_selection_highlight_color,
             size = highlight_size,
             opacity = 0.82,
             line = list(width = 0)
@@ -6876,9 +10597,10 @@ recluster_new_server <- function(input, output, session, shared_data) {
         margin = list(l = 8, r = 8, t = 18, b = 12)
       )
       p_final <- .finalize_umap_plotly(p)
-      umap_plot_rendered(p_final)
-      return(invisible(NULL))
-    }
+        umap_plot_rendered(p_final)
+        .recluster_new_overlay_finish("umap", status = "ready", reason = "split_render")
+        return(invisible(NULL))
+      }
 
     plot_df$display_x <- plot_df$UMAP_1
     plot_df$display_y <- plot_df$UMAP_2
@@ -6899,8 +10621,22 @@ recluster_new_server <- function(input, output, session, shared_data) {
       ),
       margin = list(l = 60, r = 30, t = 30, b = 88)
     ))
-    umap_plot_rendered(p_final)
-    invisible(NULL)
+      umap_plot_rendered(p_final)
+      .recluster_new_overlay_finish("umap", status = "ready", reason = "render")
+      invisible(NULL)
+    }, error = function(e) {
+      error_text <- conditionMessage(e)
+      if (inherits(e, "shiny.silent.error")) {
+        .db_dbg("umap_render_validation_return", sprintf("message=%s", substr(error_text, 1L, 500L)))
+        .recluster_new_overlay_finish("umap", status = "cancelled", reason = "validation_return")
+        return(invisible(NULL))
+      }
+      .db_dbg("umap_render_error", sprintf("message=%s", substr(error_text, 1L, 500L)))
+      message(sprintf("[DB_UMAP_ERR][%s] %s", format(Sys.time(), "%H:%M:%OS3"), error_text))
+      umap_plot_rendered(.recluster_new_error_plot(error_text, source = "recluster_new_plot_source"))
+      .recluster_new_overlay_finish("umap", status = "error", reason = "umap_render_error")
+      invisible(NULL)
+    })
   })
 
   output$recluster_new_umap_plot <- renderPlotly({
@@ -6908,9 +10644,11 @@ recluster_new_server <- function(input, output, session, shared_data) {
       return(
         plot_ly(source = "recluster_new_plot_source") %>%
           add_trace(type = "scattergl", mode = "markers", x = numeric(0), y = numeric(0), hoverinfo = "skip", showlegend = FALSE) %>%
-          layout(xaxis = list(visible = FALSE), yaxis = list(visible = FALSE), margin = list(l = 0, r = 0, t = 0, b = 0))
+          layout(xaxis = list(visible = FALSE), yaxis = list(visible = FALSE), margin = list(l = 0, r = 0, t = 0, b = 0)) %>%
+          .plotly_touch_zoom()
       )
     }
+    if (!.recluster_new_context_is_settled()) return(.recluster_new_empty_plot("recluster_new_plot_source"))
     req(umap_plot_rendered())
   })
 
@@ -6943,18 +10681,28 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   output$recluster_new_scatter_plot <- renderPlotly({
+    # Release page-level lock from server render completion. DOM polling cannot
+    # distinguish hidden outputs from failed outputs and can freeze interaction.
+    on.exit({
+      if (isTRUE(.recluster_new_context_is_settled()) &&
+          identical(.current_plot_tab(), "scatter")) {
+        .recluster_new_overlay_finish("scatter", status = "ready", reason = "scatter_render")
+      }
+    }, add = TRUE)
     if (!identical(.current_plot_tab(), "scatter")) {
       return(
         plot_ly(source = "recluster_new_plot_source") %>%
           add_trace(type = "scattergl", mode = "markers", x = numeric(0), y = numeric(0), hoverinfo = "skip", showlegend = FALSE) %>%
-          layout(xaxis = list(visible = FALSE), yaxis = list(visible = FALSE), margin = list(l = 0, r = 0, t = 0, b = 0))
+          layout(xaxis = list(visible = FALSE), yaxis = list(visible = FALSE), margin = list(l = 0, r = 0, t = 0, b = 0)) %>%
+          .plotly_touch_zoom()
       )
     }
+    if (!.recluster_new_context_is_settled()) return(.recluster_new_empty_plot("recluster_new_plot_source"))
     gene_x_now <- .scalar_chr(input$recluster_new_scatter_gene_x, default = "")
     gene_y_now <- .scalar_chr(input$recluster_new_scatter_gene_y, default = "")
     if (!nzchar(gene_x_now) || !nzchar(gene_y_now)) {
       return(
-        plot_ly() %>%
+        plot_ly(source = "recluster_new_plot_source") %>%
           add_trace(type = "scattergl", mode = "markers", x = numeric(0), y = numeric(0), hoverinfo = "skip", showlegend = FALSE) %>%
           layout(
           title = "Gene Scatter Plot",
@@ -7011,13 +10759,13 @@ recluster_new_server <- function(input, output, session, shared_data) {
       marker_list$color <- "grey55"
     }
 
-    plot_ly(source = "recluster_new_scatter_plot_source") %>%
+    plot_ly(source = "recluster_new_plot_source") %>%
       add_trace(
         type = "scattergl",
         mode = "markers",
         x = plot_df[[gene_x]],
         y = plot_df[[gene_y]],
-        key = plot_df$cell_id,
+        key = .plotly_selection_keys(plot_df$cell_id),
         hoverinfo = "skip",
         marker = marker_list,
         showlegend = FALSE
@@ -7032,10 +10780,13 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   observeEvent(rule_overlap_df(), {
+    if (!.recluster_new_event_allowed("rule_overlap_state")) return(invisible(NULL))
     rdf <- rule_overlap_df()
     grp <- as.character(rdf$overlap_group %||% character(0))
     names(grp) <- as.character(rdf$cell_id %||% character(0))
-    recluster_new_data$rule_overlap_group <- grp
+    if (!identical(recluster_new_data$rule_overlap_group, grp)) {
+      recluster_new_data$rule_overlap_group <- grp
+    }
     invisible(NULL)
   }, ignoreInit = FALSE)
 
@@ -7071,7 +10822,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     obj <- recluster_new_data$seurat_obj
     red_choices <- .embedding_reduction_choices(obj)
     req(length(red_choices))
-    red_sel <- .scalar_chr(input$recluster_new_rule_umap_reduction_select, default = .preferred_embedding_reduction(obj))
+    red_sel <- .current_rule_reduction(obj)
     if (!nzchar(red_sel) || !(red_sel %in% red_choices)) red_sel <- red_choices[[1]]
     emb <- tryCatch(Seurat::Embeddings(obj, red_sel), error = function(e) NULL)
     validate(need(!is.null(emb) && is.matrix(emb) && ncol(emb) >= 2L, sprintf("Embedding '%s' is unavailable.", red_sel)))
@@ -7123,9 +10874,11 @@ recluster_new_server <- function(input, output, session, shared_data) {
       return(
         plot_ly(source = "recluster_new_rule_plot_source") %>%
           add_trace(type = "scattergl", mode = "markers", x = numeric(0), y = numeric(0), hoverinfo = "skip", showlegend = FALSE) %>%
-          layout(xaxis = list(visible = FALSE), yaxis = list(visible = FALSE), margin = list(l = 0, r = 0, t = 0, b = 0))
+          layout(xaxis = list(visible = FALSE), yaxis = list(visible = FALSE), margin = list(l = 0, r = 0, t = 0, b = 0)) %>%
+          .plotly_touch_zoom()
       )
     }
+    if (!.recluster_new_context_is_settled()) return(.recluster_new_empty_plot("recluster_new_rule_plot_source"))
     plot_df <- rule_final_plot_df()
     req(nrow(plot_df))
 
@@ -7226,7 +10979,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
           mode = "markers",
           x = df_lv$display_x,
           y = df_lv$display_y,
-          key = df_lv$cell_id,
+          key = .plotly_selection_keys(df_lv$cell_id),
           marker = list(
             color = pal[[lv]] %||% "#6B7280",
             size = base_marker_size,
@@ -7250,7 +11003,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
           mode = "markers",
           x = bg_df$display_x,
           y = bg_df$display_y,
-          key = bg_df$cell_id,
+          key = .plotly_selection_keys(bg_df$cell_id),
           marker = list(color = "#BDBDBD", size = base_marker_size, opacity = max(0.12, dot_alpha * 0.45), line = list(width = 0)),
           hoverinfo = "skip",
           showlegend = FALSE
@@ -7263,7 +11016,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
           mode = "markers",
           x = fg_df$display_x,
           y = fg_df$display_y,
-          key = fg_df$cell_id,
+          key = .plotly_selection_keys(fg_df$cell_id),
           marker = list(color = "#C71585", size = highlight_size, opacity = min(1, dot_alpha + 0.12), line = list(width = highlight_width, color = highlight_stroke_color)),
           hoverinfo = "text",
           text = paste0("Cell: ", fg_df$cell_id, "<br>Overlap: ", as.character(fg_df$overlap_group)),
@@ -7280,6 +11033,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
       margin = list(l = 60, r = 30, t = if (length(annotations)) 62 else 30, b = 65)
     ) %>%
       event_register("plotly_selected") %>%
+      event_register("plotly_doubleclick") %>%
       .plotly_touch_zoom()
   })
 
@@ -7312,14 +11066,16 @@ recluster_new_server <- function(input, output, session, shared_data) {
       return(
         plot_ly(source = "recluster_new_rule_plot_source") %>%
           add_trace(type = "scattergl", mode = "markers", x = numeric(0), y = numeric(0), hoverinfo = "skip", showlegend = FALSE) %>%
-          layout(xaxis = list(visible = FALSE), yaxis = list(visible = FALSE), margin = list(l = 0, r = 0, t = 0, b = 0))
+          layout(xaxis = list(visible = FALSE), yaxis = list(visible = FALSE), margin = list(l = 0, r = 0, t = 0, b = 0)) %>%
+          .plotly_touch_zoom()
       )
     }
+    if (!.recluster_new_context_is_settled()) return(.recluster_new_empty_plot("recluster_new_rule_plot_source"))
     gene_x <- .scalar_chr(input$recluster_new_rule_scatter_gene_x, default = "")
     gene_y <- .scalar_chr(input$recluster_new_rule_scatter_gene_y, default = "")
     if (!nzchar(gene_x) || !nzchar(gene_y)) {
       return(
-        plot_ly() %>%
+        plot_ly(source = "recluster_new_rule_plot_source") %>%
           add_trace(type = "scattergl", mode = "markers", x = numeric(0), y = numeric(0), hoverinfo = "skip", showlegend = FALSE) %>%
           layout(
             title = "Rule Scatter Plot",
@@ -7379,7 +11135,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
         mode = "markers",
         x = plot_df[[gene_x]],
         y = plot_df[[gene_y]],
-        key = plot_df$cell_id,
+        key = .plotly_selection_keys(plot_df$cell_id),
         hoverinfo = "skip",
         marker = marker_list,
         showlegend = FALSE
@@ -7394,7 +11150,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
         mode = "markers",
         x = sel_df[[gene_x]],
         y = sel_df[[gene_y]],
-        key = sel_df$cell_id,
+        key = .plotly_selection_keys(sel_df$cell_id),
         marker = list(symbol = "circle-open", size = 5, color = "#C71585", line = list(width = 1, color = "#C71585"), opacity = 0.95),
         hoverinfo = "skip",
         showlegend = FALSE
@@ -7407,6 +11163,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
       yaxis = list(title = gene_y),
       margin = list(l = 55, r = if (isTRUE(show_scale)) 65 else 25, t = 25, b = 55)
     ) %>%
+      event_register("plotly_selected") %>%
+      event_register("plotly_doubleclick") %>%
       .plotly_touch_zoom()
   })
 
@@ -7415,16 +11173,19 @@ recluster_new_server <- function(input, output, session, shared_data) {
       return(
         plot_ly(source = "recluster_new_rule_plot_source") %>%
           add_trace(type = "scattergl", mode = "markers", x = numeric(0), y = numeric(0), hoverinfo = "skip", showlegend = FALSE) %>%
-          layout(xaxis = list(visible = FALSE), yaxis = list(visible = FALSE), margin = list(l = 0, r = 0, t = 0, b = 0))
+          layout(xaxis = list(visible = FALSE), yaxis = list(visible = FALSE), margin = list(l = 0, r = 0, t = 0, b = 0)) %>%
+          .plotly_touch_zoom()
       )
     }
     if (!identical(.current_expr_tab(), "stacked")) {
       return(
         plot_ly(source = "recluster_new_rule_plot_source") %>%
           add_trace(type = "scattergl", mode = "markers", x = numeric(0), y = numeric(0), hoverinfo = "skip", showlegend = FALSE) %>%
-          layout(xaxis = list(visible = FALSE), yaxis = list(visible = FALSE), margin = list(l = 0, r = 0, t = 0, b = 0))
+          layout(xaxis = list(visible = FALSE), yaxis = list(visible = FALSE), margin = list(l = 0, r = 0, t = 0, b = 0)) %>%
+          .plotly_touch_zoom()
       )
     }
+    if (!.recluster_new_context_is_settled()) return(.recluster_new_empty_plot("recluster_new_rule_plot_source"))
     req(recluster_new_data$seurat_obj)
     obj <- recluster_new_data$seurat_obj
     rdf <- rule_overlap_df()
@@ -7455,6 +11216,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     pal <- unlist(.rule_color_map()[c("A_only", "B_only", "A_B", "Neither", "Missing")], use.names = TRUE)
 
     plot_ly(
+      source = "recluster_new_rule_plot_source",
       data = pct_df,
       x = ~group_value,
       y = ~percent,
@@ -7472,16 +11234,20 @@ recluster_new_server <- function(input, output, session, shared_data) {
     ) %>%
       layout(
         barmode = "stack",
-        xaxis = list(title = group_col),
+        xaxis = list(title = group_col, automargin = TRUE, tickangle = -45),
         yaxis = list(title = "Percent of cells", ticksuffix = "%", range = c(0, 100)),
-        legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.18, yanchor = "top"),
-        margin = list(l = 60, r = 20, t = 20, b = 95)
-      )
+        legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.32, yanchor = "top"),
+        margin = list(l = 60, r = 20, t = 20, b = 145)
+      ) %>%
+      .plotly_touch_zoom()
   })
 
   .pseudobulk_table_data <- reactiveVal(NULL)
 
   .pb_run_context <- reactive({
+    if (!.recluster_new_context_is_settled()) {
+      return(list(valid = FALSE, reason = "Selected dataset is still loading."))
+    }
     obj <- recluster_new_data$seurat_obj
     req(obj)
     md <- obj@meta.data
@@ -7541,6 +11307,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   output$recluster_new_pb_level_a_ui <- renderUI({
+    if (!.recluster_new_context_is_settled()) return(NULL)
     x <- .pb_run_context()
     if (!isTRUE(x$valid)) return(helpText(x$reason %||% "Pseudobulk context is not ready."))
     if (identical(.scalar_chr(x$mode, default = ""), "per_cluster_vs_rest")) {
@@ -7550,25 +11317,32 @@ recluster_new_server <- function(input, output, session, shared_data) {
       return(helpText("Auto mode: each selected cluster will run against the remaining selected clusters."))
     }
     lbl <- paste0(RECLUSTER_NEW_UI_TEXT$t_label_pb_level_a, " (", x$level_label %||% "Level", ")")
-    selectInput("recluster_new_pb_level_a", lbl, choices = x$levels, selected = x$levels[[1]])
+    selected <- .scalar_chr(isolate(input$recluster_new_pb_level_a), default = "")
+    if (!(selected %in% x$levels)) selected <- x$levels[[1]]
+    selectInput("recluster_new_pb_level_a", lbl, choices = x$levels, selected = selected)
   })
 
   output$recluster_new_pb_level_b_ui <- renderUI({
+    if (!.recluster_new_context_is_settled()) return(NULL)
     x <- .pb_run_context()
     if (!isTRUE(x$valid)) return(NULL)
     if (identical(.scalar_chr(x$mode, default = ""), "cluster_set_vs_rest")) return(NULL)
     if (identical(.scalar_chr(x$mode, default = ""), "per_cluster_vs_rest")) return(NULL)
     if (identical(.scalar_chr(x$mode, default = ""), "selected_cluster_vs_remaining")) return(NULL)
     selected <- if (length(x$levels) > 1) x$levels[[2]] else x$levels[[1]]
+    current <- .scalar_chr(isolate(input$recluster_new_pb_level_b), default = "")
+    if (current %in% x$levels && !identical(current, selected)) selected <- current
     lbl <- paste0(RECLUSTER_NEW_UI_TEXT$t_label_pb_level_b, " (", x$level_label %||% "Level", ")")
     selectInput("recluster_new_pb_level_b", lbl, choices = x$levels, selected = selected)
   })
 
   observeEvent(input$recluster_new_pb_open_analysis_btn, {
+    if (!.recluster_new_event_allowed("pseudobulk_open_analysis")) return(invisible(NULL))
     updateNavbarPage(session, "main_navbar", selected = "analysis_tab")
   }, ignoreInit = TRUE)
 
   observeEvent(input$recluster_new_pb_run_btn, {
+    if (!.recluster_new_event_allowed("pseudobulk_run")) return(invisible(NULL))
     obj <- recluster_new_data$seurat_obj
     req(obj)
     ctx <- .pb_run_context()
@@ -7610,9 +11384,10 @@ recluster_new_server <- function(input, output, session, shared_data) {
     compare_mode <- core_mode
     split_by <- .scalar_chr(ctx$split_by, default = "None")
     cluster_subset <- as.character(ctx$cluster_subset %||% character(0))
-    message(
+    .db_dbg(
+      "pseudobulk_bind",
       sprintf(
-        "[PB_BIND] mode=%s meta_col=%s split_by=%s cluster_subset=%s level_a=%s level_b=%s",
+        "mode=%s meta_col=%s split_by=%s cluster_subset=%s level_a=%s level_b=%s",
         core_mode, meta_col, split_by, paste(cluster_subset, collapse = ","), level_a, level_b
       )
     )
@@ -7914,11 +11689,12 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }
 
   output$recluster_new_pb_group_controls_ui <- renderUI({
+    if (!.recluster_new_context_is_settled()) return(NULL)
     df <- .pseudobulk_table_data()
     groups <- .pb_table_group_values(df)
     if (!length(groups)) return(NULL)
 
-    visible_now <- input$recluster_new_pb_visible_groups
+    visible_now <- isolate(input$recluster_new_pb_visible_groups)
     if (is.null(visible_now)) {
       visible_now <- groups
     } else {
@@ -7987,6 +11763,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   output$recluster_new_pb_empty_group_note_ui <- renderUI({
+    if (!.recluster_new_context_is_settled()) return(NULL)
     df <- .pseudobulk_table_data()
     groups <- .pb_table_group_values(df)
     visible_groups <- input$recluster_new_pb_visible_groups
@@ -8004,6 +11781,9 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   output$recluster_new_pb_table <- renderDT({
+    if (!.recluster_new_context_is_settled()) {
+      return(datatable(data.frame(note = "Loading selected dataset..."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    }
     df <- .pseudobulk_table_data()
     if (!is.data.frame(df) || !nrow(df)) {
       return(datatable(data.frame(note = "Run pseudobulk table to view results."), rownames = FALSE, selection = "none", options = list(dom = "t")))
@@ -8097,11 +11877,25 @@ recluster_new_server <- function(input, output, session, shared_data) {
     names(profiles)[[1]]
   })
 
+  # Agent note: Stacked-bar segments must use same metadata column and palette
+  # as UMAP color selector. Keep violin grouping independent because expression
+  # violin mode is driven by metadata operation state, not UMAP display state.
+  .active_stacked_group_col <- reactive({
+    selected_col <- .active_umap_metadata_col()
+    if (!nzchar(selected_col) || identical(selected_col, "None")) return("")
+    selected_col
+  })
+
   .violin_plot_cache_signature <- function() {
     obj <- recluster_new_data$seurat_obj
     if (is.null(obj) || !inherits(obj, "Seurat")) return("")
-    
-    group_col <- .active_violin_group_col()
+
+    expr_tab <- .current_expr_tab()
+    group_col <- if (identical(expr_tab, "stacked")) {
+      .active_stacked_group_col()
+    } else {
+      .active_violin_group_col()
+    }
     if (!nzchar(group_col) || !(group_col %in% colnames(recluster_new_data$plot_df))) return("")
     
     plot_groups <- as.character(recluster_new_data$plot_df[[group_col]] %||% character(0))
@@ -8126,7 +11920,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     
     paste(
       .scalar_chr(recluster_new_loaded_object_name(), default = ""),
-      .current_expr_tab(),
+      expr_tab,
       .scalar_chr(input$recluster_new_gene_expr_select_1, default = ""),
       group_col,
       mode_now,
@@ -8141,13 +11935,15 @@ recluster_new_server <- function(input, output, session, shared_data) {
   }
 
   observe({
+    if (!.recluster_new_event_allowed("violin_cache_render")) return(invisible(NULL))
     if (!.db_tab_is_active()) {
       return(invisible(NULL))
     }
     if (!(.current_expr_tab() %in% c("violin", "stacked"))) {
       p_empty <- plot_ly(source = "recluster_new_plot_source") %>%
         add_trace(type = "scattergl", mode = "markers", x = numeric(0), y = numeric(0), hoverinfo = "skip", showlegend = FALSE) %>%
-        layout(xaxis = list(visible = FALSE), yaxis = list(visible = FALSE), margin = list(l = 0, r = 0, t = 0, b = 0))
+        layout(xaxis = list(visible = FALSE), yaxis = list(visible = FALSE), margin = list(l = 0, r = 0, t = 0, b = 0)) %>%
+        .plotly_touch_zoom()
       violin_plot_rendered(p_empty)
       return(invisible(NULL))
     }
@@ -8168,8 +11964,18 @@ recluster_new_server <- function(input, output, session, shared_data) {
 
     gene_name <- .scalar_chr(input$recluster_new_gene_expr_select_1, default = "")
 
-    group_col <- .active_violin_group_col()
-    validate(need(nzchar(group_col), "No active metadata grouping is available."))
+    expr_tab <- .current_expr_tab()
+    group_col <- if (identical(expr_tab, "stacked")) {
+      .active_stacked_group_col()
+    } else {
+      .active_violin_group_col()
+    }
+    group_error <- if (identical(expr_tab, "stacked")) {
+      "Stacked bar plot follows UMAP color selection. Choose a metadata column first."
+    } else {
+      "No active metadata grouping is available."
+    }
+    validate(need(nzchar(group_col), group_error))
     validate(need(group_col %in% colnames(recluster_new_data$plot_df), "Active metadata grouping column is missing from plot data."))
 
     plot_groups <- as.character(recluster_new_data$plot_df[[group_col]] %||% character(0))
@@ -8187,9 +11993,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
     lv <- lv[nzchar(lv)]
     if (!length(lv)) lv <- .sort_numeric_first(unique(plot_groups))
 
-    expr_tab <- .current_expr_tab()
     if (identical(expr_tab, "pseudobulk")) {
-      p_bulk <- plot_ly() %>%
+      p_bulk <- plot_ly(source = "recluster_new_plot_source") %>%
         add_trace(type = "scattergl", mode = "markers", x = numeric(0), y = numeric(0), hoverinfo = "skip", showlegend = FALSE) %>%
         layout(
           title = "Pseudobulk table mode: use the tab below to run and view results.",
@@ -8201,7 +12006,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
             font = list(size = 14, color = "#6b7280")
           )),
           margin = list(l = 20, r = 20, t = 55, b = 20)
-        )
+        ) %>%
+        .plotly_touch_zoom()
       recluster_new_data$violin_plot_cache_sig <- plot_cache_sig
       recluster_new_data$violin_plot_cache <- p_bulk
       violin_plot_rendered(p_bulk)
@@ -8216,7 +12022,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
       split_levels <- .sort_numeric_first(unique(split_vals))
 
       pal <- .level_color_map(recluster_new_data$seurat_obj, group_col, lv)
-      pbar <- plot_ly()
+      pbar <- plot_ly(source = "recluster_new_plot_source")
       for (g in lv) {
         y_vals <- vapply(split_levels, function(sv) sum(plot_groups == g & split_vals == sv), numeric(1))
         pbar <- add_trace(
@@ -8230,12 +12036,17 @@ recluster_new_server <- function(input, output, session, shared_data) {
       }
       p_res <- pbar %>% layout(
         title = paste0(RECLUSTER_NEW_UI_TEXT$t_text_violin_no_gene, " (", group_col, ")"),
-        xaxis = list(title = if (use_split) split_by else ""),
+        xaxis = list(
+          title = if (use_split) split_by else "",
+          automargin = TRUE,
+          tickangle = "auto"
+        ),
         yaxis = list(title = "Cell count"),
         barmode = "stack",
-        legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.2, yanchor = "top"),
+        legend = list(orientation = "h", traceorder = "reversed", x = 0.5, xanchor = "center", y = -0.18, yanchor = "top"),
         margin = list(l = 55, r = 20, t = 40, b = 90)
-      )
+      ) %>%
+      .plotly_touch_zoom()
       recluster_new_data$violin_plot_cache_sig <- plot_cache_sig
       recluster_new_data$violin_plot_cache <- p_res
       violin_plot_rendered(p_res)
@@ -8243,7 +12054,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     }
 
     if (!nzchar(gene_name)) {
-      p_no_gene <- plot_ly() %>%
+      p_no_gene <- plot_ly(source = "recluster_new_plot_source") %>%
         add_trace(type = "scattergl", mode = "markers", x = numeric(0), y = numeric(0), hoverinfo = "skip", showlegend = FALSE) %>%
         layout(
           title = "Choose a gene to show violin plot.",
@@ -8255,7 +12066,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
             font = list(size = 16, color = "#6b7280")
           )),
           margin = list(l = 20, r = 20, t = 60, b = 20)
-        )
+        ) %>%
+        .plotly_touch_zoom()
       recluster_new_data$violin_plot_cache_sig <- plot_cache_sig
       recluster_new_data$violin_plot_cache <- p_no_gene
       violin_plot_rendered(p_no_gene)
@@ -8304,7 +12116,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     df$x_violin <- df$x_center + 0.1
     df$dot_color <- vapply(df$group_chr, function(g) .scalar_chr(pal[[g]], default = "#4B5563"), character(1))
 
-    p <- plot_ly()
+    p <- plot_ly(source = "recluster_new_plot_source")
     for (g in lv) {
       sub_df <- df[df$group_chr == g, , drop = FALSE]
       if (!nrow(sub_df)) next
@@ -8380,7 +12192,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
       yaxis = list(title = paste0(gene_name, " expression")),
       showlegend = FALSE,
       margin = list(l = 55, r = 20, t = 40, b = 65)
-    )
+    ) %>%
+      .plotly_touch_zoom()
 
     recluster_new_data$violin_plot_cache_sig <- plot_cache_sig
     recluster_new_data$violin_plot_cache <- p_final
@@ -8393,17 +12206,20 @@ recluster_new_server <- function(input, output, session, shared_data) {
       return(
         plot_ly(source = "recluster_new_plot_source") %>%
           add_trace(type = "scattergl", mode = "markers", x = numeric(0), y = numeric(0), hoverinfo = "skip", showlegend = FALSE) %>%
-          layout(xaxis = list(visible = FALSE), yaxis = list(visible = FALSE), margin = list(l = 0, r = 0, t = 0, b = 0))
+          layout(xaxis = list(visible = FALSE), yaxis = list(visible = FALSE), margin = list(l = 0, r = 0, t = 0, b = 0)) %>%
+          .plotly_touch_zoom()
       )
     }
+    if (!.recluster_new_context_is_settled()) return(.recluster_new_empty_plot("recluster_new_plot_source"))
     req(violin_plot_rendered())
   })
 
   output$recluster_new_selected_cell_count_output <- renderText({
-    paste(RECLUSTER_NEW_UI_TEXT$t_text_selected_barcodes, length(recluster_new_data$selected_cells), "cells")
+    paste(RECLUSTER_NEW_UI_TEXT$t_text_selected_barcodes, length(manual_selection_cells()), "cells")
   })
 
   observe({
+    if (!.recluster_new_event_allowed("final_cell_count")) return(invisible(NULL))
     selected_cells_now <- checked_population_cells()
     next_text <- paste(RECLUSTER_NEW_UI_TEXT$t_text_selected_total, length(selected_cells_now), "cells")
     if (!identical(next_text, isolate(final_cell_count_text()))) {
@@ -8416,16 +12232,54 @@ recluster_new_server <- function(input, output, session, shared_data) {
     final_cell_count_text()
   })
 
+  .recluster_new_send_create_feedback <- function(state) {
+    try(
+      session$sendCustomMessage(
+        "recluster-new-create-feedback",
+        list(state = as.character(state))
+      ),
+      silent = TRUE
+    )
+    invisible(NULL)
+  }
+
   observeEvent(input$recluster_new_run_btn, {
-    selected_cells_now <- checked_population_cells()
+    on.exit(.recluster_new_send_create_feedback("open_finished"), add = TRUE)
+    if (!.recluster_new_event_allowed("subset_open")) return(invisible(NULL))
+    obj <- recluster_new_data$seurat_obj
+    req(obj)
+    selected_cells_now <- unique(as.character(checked_population_cells() %||% character(0)))
+    selected_cells_now <- selected_cells_now[!is.na(selected_cells_now) & nzchar(selected_cells_now)]
+    missing_cells <- setdiff(selected_cells_now, colnames(obj))
+    if (length(missing_cells)) {
+      .db_dbg(
+        "subset_open_rejected_stale_cells",
+        sprintf("object=%s missing=%d checked=%d", .recluster_new_canonical_object_name(), length(missing_cells), length(selected_cells_now))
+      )
+      showNotification("Population selection is out of date. Reopen it before creating a new object.", type = "error", duration = 8)
+      return(invisible(NULL))
+    }
+    .db_dbg(
+      "subset_open",
+      sprintf(
+        "object=%s revision=%s column=%s filter=%s cells=%d",
+        .recluster_new_canonical_object_name(),
+        .recluster_new_context_revision(),
+        .scalar_chr(recluster_new_data$metadata_active_column, default = ""),
+        .scalar_chr(recluster_new_data$metadata_filter_state, default = ""),
+        length(selected_cells_now)
+      )
+    )
     if (!length(selected_cells_now)) {
-      showNotification("Select at least one population before reclustering.", type = "error")
+      showNotification("Select at least one population before creating a new object.", type = "error")
       return(invisible(NULL))
     }
     # Agent note: Recluster object membership is defined only by checked
     # population levels. Lasso, expression, and saved-group state must not
     # silently replace this explicit population selection.
     recluster_new_pending_population_cells(selected_cells_now)
+    recluster_new_pending_population_object(.recluster_new_canonical_object_name())
+    recluster_new_pending_population_revision(.recluster_new_context_revision())
     obj <- recluster_new_data$seurat_obj
     req(obj)
     md <- tryCatch(obj@meta.data, error = function(e) data.frame())
@@ -8437,6 +12291,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     showModal(modalDialog(
       title = RECLUSTER_NEW_UI_TEXT$t_text_name_subset,
       textInput("recluster_new_subset_name", RECLUSTER_NEW_UI_TEXT$t_label_name_subset, placeholder = RECLUSTER_NEW_UI_TEXT$t_label_name_subset_placeholder),
+      div(class = "app-note-box control-note", p(class = "recluster-new-secondary-text", RECLUSTER_NEW_UI_TEXT$t_text_subset_note)),
       textInput("recluster_new_subset_suffix", RECLUSTER_NEW_UI_TEXT$t_label_suffix_for_metadata, value = suffix_seed),
       div(class = "app-note-box control-note", p(class = "recluster-new-secondary-text", RECLUSTER_NEW_UI_TEXT$t_text_suffix_help)),
       if (length(unknown_cols)) checkboxGroupInput(
@@ -8453,18 +12308,52 @@ recluster_new_server <- function(input, output, session, shared_data) {
   })
 
   observeEvent(input$recluster_new_confirm_btn, {
+    on.exit(.recluster_new_send_create_feedback("create_finished"), add = TRUE)
+    if (!.recluster_new_event_allowed("subset_confirm")) return(invisible(NULL))
     overlay_show(RECLUSTER_NEW_UI_TEXT$t_text_creating_subset)
     on.exit(overlay_hide(), add = TRUE)
 
     seurat_obj <- recluster_new_data$seurat_obj
     selected_cells <- recluster_new_pending_population_cells()
+    pending_object <- .scalar_chr(recluster_new_pending_population_object(), default = "")
+    pending_revision <- suppressWarnings(as.integer(recluster_new_pending_population_revision() %||% NA_integer_))
+    current_object <- .recluster_new_canonical_object_name()
+    if (!nzchar(pending_object) || !identical(pending_object, current_object) ||
+        !is.finite(pending_revision) || is.na(pending_revision) ||
+        !identical(pending_revision, .recluster_new_context_revision())) {
+      showNotification("Dataset changed while subset dialog was open. Reopen subset creation for current dataset.", type = "error", duration = 8)
+      recluster_new_pending_population_cells(character(0))
+      recluster_new_pending_population_object("")
+      recluster_new_pending_population_revision(NA_integer_)
+      removeModal()
+      return(invisible(NULL))
+    }
     new_name <- .scalar_chr(input$recluster_new_subset_name, default = "")
     suffix_raw <- .scalar_chr(input$recluster_new_subset_suffix, default = "")
     unknown_keep <- as.character(input$recluster_new_unknown_keep_cols %||% character(0))
 
     req(seurat_obj)
+    selected_cells <- unique(as.character(selected_cells %||% character(0)))
+    selected_cells <- selected_cells[!is.na(selected_cells) & nzchar(selected_cells)]
+    missing_cells <- setdiff(selected_cells, colnames(seurat_obj))
+    if (length(missing_cells)) {
+      .db_dbg(
+        "subset_confirm_rejected_stale_cells",
+        sprintf("object=%s missing=%d pending=%d", current_object, length(missing_cells), length(selected_cells))
+      )
+      showNotification("Population selection changed while dialog was open. Reopen object creation.", type = "error", duration = 8)
+      recluster_new_pending_population_cells(character(0))
+      recluster_new_pending_population_object("")
+      recluster_new_pending_population_revision(NA_integer_)
+      removeModal()
+      return(invisible(NULL))
+    }
+    .db_dbg(
+      "subset_confirm",
+      sprintf("source=%s revision=%s cells=%d", current_object, pending_revision, length(selected_cells))
+    )
     if (!length(selected_cells)) {
-      showNotification("Select at least one population before reclustering.", type = "error")
+      showNotification("Select at least one population before creating a new object.", type = "error")
       return(invisible(NULL))
     }
     req(isTruthy(new_name))
@@ -8475,6 +12364,10 @@ recluster_new_server <- function(input, output, session, shared_data) {
 
     subset_obj <- tryCatch(subset(seurat_obj, cells = selected_cells), error = function(e) NULL)
     req(subset_obj)
+    .db_dbg(
+      "subset_created",
+      sprintf("source=%s new=%s cells=%d", current_object, new_name, ncol(subset_obj))
+    )
     rename_res <- tryCatch(
       metadata_policy_rename_for_subset(
         md = subset_obj@meta.data,
@@ -8490,7 +12383,7 @@ recluster_new_server <- function(input, output, session, shared_data) {
     }
     subset_obj@meta.data <- rename_res$meta
     parent_name <- .scalar_chr(shared_data$active_object_name, default = "")
-    subset_obj <- .reset_subset_analysis_state(subset_obj, source_object_name = parent_name)
+    subset_obj <- wanlab_reset_subset_analysis_state(subset_obj, source_object_name = parent_name)
     subset_obj <- metadata_policy_add_audit(
       subset_obj,
       source_module = "data_browser_new_subset_create",
@@ -8529,13 +12422,17 @@ recluster_new_server <- function(input, output, session, shared_data) {
     shared_data$active_object_name <- new_name
     recluster_new_loaded_object_name("")
     .load_active_recluster_new_object(new_name)
+    recluster_new_pending_population_cells(character(0))
+    recluster_new_pending_population_object("")
+    recluster_new_pending_population_revision(NA_integer_)
 
-    showNotification(paste("New subset '", new_name, "' created and activated.", sep = ""), type = "message")
+    showNotification(paste("New object '", new_name, "' created and activated.", sep = ""), type = "message")
   })
 
   # Reactive values/helper for VDJ clone explorer in Data Browser
   # Populate dropdowns when Seurat object changes
   observe({
+    if (!.recluster_new_event_allowed("tcr_choice_sync")) return(invisible(NULL))
     obj <- recluster_new_data$seurat_obj
     req(obj)
     md <- obj@meta.data
@@ -8545,19 +12442,29 @@ recluster_new_server <- function(input, output, session, shared_data) {
     # Clone cols candidates
     clone_candidates <- c("vdj_tcr_clone", "vdj_bcr_clone", "tcr_clone", "bcr_clone", "cdr3")
     clone_hit <- clone_candidates[clone_candidates %in% cols]
-    clone_sel <- if (length(clone_hit)) clone_hit[[1]] else cols[[1]]
+    clone_default <- if (length(clone_hit)) clone_hit[[1]] else cols[[1]]
+    clone_current <- .scalar_chr(isolate(input$recluster_new_tcr_clone_col), default = "")
+    clone_sel <- if (clone_current %in% cols) clone_current else clone_default
     
     # Cond cols candidates
     cond_candidates <- c("condition", "sample", "orig.ident", "group", "treatment")
     cond_hit <- cond_candidates[cond_candidates %in% cols]
-    cond_sel <- if (length(cond_hit)) cond_hit[[1]] else cols[[1]]
-    
+    cond_default <- if (length(cond_hit)) cond_hit[[1]] else cols[[1]]
+    cond_current <- .scalar_chr(isolate(input$recluster_new_tcr_cond_col), default = "")
+    cond_sel <- if (cond_current %in% cols) cond_current else cond_default
+
+    choices_sig <- paste(c(cols, clone_sel, cond_sel), collapse = "\u001f")
+    if (identical(.scalar_chr(recluster_new_data$tcr_choices_sig, default = ""), choices_sig)) {
+      return(invisible(NULL))
+    }
+    recluster_new_data$tcr_choices_sig <- choices_sig
     updateSelectInput(session, "recluster_new_tcr_clone_col", choices = cols, selected = clone_sel)
     updateSelectInput(session, "recluster_new_tcr_cond_col", choices = cols, selected = cond_sel)
   })
   
   # Reactive expression to build clone table
   .tcr_clone_table_data <- reactive({
+    if (!.recluster_new_context_is_settled()) return(NULL)
     obj <- recluster_new_data$seurat_obj
     req(obj)
     clone_col <- input$recluster_new_tcr_clone_col
@@ -8649,6 +12556,9 @@ recluster_new_server <- function(input, output, session, shared_data) {
   
   # Render DT Clone Table
   output$recluster_new_tcr_table <- DT::renderDataTable({
+    if (!.recluster_new_context_is_settled()) {
+      return(DT::datatable(data.frame(note = "Loading selected dataset..."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    }
     tbl <- .tcr_clone_table_data()
     validate(need(!is.null(tbl) && nrow(tbl) > 0, "No clone statistics available. Confirm VDJ metadata is applied to this object."))
     
@@ -8670,10 +12580,15 @@ recluster_new_server <- function(input, output, session, shared_data) {
   
   # React to row selection: Highlight cells in UMAP by appending to selected_cells
   observeEvent(input$recluster_new_tcr_table_rows_selected, {
+    if (!.recluster_new_event_allowed("tcr_table_selection")) return(invisible(NULL))
     tbl <- .tcr_clone_table_data()
     req(tbl)
     selected_rows <- input$recluster_new_tcr_table_rows_selected
-    
+    # DT sends NULL while table binding/rebinding. That is not a user clear
+    # event and must not erase selections from metadata, lasso, or expression
+    # controls during object/table transitions.
+    if (is.null(selected_rows)) return(invisible(NULL))
+
     obj <- recluster_new_data$seurat_obj
     req(obj)
     clone_col <- input$recluster_new_tcr_clone_col
@@ -8681,17 +12596,23 @@ recluster_new_server <- function(input, output, session, shared_data) {
     
     if (!length(selected_rows)) {
       recluster_new_data$selected_cells <- character(0)
+      if (identical(.scalar_chr(selection_owner_state(), default = "none"), "manual") &&
+          !length(lasso_selected_cells_state())) {
+        .restore_selection_owner_after_manual_clear("tcr_rows_cleared")
+      }
     } else {
       selected_clones <- tbl$clone[selected_rows]
       clones_in_metadata <- as.character(md[[clone_col]])
       matched_barcodes <- rownames(md)[clones_in_metadata %in% selected_clones]
       
       recluster_new_data$selected_cells <- matched_barcodes
+      .set_selection_owner("manual", "tcr_rows_selected")
     }
   }, ignoreNULL = FALSE)
   
   # Select All button click
   observeEvent(input$recluster_new_tcr_select_all_btn, {
+    if (!.recluster_new_event_allowed("tcr_select_all")) return(invisible(NULL))
     tbl <- .tcr_clone_table_data()
     req(tbl)
     selected_rows <- input$recluster_new_tcr_table_rows_selected
@@ -8707,11 +12628,13 @@ recluster_new_server <- function(input, output, session, shared_data) {
     matched_barcodes <- rownames(md)[clones_in_metadata %in% selected_clones]
     
     recluster_new_data$selected_cells <- unique(c(recluster_new_data$selected_cells, matched_barcodes))
+    .set_selection_owner("manual", "tcr_select_all")
     showNotification(sprintf("Added %d cells from selected clone(s) to Selection Workspace.", length(matched_barcodes)), type = "message")
   })
   
   # Clonal Distribution Plot
   output$recluster_new_tcr_dist_plot <- renderPlotly({
+    if (!.recluster_new_context_is_settled()) return(.recluster_new_empty_plot("recluster_new_tcr_plot_source"))
     tbl <- .tcr_clone_table_data()
     req(tbl)
     
@@ -8746,7 +12669,8 @@ recluster_new_server <- function(input, output, session, shared_data) {
       labs(x = "Clone ID", y = "Cell Count", fill = "Condition") +
       theme(axis.text.x = element_text(angle = 30, hjust = 1))
     
-    ggplotly(p)
+    ggplotly(p) %>%
+      .plotly_interactive_tools()
   })
 }
 

@@ -881,7 +881,7 @@ atac_qc_server <- function(input, output, session, shared_data) {
     atac_table_data(df)
 
     if (length(applied)) {
-      shared_data$active_object_name <- paste0(applied[[1]], "_atacqc_filtered")
+      shared_data$active_object_name <- paste0(applied[[length(applied)]], "_atacqc_filtered")
       showNotification(sprintf("ATAC QC done: %d filtered object(s) added to workspace.", length(applied)), type = "message")
     }
     if (length(skipped)) {

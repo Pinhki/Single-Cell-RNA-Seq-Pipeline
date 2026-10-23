@@ -274,7 +274,6 @@ body{
 .qc-square .plotly,
 .qc-square #qc_scatter_main{
   width: 100% !important;
-  height: 100% !important;
 }
 
 .qc-vln .shiny-spinner-output-container,

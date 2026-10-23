@@ -14,9 +14,9 @@ wan_lab_footer <- function(APP_VERSION = NA_character_) {
         span(
           class = "footer-policy",
           tags$abbr(
-            title = "This app may not be perfect, but it was built under extreme tuning and stress testing by a PhD student who had no formal obligation to do this, no spare time to do this, and in truth would have preferred not to take this on at all. It was done solely out of care for the lab. The code is visible, but this is not open source. Any reverse engineering, modification, or analysis without explicit permission is unauthorized, and you assume all resulting risks and consequences, which will be refused for any help or suggestions.",
+            title = "GNU General Public License version 3 applies to original code. See LICENSE and THIRD_PARTY_NOTICES.md.",
             style = "text-decoration: none; cursor: help;",
-            HTML("<strong>Unauthorized</strong> LLM-assisted <strong>reverse engineering, modification, or adaptation</strong> of this app is strictly <strong>prohibited</strong>. Ask permission and contribute with <strong>etiquette</strong>.")
+            HTML("Original code is licensed under GNU GPL v3. Third-party components retain their own licenses.")
           )
         ),
         span(" • "),

@@ -98,7 +98,7 @@ testthat::test_that("analysis selector helpers resolve source choices and mode o
   )
 })
 
-testthat::test_that("analysis bootstrap selection prefers integrated object over stale imported selection", {
+testthat::test_that("analysis bootstrap selection preserves valid active object", {
   registry <- list(
     sample_a = list(obj = list(assays = c("RNA"))),
     integrated_20260331 = list(obj = list(assays = c("RNA", "integrated"))),
@@ -113,11 +113,11 @@ testthat::test_that("analysis bootstrap selection prefers integrated object over
   )
 
   testthat::expect_identical(boot$mode, "replace")
-  testthat::expect_identical(boot$active_name, "integrated_20260331")
-  testthat::expect_identical(boot$selection, "integrated_20260331")
+  testthat::expect_identical(boot$active_name, "sample_a")
+  testthat::expect_identical(boot$selection, "sample_a")
 })
 
-testthat::test_that("analysis preferred loaded object name promotes integrated objects during import bootstrap", {
+testthat::test_that("analysis preferred loaded object name preserves explicit object intent", {
   registry <- list(
     sample_a = list(obj = list(assays = c("RNA"))),
     integrated_20260331 = list(obj = list(assays = c("RNA", "integrated"))),
@@ -130,7 +130,7 @@ testthat::test_that("analysis preferred loaded object name promotes integrated o
       focus_name = "sample_a",
       imported_active_name = "sample_a"
     ),
-    "integrated_20260331"
+    "sample_a"
   )
   testthat::expect_identical(
     analysis_preferred_loaded_object_name(
@@ -148,9 +148,102 @@ testthat::test_that("analysis preferred loaded object name promotes integrated o
     ),
     "sample_only"
   )
+  testthat::expect_identical(
+    analysis_preferred_loaded_object_name(registry),
+    "sample_b"
+  )
 })
 
-testthat::test_that("analysis page enables only one selector mode at a time", {
+testthat::test_that("missing active object defaults to newest registry entry", {
+  registry <- list(
+    sample_a = list(obj = list(assays = c("RNA"))),
+    sample_b = list(obj = list(assays = c("RNA")))
+  )
+
+  boot <- analysis_bootstrap_selection(
+    registry,
+    active_name = "",
+    current_selection = character(0),
+    reintegration_enabled = FALSE
+  )
+  testthat::expect_identical(boot$active_name, "sample_b")
+  testthat::expect_identical(boot$selection, "sample_b")
+})
+
+testthat::test_that("replace-mode bootstrap also defaults to newest registry entry", {
+  registry <- list(
+    sample_a = list(obj = list(assays = c("RNA"))),
+    integrated_old = list(obj = list(assays = c("RNA", "integrated"))),
+    newest_object = list(obj = list(assays = c("RNA")))
+  )
+
+  boot <- analysis_bootstrap_selection(
+    registry,
+    active_name = "",
+    current_selection = character(0),
+    reintegration_enabled = FALSE
+  )
+  testthat::expect_identical(boot$active_name, "newest_object")
+  testthat::expect_identical(boot$selection, "newest_object")
+})
+
+testthat::test_that("active-object recovery call sites use registry tail", {
+  read_source <- function(path) {
+    source_path <- if (file.exists(path)) path else file.path("..", "..", path)
+    paste(readLines(source_path, warn = FALSE), collapse = "\n")
+  }
+  app_source <- read_source("Content/app.R")
+  analysis_source <- read_source("Content/interface/analysis/page_analysis.R")
+  browser_source <- read_source("Content/interface/analysis/page_data_browser.R")
+  workspace_source <- read_source("Content/interface/workspace/page_rds.R")
+  sidebar_source <- read_source("Content/interface/components/component_right_sidebar.R")
+  barcode_source <- read_source("Content/interface/qc/page_barcodes.R")
+  qc_source <- read_source("Content/interface/qc/page_qc.R")
+  flowgate_source <- read_source("Content/interface/qc/page_flowgate.R")
+  doublet_source <- read_source("Content/interface/qc/page_doublet.R")
+  vdj_source <- read_source("Content/interface/qc/page_vdj.R")
+  hto_source <- read_source("Content/interface/qc/page_hto.R")
+  contamination_source <- read_source("Content/interface/qc/page_contamination_correction.R")
+  atac_source <- read_source("Content/interface/qc/page_atac_qc.R")
+  rds_source <- read_source("Content/interface/workspace/page_rds.R")
+  beta_source <- read_source("Content/core/backends/analysis_beta_methods_core.R")
+  beta_backend_sources <- vapply(
+    c(
+      "Content/core/backends/cellchat_core.R",
+      "Content/core/backends/monocle2_core.R",
+      "Content/core/backends/nichenet_core.R",
+      "Content/core/backends/niches_core.R",
+      "Content/core/backends/rna_velocity_core.R",
+      "Content/core/backends/scenic_core.R",
+      "Content/core/backends/sctenifoldknk_core.R"
+    ),
+    read_source,
+    character(1)
+  )
+
+  testthat::expect_true(grepl("valid_names\\[\\[length\\(valid_names\\)\\]\\]", app_source, perl = TRUE))
+  testthat::expect_true(grepl("obj_names\\[\\[length\\(obj_names\\)\\]\\]", app_source, perl = TRUE))
+  testthat::expect_true(grepl("imported\\[\\[length\\(imported\\)\\]\\]", app_source, perl = TRUE))
+  testthat::expect_true(grepl("reg_names\\[\\[length\\(reg_names\\)\\]\\]", analysis_source, perl = TRUE))
+  testthat::expect_true(grepl("reg_names\\[\\[length\\(reg_names\\)\\]\\]", browser_source, perl = TRUE))
+  testthat::expect_true(grepl("object_names\\[\\[length\\(object_names\\)\\]\\]", workspace_source, perl = TRUE))
+  testthat::expect_true(grepl("remain\\[\\[length\\(remain\\)\\]\\]", sidebar_source, perl = TRUE))
+  testthat::expect_true(grepl("created\\[\\[length\\(created\\)\\]\\]", barcode_source, perl = TRUE))
+  testthat::expect_true(grepl("entry_names\\[\\[length\\(entry_names\\)\\]\\]", qc_source, perl = TRUE))
+  testthat::expect_true(grepl("objs\\[\\[length\\(objs\\)\\]\\]", flowgate_source, perl = TRUE))
+  testthat::expect_true(grepl("object_names\\[\\[length\\(object_names\\)\\]\\]", doublet_source, perl = TRUE))
+  testthat::expect_true(grepl("nms\\[\\[length\\(nms\\)\\]\\]", vdj_source, perl = TRUE))
+  testthat::expect_true(grepl("nms\\[\\[length\\(nms\\)\\]\\]", hto_source, perl = TRUE))
+  testthat::expect_true(grepl("nms\\[\\[length\\(nms\\)\\]\\]", contamination_source, perl = TRUE))
+  testthat::expect_true(grepl("applied\\[\\[length\\(applied\\)\\]\\]", atac_source, perl = TRUE))
+  testthat::expect_true(grepl("nms\\[\\[length\\(nms\\)\\]\\]", rds_source, perl = TRUE))
+  testthat::expect_true(grepl("imported_names\\[\\[length\\(imported_names\\)\\]\\]", sidebar_source, perl = TRUE))
+  testthat::expect_true(grepl("imported_names\\[\\[length\\(imported_names\\)\\]\\]", workspace_source, perl = TRUE))
+  testthat::expect_true(grepl("registry_names\\[\\[length\\(registry_names\\)\\]\\]", beta_source, perl = TRUE))
+  testthat::expect_true(all(grepl("valid_nms\\[\\[length\\(valid_nms\\)\\]\\]", beta_backend_sources, fixed = FALSE)))
+})
+
+testthat::test_that("analysis page separates header switching from integration selection", {
   .page_source_path <- if (file.exists("Content/interface/analysis/page_analysis.R")) {
     "Content/interface/analysis/page_analysis.R"
   } else {
@@ -158,34 +251,22 @@ testthat::test_that("analysis page enables only one selector mode at a time", {
   }
   page_source <- paste(readLines(.page_source_path, warn = FALSE), collapse = "\n")
 
+  testthat::expect_true(grepl("enabled = reactive(TRUE)", page_source, fixed = TRUE))
   testthat::expect_true(
     grepl(
-      "enabled\\s*=\\s*isTRUE\\(.analysis_replace_selector_enabled\\(\\)\\)",
-      page_source,
-      perl = TRUE
-    )
-  )
-  testthat::expect_true(
-    grepl(
-      "if \\(!isTRUE\\(.analysis_replace_selector_enabled\\(\\)\\)\\) return\\(invisible\\(NULL\\)\\)",
-      page_source,
-      perl = TRUE
-    )
-  )
-  testthat::expect_true(
-    grepl(
-      "if \\(!isTRUE\\(.analysis_multiselect_enabled\\(\\)\\)\\) return\\(invisible\\(NULL\\)\\)",
-      page_source,
-      perl = TRUE
-    )
-  )
-  testthat::expect_true(
-    grepl(
-      "analysis_preferred_integrated_name(",
+      "!isTRUE(.analysis_should_lock_integration())",
       page_source,
       fixed = TRUE
     )
   )
+  testthat::expect_true(
+    grepl(
+      "active = reactive(identical(.scalar_chr(input$main_navbar, default = \"\"), \"analysis_tab\"))",
+      page_source,
+      fixed = TRUE
+    )
+  )
+  testthat::expect_true(grepl("analysis_prefer_integrated_boot_pending(FALSE)", page_source, fixed = TRUE))
   testthat::expect_true(
     grepl(
       "analysis_reintegration_enabled <- reactiveVal\\(FALSE\\)",

@@ -112,6 +112,8 @@ analysis_selector_choices_for_mode <- function(registry, mode = NULL, reintegrat
 }
 
 analysis_preferred_integrated_name <- function(registry, active_name = "") {
+  # Explicit integration workflow helper only. Never use this for landing or
+  # canonical active-object hydration; first integrated object is not default.
   integrated_names <- analysis_integrated_object_names(registry)
   if (!length(integrated_names)) return("")
   active_chr <- analysis_selector_chr_values(active_name)
@@ -151,9 +153,15 @@ analysis_bootstrap_selection <- function(registry, active_name = "", current_sel
   selected_chr <- intersect(analysis_selector_chr_values(current_selection), choices)
 
   if (identical(mode_now, "replace")) {
-    target_active <- analysis_preferred_integrated_name(registry, active_name = active_chr)
-    if (!nzchar(target_active) && nzchar(active_chr) && active_chr %in% choices) target_active <- active_chr
-    if (!nzchar(target_active) && length(choices)) target_active <- choices[[1]]
+    # A valid canonical active object remains authoritative. Only missing
+    # active state falls back to the newest registry entry; integration status
+    # must never silently replace a valid user/object choice.
+    target_active <- if (nzchar(active_chr) && active_chr %in% choices) {
+      active_chr
+    } else {
+      ""
+    }
+    if (!nzchar(target_active) && length(choices)) target_active <- choices[[length(choices)]]
     return(list(
       mode = mode_now,
       choices = choices,
@@ -178,7 +186,7 @@ analysis_bootstrap_selection <- function(registry, active_name = "", current_sel
     if (nzchar(active_chr) && active_chr %in% choices) {
       selected_chr <- active_chr
     } else if (length(choices)) {
-      selected_chr <- choices[[1]]
+      selected_chr <- choices[[length(choices)]]
     }
   }
 

@@ -601,7 +601,13 @@ figure_dotplot_server <- function(input, output, session, shared_data) {
       show_group_labels = isTRUE(input$dotplot_show_group_labels)
     ))
   })
-  figure_code_card_server("figure_dotplot_code_card", code_text_reactive = generated_plot_code)
+  figure_code_card_server(
+    "figure_dotplot_code_card",
+    code_text_reactive = generated_plot_code,
+    shared_data = shared_data,
+    object_name_reactive = selected_dataset_name,
+    studio_name = "Dot Plot Studio"
+  )
 
   output$figure_dotplot_plot <- renderPlot({
     req(input$dotplot_generate_btn > 0)

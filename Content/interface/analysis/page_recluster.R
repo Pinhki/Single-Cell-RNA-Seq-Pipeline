@@ -290,7 +290,13 @@ recluster_ui <- fluidPage(
         class = "recluster-header-selector",
         div(
           class = "analysis-object-selector-wrap",
-          uiOutput("recluster_object_selector_ui")
+          div(
+            class = "analysis-object-selector-card analysis-object-selector-card-top",
+            wl_object_selector_ui(
+              "recluster_dataset_select",
+              RECLUSTER_UI_TEXT$t_label_select_active_dataset
+            )
+          )
         )
       )
     ),
@@ -526,29 +532,19 @@ recluster_server <- function(input, output, session, shared_data) {
     input$gene_expr_select_2
   }, ignoreNULL = FALSE)
   
-  # 1. This renders the dataset selector dropdown UI
-  output$recluster_object_selector_ui <- renderUI({
-    object_choices <- names(shared_data$all_seurat_objects)
-    req(length(object_choices) > 0)
-    
-    div(
-      class = "analysis-object-selector-card analysis-object-selector-card-top",
-      `data-canonical-value` = shared_data$active_object_name,
-      tags$label(class = "control-label", RECLUSTER_UI_TEXT$t_label_select_active_dataset),
-      selectInput(
-        "recluster_dataset_select",
-        label = NULL,
-        choices = object_choices,
-        selected = shared_data$active_object_name
-      )
-    )
-  })
-  
-  # 2. This observer updates the active dataset when the user changes the dropdown
-  observeEvent(input$recluster_dataset_select, {
-    req(input$recluster_dataset_select)
-    shared_data$active_object_name <- input$recluster_dataset_select
-  })
+  recluster_object_selector <- wl_bind_active_object_selector(
+    input = input,
+    session = session,
+    shared_data = shared_data,
+    input_id = "recluster_dataset_select",
+    choices = reactive(names(shared_data$all_seurat_objects %||% list())),
+    active = reactive(identical(.scalar_chr(input$main_navbar, default = ""), "recluster_tab")),
+    on_user_selection = function(selected, previous) {
+      if (!identical(previous, selected)) {
+        shared_data$active_object_name <- selected
+      }
+    }
+  )
   
   observeEvent(input$recluster_tabs, {
     if (input$recluster_tabs == "UMAP Plot") {
@@ -639,7 +635,17 @@ recluster_server <- function(input, output, session, shared_data) {
     if (!nzchar(active_name %||% "")) return(invisible(NULL))
     entry <- shared_data$all_seurat_objects[[active_name]]
     obj <- if (is.list(entry) && !is.null(entry$obj)) entry$obj else entry
-    if (is.null(obj) || !inherits(obj, "Seurat") || !("umap" %in% names(obj@reductions))) {
+    dims_pref <- wanlab_get_active_embedding_dims(entry)
+    umap_name <- if (!is.null(obj) && inherits(obj, "Seurat")) {
+      wanlab_resolve_embedding_reduction(
+        obj,
+        "umap",
+        preferred_dims = if (length(dims_pref)) dims_pref else NULL
+      )
+    } else {
+      ""
+    }
+    if (!nzchar(umap_name)) {
       recluster_data$seurat_obj <- NULL
       recluster_data$plot_df <- NULL
       recluster_data$cell_groups <- list()
@@ -649,8 +655,8 @@ recluster_server <- function(input, output, session, shared_data) {
     }
 
     plot_df <- data.frame(
-      UMAP_1 = obj@reductions$umap@cell.embeddings[, 1],
-      UMAP_2 = obj@reductions$umap@cell.embeddings[, 2],
+      UMAP_1 = Seurat::Embeddings(obj, umap_name)[, 1],
+      UMAP_2 = Seurat::Embeddings(obj, umap_name)[, 2],
       row.names = colnames(obj)
     )
 
@@ -1217,7 +1223,7 @@ recluster_server <- function(input, output, session, shared_data) {
     # Create a new Seurat object containing only the selected cells
     parent_name <- .scalar_chr(shared_data$active_object_name, default = "")
     subset_obj <- subset(seurat_obj, cells = selected_cells)
-    subset_obj <- .reset_subset_analysis_state(subset_obj, source_object_name = parent_name)
+    subset_obj <- wanlab_reset_subset_analysis_state(subset_obj, source_object_name = parent_name)
     
     # --- Pass this subset object BACK to the Analysis page ---
     

@@ -1,5 +1,6 @@
 # Shared active-object selector contract.
 #
+# Full cross-control rules: read docs/agents/interface/ANALYSIS_STATE_SYNC_CONTRACT.md.
 # Agent note: These selectors are views/controllers for
 # shared_data$active_object_name. Physical user events use a separate input;
 # ordinary select changes are server echoes or browser restoration and must
@@ -40,10 +41,92 @@ wl_object_selector_ui <- function(input_id, label) {
           return selector;
         }
 
-        function emitUserSelection(selector) {
-          if (!selector || !selector.__wlPhysicalChangeArmed) return;
-          selector.__wlPhysicalChangeArmed = false;
-          if (!window.Shiny || !Shiny.setInputValue) return;
+        function selectorValuesMatch(actual, expected) {
+          if (Array.isArray(actual) || Array.isArray(expected)) {
+            var actualList = Array.isArray(actual) ? actual : [actual];
+            var expectedList = Array.isArray(expected) ? expected : [expected];
+            return expectedList.map(String).sort().join('\u001f') === actualList.map(String).sort().join('\u001f');
+          }
+          return String(actual) === String(expected);
+        }
+
+        function selectorHasOption(selector, value) {
+          if (!selector || value === undefined || value === null || value === '') return false;
+          return Array.prototype.some.call(selector.options || [], function (option) {
+            return String(option.value) === String(value);
+          });
+        }
+
+        function selectorValueAvailable(selector, value) {
+          if (!selector) return false;
+          if (Array.isArray(value)) {
+            return value.every(function (item) { return selectorHasOption(selector, item); });
+          }
+          return selectorHasOption(selector, value);
+        }
+
+        function selectorExpectedValue(selector) {
+          if (!selector) return undefined;
+          var candidates = [
+            selector.__wlServerExpected,
+            selector.__wlObjectCanonicalValue,
+            selector.__prev_value
+          ];
+          for (var i = 0; i < candidates.length; i++) {
+            if (candidates[i] !== undefined && selectorValueAvailable(selector, candidates[i])) return candidates[i];
+          }
+          // Empty is deterministic when no server-confirmed value remains;
+          // never reuse an invalid browser-restored string.
+          return selector.multiple ? [] : '';
+        }
+
+        function restoreSelectorValue(selector) {
+          if (!selector) return;
+          var expected = selectorExpectedValue(selector);
+          if (expected === undefined || expected === null) return;
+          if (Array.isArray(expected)) expected = expected.length ? expected[0] : '';
+          selector.value = String(expected || '');
+          if (selector.selectize && selector.selectize.setValue) {
+            selector.selectize.setValue(String(expected || ''), false);
+          }
+        }
+
+        function emitUserSelection(selector, source, event) {
+          if (!selector) return;
+          var nativeEvent = event && event.originalEvent ? event.originalEvent : event;
+          // One physical change can surface through window capture, document
+          // capture, and Selectize's delegated jQuery handler. Mark event
+          // itself, not selector state, so duplicate listeners cannot undo a
+          // valid choice or poison the next independent change.
+          if (nativeEvent && nativeEvent.__wlObjectSelectorHandled) return;
+          var physical = selector.__wlPhysicalChangeArmed === true
+            || selector.__wlObjectUserChangeAuthorized === true;
+          var value = selector.value;
+          var expected = selectorExpectedValue(selector);
+          var valid = selectorHasOption(selector, value);
+          if (!physical) {
+            if (!valid || (expected !== undefined && !selectorValuesMatch(value, expected))) {
+              restoreSelectorValue(selector);
+            }
+            return;
+          }
+          // Typing into Selectize search is physical input, but only a real
+          // option may become canonical object state. Invalid/browser-restored
+          // text is restored to last server-confirmed object immediately.
+          if (!valid) {
+            restoreSelectorValue(selector);
+            selector.__wlPhysicalChangeArmed = false;
+            selector.__wlObjectUserChangeAuthorized = false;
+            return;
+          }
+          if (nativeEvent) nativeEvent.__wlObjectSelectorHandled = true;
+          // Keep marker until global runtime validates native change.
+          selector.__wlObjectUserChangeAuthorized = true;
+          if (!window.Shiny || !Shiny.setInputValue) {
+            selector.__wlPhysicalChangeArmed = false;
+            selector.__wlObjectUserChangeAuthorized = false;
+            return;
+          }
           Shiny.setInputValue(
             selector.id + '_user_event',
             {
@@ -61,17 +144,38 @@ wl_object_selector_ui <- function(input_id, label) {
           }, true);
         });
 
+        window.addEventListener('change', function (event) {
+          var selector = guardedSelector(event.target);
+          emitUserSelection(selector, 'window', event);
+        }, true);
+
         document.addEventListener('change', function (event) {
           var selector = guardedSelector(event.target);
-          emitUserSelection(selector);
+          emitUserSelection(selector, 'document', event);
         }, true);
+
+        // Clear provenance after bubbling completes. This keeps the physical
+        // authorization scoped to one native event without any timer.
+        document.addEventListener('change', function (event) {
+          var selector = guardedSelector(event.target);
+          if (!selector) return;
+          selector.__wlPhysicalChangeArmed = false;
+          selector.__wlObjectUserChangeAuthorized = false;
+        }, false);
 
         if (window.jQuery) {
           jQuery(document)
             .off('shiny:updateinput.wlObjectSelectorContract')
             .on('shiny:updateinput.wlObjectSelectorContract', function (event) {
-              var selector = guardedSelector(event.target);
-              if (selector) selector.__wlPhysicalChangeArmed = false;
+              var selector = event.message && event.message.id
+                ? document.getElementById(event.message.id)
+                : guardedSelector(event.target);
+              if (selector) {
+                selector.__wlServerExpected = event.message && event.message.value;
+                selector.__wlObjectCanonicalValue = selector.__wlServerExpected;
+                selector.__wlPhysicalChangeArmed = false;
+                selector.__wlObjectUserChangeAuthorized = false;
+              }
             });
 
           // Agent note: Selectize emits a jQuery synthetic change event, which
@@ -81,8 +185,10 @@ wl_object_selector_ui <- function(input_id, label) {
             .on(
               'change.wlObjectSelectorContract',
               '[data-wl-object-selector=\"true\"] select',
-              function () {
-                emitUserSelection(this);
+              function (event) {
+                emitUserSelection(this, 'jquery', event);
+                this.__wlPhysicalChangeArmed = false;
+                this.__wlObjectUserChangeAuthorized = false;
               }
             );
         }
@@ -102,7 +208,6 @@ wl_bind_active_object_selector <- function(
   on_user_selection = NULL,
   log_event = NULL
 ) {
-  pending_value <- reactiveVal("")
   choices_signature <- reactiveVal("")
 
   normalize_choices <- function(values) {
@@ -119,8 +224,6 @@ wl_bind_active_object_selector <- function(
     if (nzchar(canonical) && canonical %in% object_choices) canonical else ""
   }
   push_selector_state <- function(object_choices, selected) {
-    pending_value(selected)
-    suppressWarnings(try(freezeReactiveValue(input, input_id), silent = TRUE))
     updateSelectInput(
       session,
       input_id,
@@ -180,7 +283,6 @@ wl_bind_active_object_selector <- function(
 
     previous <- as.character(shared_data$active_object_name %||% "")
     previous <- if (length(previous)) previous[[1]] else ""
-    pending_value("")
     log(
       "user_selection",
       sprintf("id=%s selected=%s previous=%s source=%s", input_id, selected, previous, source)
@@ -205,29 +307,16 @@ wl_bind_active_object_selector <- function(
     selected <- if (length(selected)) selected[[1]] else ""
     object_choices <- normalize_choices(isolate(choices()))
     canonical <- selected_value(object_choices)
-    pending <- isolate(pending_value())
 
     if (identical(selected, canonical)) {
-      if (identical(pending, selected)) {
-        pending_value("")
-        log("selector_sync_success", sprintf("id=%s value=%s", input_id, selected))
-      }
+      log("selector_sync_success", sprintf("id=%s value=%s", input_id, selected))
       return(invisible(NULL))
     }
 
-    # Agent note: Global autofill guard rejects unauthorized browser restoration.
-    # Accept valid raw changes so switching does not depend on client bridge delivery.
-    if (isTRUE(active()) && nzchar(selected) && selected %in% object_choices) {
-      apply_user_selection(selected, source = "raw_change")
-      return(invisible(NULL))
-    }
-
-    pending_value(canonical)
     log(
-      "noncanonical_reset",
-      sprintf("id=%s value=%s active=%s pending=%s", input_id, selected, canonical, pending)
+      "unexpected_input_reconcile",
+      sprintf("id=%s value=%s canonical=%s choices=%d", input_id, selected, canonical, length(object_choices))
     )
-    suppressWarnings(try(freezeReactiveValue(input, input_id), silent = TRUE))
     updateSelectInput(
       session,
       input_id,
@@ -237,7 +326,6 @@ wl_bind_active_object_selector <- function(
   }, ignoreInit = TRUE, priority = 1000)
 
   list(
-    pending_value = pending_value,
     choices_signature = choices_signature
   )
 }

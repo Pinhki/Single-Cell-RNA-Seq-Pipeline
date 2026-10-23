@@ -84,28 +84,6 @@ right_sidebar_ui <- function(id) {
         $(document).on('shown.bs.modal shown.wanlab', '.sF-modalContainer', function() {
           bindModal($(this));
         });
-        if (typeof MutationObserver !== 'undefined') {
-          var root = document.body || document.documentElement;
-          if (root) {
-            var mo = new MutationObserver(function(mutations) {
-              var shouldBind = false;
-              for (var i = 0; i < mutations.length; i += 1) {
-                var m = mutations[i];
-                if (m.type === 'childList') {
-                  shouldBind = true;
-                  break;
-                }
-                if (m.type === 'attributes' && m.target && m.target.classList &&
-                    m.target.classList.contains('sF-modalContainer')) {
-                  shouldBind = true;
-                  break;
-                }
-              }
-              if (shouldBind) bindVisibleModals();
-            });
-            mo.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
-          }
-        }
 
         // Robust delegated handler for sidebar delete buttons inside DT-rendered HTML.
         if (!window.__wanlab_sidebar_remove_bind_v1) {
@@ -128,6 +106,8 @@ right_sidebar_ui <- function(id) {
       shinyFilesButton(ns("real_h5_file_btn"), "Hidden H5/H5AD", "Select H5/H5AD", multiple = TRUE),
       shinyDirButton(ns("real_matrix_dir_btn"), "Hidden Dir", "Select Dir"),
       shinyFilesButton(ns("real_csv_file_btn"), "Hidden CSV", "Select CSV", multiple = TRUE),
+      shinyFilesButton(ns("real_metadata_file_btn"), "Hidden Metadata List", "Select metadata list", multiple = FALSE),
+      shinyDirButton(ns("real_metadata_root_btn"), "Hidden Metadata Root", "Select metadata root"),
       shinyFilesButton(ns("real_atac_file_btn"), "Hidden ATAC", "Select ATAC fragment file(s)", multiple = TRUE)
     ),
 
@@ -141,9 +121,7 @@ right_sidebar_ui <- function(id) {
           div(
             class = "sidebar-env-right",
             tags$span(id = ns("env_admin_label"), class = "sidebar-env-label", "Environment:"),
-            uiOutput(ns("env_status_ui"), inline = TRUE),
-            tags$span(style = "margin-left: 8px;"),
-            uiOutput(ns("presenter_mode_status_ui"), inline = TRUE)
+            uiOutput(ns("env_status_ui"), inline = TRUE)
           )
         )
       ),
@@ -156,7 +134,7 @@ right_sidebar_ui <- function(id) {
           actionButton(ns("btn_import_modal"), "Import New Data", icon = icon("plus"), class = "btn-primary btn-sm w-100", style = "margin-bottom: 5px;")
         ),
         div(
-          class = "sidebar-data-scroll",
+          class = "sidebar-data-scroll Pinhki-scroll-fade",
           DTOutput(ns("data_registry_table"))
         ),
         div(style = "height:6px"),
@@ -246,6 +224,8 @@ import_modal_content <- function(ns) {
         div(style = "height:5px"),
         actionButton(ns("proxy_csv_btn"), "Add CSV File(s)", icon = icon("file-csv"), class = "btn-outline-primary btn-sm w-100 mb-2"),
         div(style = "height:5px"),
+        actionButton(ns("proxy_metadata_btn"), "Import Metadata List", icon = icon("table"), class = "btn-outline-primary btn-sm w-100 mb-2"),
+        div(style = "height:5px"),
         actionButton(ns("proxy_atac_btn"), "Add ATAC Fragments", icon = icon("project-diagram"), class = "btn-outline-primary btn-sm w-100 mb-2"),
         div(style = "height:5px"),
         actionButton(ns("btn_add_demo"), "Quick Add Demo", icon = icon("flask"), class = "btn-outline-secondary btn-sm w-100"),
@@ -279,6 +259,189 @@ import_modal_content <- function(ns) {
     )
     ),
     class = "import-samples-modal"
+  )
+}
+
+metadata_manifest_modal_content <- function(ns, root_path = "") {
+  htmltools::tagAppendAttributes(
+    modalDialog(
+      title = "Import Metadata List",
+      size = "l",
+      easyClose = FALSE,
+      tags$style(HTML("
+        .metadata-manifest-modal .modal-dialog {
+          width: 98vw !important;
+          max-width: 98vw !important;
+          margin: 1rem auto !important;
+        }
+        .metadata-manifest-modal .modal-content { max-height: 92vh; }
+        .metadata-manifest-modal .modal-body { overflow-x: auto; overflow-y: auto; }
+        .metadata-manifest-modal .manifest-table-wrap {
+          width: 100%;
+          overflow-x: auto;
+          overflow-y: hidden;
+          border: 1px solid #e5e7eb;
+          border-radius: 6px;
+          padding: 6px;
+        }
+        .metadata-manifest-modal .manifest-table-wrap table.dataTable {
+          width: max-content !important;
+          min-width: 100% !important;
+        }
+        .metadata-manifest-modal .manifest-table-wrap table.dataTable th,
+        .metadata-manifest-modal .manifest-table-wrap table.dataTable td {
+          white-space: nowrap !important;
+          min-width: 110px;
+        }
+        .metadata-manifest-modal table.dataTable tbody tr.manifest-row-invalid td {
+          opacity: 0.55;
+          background-color: #f7f7f7 !important;
+        }
+        .metadata-manifest-modal table.dataTable tbody tr.manifest-row-excluded td {
+          opacity: 0.55;
+          background-color: #f7f7f7 !important;
+        }
+        .metadata-manifest-modal .manifest-controls {
+          display: flex;
+          gap: 12px;
+          align-items: flex-end;
+          margin-bottom: 10px;
+        }
+        .metadata-manifest-modal .manifest-control-group {
+          flex: 1 1 0;
+          min-width: 260px;
+        }
+        .metadata-manifest-modal .manifest-inline-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .metadata-manifest-modal .manifest-inline-row .form-group {
+          flex: 1 1 auto;
+          margin-bottom: 0 !important;
+        }
+        .metadata-manifest-modal .manifest-status {
+          margin: 6px 0 10px;
+          color: #475569;
+          font-size: 12px;
+          line-height: 1.4;
+        }
+        @media (max-width: 1200px) {
+          .metadata-manifest-modal .manifest-controls { flex-direction: column; align-items: stretch; }
+          .metadata-manifest-modal .manifest-control-group { min-width: 0; width: 100%; }
+        }
+      ")),
+      tags$p(
+        "Review one row per sample. Choose the input source and cell set per row. Sidecar files are summarized only; their cell rows are not inserted into this table."
+      ),
+      div(
+        class = "manifest-controls",
+        div(
+          class = "manifest-control-group",
+          textInput(ns("metadata_manifest_root_path"), "Root folder for relative paths", value = root_path, width = "100%")
+        ),
+        div(
+          class = "manifest-control-group",
+          tags$label("Root folder actions"),
+          div(
+            class = "manifest-inline-row",
+            actionButton(ns("metadata_manifest_apply_root_btn"), "Use Root", class = "btn btn-outline-secondary"),
+            actionButton(ns("metadata_manifest_choose_root_btn"), "Choose Folder", class = "btn btn-outline-primary")
+          )
+        )
+      ),
+      div(class = "manifest-status", uiOutput(ns("metadata_manifest_status_ui"))),
+      div(
+        class = "manifest-controls",
+        div(
+          class = "manifest-control-group",
+          tags$label(`for` = ns("metadata_manifest_new_col_name"), "Add metadata column"),
+          div(
+            class = "manifest-inline-row",
+            textInput(ns("metadata_manifest_new_col_name"), NULL, value = "", placeholder = "e.g., cohort, donor_group, platform"),
+            actionButton(ns("metadata_manifest_add_col_btn"), "Add Column", class = "btn btn-default")
+          )
+        ),
+        div(
+          class = "manifest-control-group",
+          tags$label("Remove metadata column"),
+          uiOutput(ns("metadata_manifest_remove_col_ui"))
+        )
+      ),
+      div(class = "manifest-table-wrap", DTOutput(ns("metadata_manifest_table"))),
+      footer = tagList(
+        actionButton(ns("metadata_manifest_remove_rows_btn"), "Remove Selected Rows", class = "btn btn-outline-danger"),
+        modalButton("Cancel"),
+        actionButton(ns("metadata_manifest_confirm_btn"), "Import Selected", class = "btn btn-success", icon = icon("check"))
+      )
+    ),
+    class = "metadata-manifest-modal"
+  )
+}
+
+metadata_manifest_conflict_modal_content <- function(ns) {
+  htmltools::tagAppendAttributes(
+    modalDialog(
+      title = "Review Metadata Name Conflicts",
+      size = "m",
+      easyClose = FALSE,
+      tags$p("Some imported metadata names already exist in the target object. Rename or skip each conflicting column. Existing values will not be overwritten."),
+      DTOutput(ns("metadata_manifest_conflict_table")),
+      footer = tagList(
+        actionButton(ns("metadata_manifest_conflict_cancel_btn"), "Return to Metadata List", class = "btn btn-outline-secondary"),
+        actionButton(ns("metadata_manifest_conflict_apply_btn"), "Apply Decisions", class = "btn btn-primary")
+      )
+    ),
+    class = "metadata-manifest-conflict-modal"
+  )
+}
+
+metadata_manifest_result_modal_content <- function(ns) {
+  htmltools::tagAppendAttributes(
+    modalDialog(
+      title = "Batch Import Results",
+      size = "l",
+      easyClose = FALSE,
+      tags$style(HTML("
+        .metadata-manifest-result-modal .modal-dialog {
+          width: 96vw !important;
+          max-width: 96vw !important;
+          margin: 1rem auto !important;
+        }
+        .metadata-manifest-result-modal .modal-content {
+          max-height: 92vh;
+        }
+        .metadata-manifest-result-modal .modal-body {
+          overflow-x: auto;
+          overflow-y: auto;
+        }
+        .metadata-manifest-result-modal .metadata-manifest-result-table-wrap {
+          width: 100%;
+          max-width: 100%;
+          overflow-x: auto;
+          overflow-y: hidden;
+          border: 1px solid #e5e7eb;
+          border-radius: 6px;
+          padding: 6px;
+        }
+        .metadata-manifest-result-modal .metadata-manifest-result-table-wrap table.dataTable {
+          width: max-content !important;
+          min-width: 100% !important;
+        }
+        .metadata-manifest-result-modal .metadata-manifest-result-table-wrap th,
+        .metadata-manifest-result-modal .metadata-manifest-result-table-wrap td {
+          white-space: nowrap !important;
+          min-width: 110px;
+        }
+      ")),
+      tags$p("Import completed. Review each row before closing this report."),
+      div(
+        class = "metadata-manifest-result-table-wrap",
+        DTOutput(ns("metadata_manifest_result_table"))
+      ),
+      footer = modalButton("Close")
+    ),
+    class = "metadata-manifest-result-modal"
   )
 }
 
@@ -391,38 +554,11 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
     .fast_mode_active <- function() {
       identical(as.character(shared_data$workflow_mode %||% "manual"), "fast")
     }
-    if (is.null(session$userData$presenter_mode_on)) {
-      session$userData$presenter_mode_on <- FALSE
-    }
-    .presenter_mode_is_on <- function() isTRUE(session$userData$presenter_mode_on)
-    .set_presenter_mode_client <- function(on) {
-      session$sendCustomMessage(
-        "spinner-overlay-set-presenter-mode",
-        list(id = "global_overlay", presenterMode = isTRUE(on))
-      )
-      invisible(NULL)
-    }
-
     output$env_status_ui <- renderUI({
       env <- shared_data$active_environment
       if (is.null(env$name)) span(class = "sidebar-env-status status-missing", icon("exclamation-circle"), " No Env Selected")
       else span(class = "sidebar-env-status status-ready", icon("check-circle"), paste0(" ", env$name))
     })
-    output$presenter_mode_status_ui <- renderUI({
-      if (isTRUE(.presenter_mode_is_on())) {
-        span(
-          class = "sidebar-env-status status-ready",
-          title = "Presenter Mode ON",
-          icon("tv")
-        )
-      } else {
-        NULL
-      }
-    })
-    session$onFlushed(function() {
-      .set_presenter_mode_client(.presenter_mode_is_on())
-    }, once = TRUE)
-
     if (isTRUE(admin_enabled)) {
       session$onFlushed(function() {
         shinyjs::runjs(sprintf(
@@ -440,7 +576,6 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
         showModal(admin_hidden_modal_ui(
           ns,
           test_mode_state = test_mode_state,
-          presenter_mode_state = .presenter_mode_is_on(),
           locked_tabs = locked_tabs
         ))
       }, ignoreInit = TRUE)
@@ -502,21 +637,6 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
         }
       }, ignoreInit = TRUE)
 
-      # Presenter Mode toggle contract:
-      # - session-only state stored in session$userData
-      # - no navbar routing and no shared_data schema changes
-      # - busy-overlay media slot swaps meme -> ASCII when enabled
-      # - reference: docs/agents/interface/PRESENTER_MODE.md
-      observeEvent(input$admin_toggle_presenter_mode_btn, {
-        session$userData$presenter_mode_on <- !isTRUE(session$userData$presenter_mode_on)
-        now_on <- isTRUE(session$userData$presenter_mode_on)
-        .set_presenter_mode_client(now_on)
-        removeModal()
-        showNotification(
-          sprintf("Admin: Presenter Mode %s for this session.", if (isTRUE(now_on)) "enabled" else "disabled"),
-          type = "message"
-        )
-      }, ignoreInit = TRUE)
     }
 
     output$memory_usage_ui <- renderUI({
@@ -1214,7 +1334,7 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
         cur_active <- as.character(shared_data$active_object_name %||% "")
         if (!nzchar(cur_active) || identical(cur_active, nm) || is.null((shared_data$all_seurat_objects %||% list())[[cur_active]])) {
           remain <- names(shared_data$all_seurat_objects %||% list())
-          shared_data$active_object_name <- if (length(remain)) remain[[1]] else NULL
+          shared_data$active_object_name <- if (length(remain)) remain[[length(remain)]] else NULL
         }
         removed_n <- length(intersect(before_names, nm))
         if (!removed_n) {
@@ -1271,6 +1391,15 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
       batch = character(0),
       stringsAsFactors = FALSE
     ))
+    # Agent note: Manifest rows stay compact and sample-level. Per-cell sidecars are
+    # attached only during commit; never expand them into this preview table. Keep
+    # long import result reports in their own scrollable viewport and update the
+    # overlay from the sample-loading loop so batch imports remain visibly active.
+    metadata_manifest_df <- reactiveVal(data.frame())
+    metadata_manifest_info <- reactiveVal(list())
+    metadata_manifest_conflicts <- reactiveVal(data.frame())
+    metadata_manifest_pending_commit <- reactiveVal(NULL)
+    metadata_manifest_result <- reactiveVal(data.frame())
     vdj_detect_candidates <- reactiveVal(data.frame())
     vdj_prompt_pending <- reactiveVal(NULL)
     h5ad_import_pending <- reactiveVal(NULL)
@@ -1390,6 +1519,483 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
       if (!nzchar(x)) x <- "meta"
       if (grepl("^[0-9]", x)) x <- paste0("meta_", x)
       tolower(x)
+    }
+
+    .metadata_manifest_norm_col <- function(x) {
+      x <- tolower(trimws(as.character(x %||% "")))
+      x <- gsub("[^a-z0-9]+", "_", x)
+      x <- gsub("_+", "_", x)
+      x <- gsub("^_|_$", "", x)
+      x
+    }
+
+    .metadata_manifest_find_col <- function(df, aliases = character(0), pattern = NULL) {
+      if (is.null(df) || !is.data.frame(df) || !ncol(df)) return("")
+      raw <- colnames(df)
+      norm <- vapply(raw, .metadata_manifest_norm_col, character(1))
+      alias_norm <- unique(vapply(as.character(aliases %||% character(0)), .metadata_manifest_norm_col, character(1)))
+      alias_norm <- alias_norm[nzchar(alias_norm)]
+      for (aa in alias_norm) {
+        idx <- which(norm == aa)
+        if (length(idx)) return(raw[[idx[[1]]]])
+      }
+      if (!is.null(pattern) && nzchar(as.character(pattern %||% ""))) {
+        idx <- which(grepl(pattern, norm, perl = TRUE))
+        if (length(idx)) return(raw[[idx[[1]]]])
+      }
+      ""
+    }
+
+    .metadata_manifest_read_table <- function(path) {
+      p <- normalizePath(as.character(path %||% ""), winslash = "/", mustWork = FALSE)
+      if (!file.exists(p) || dir.exists(p)) stop("Metadata list file was not found.")
+      ext <- tolower(tools::file_ext(p))
+      try_one <- function(sep) {
+        tryCatch(
+          utils::read.table(
+            p,
+            header = TRUE,
+            sep = sep,
+            quote = "\"'",
+            comment.char = "",
+            fill = FALSE,
+            stringsAsFactors = FALSE,
+            check.names = FALSE,
+            na.strings = c("", "NA", "N/A", "na"),
+            strip.white = TRUE
+          ),
+          error = function(e) NULL
+        )
+      }
+      tab <- try_one("\t")
+      csv <- try_one(",")
+      valid <- list()
+      if (is.data.frame(tab) && ncol(tab) > 1L) valid$tsv <- tab
+      if (is.data.frame(csv) && ncol(csv) > 1L) valid$csv <- csv
+      if (!length(valid)) stop("Could not detect a tab-separated or comma-separated table with multiple columns.")
+      chosen <- ""
+      if (ext %in% c("tsv", "tab") && !is.null(valid$tsv)) chosen <- "tsv"
+      if (ext %in% c("csv") && !is.null(valid$csv)) chosen <- "csv"
+      if (!nzchar(chosen) && length(valid) == 1L) chosen <- names(valid)[[1]]
+      if (!nzchar(chosen)) {
+        n_tsv <- if (!is.null(valid$tsv)) ncol(valid$tsv) else 0L
+        n_csv <- if (!is.null(valid$csv)) ncol(valid$csv) else 0L
+        if (n_tsv != n_csv) {
+          chosen <- if (n_tsv > n_csv) "tsv" else "csv"
+        } else {
+          stop("Table delimiter is ambiguous. Save the file as .tsv or .csv and try again.")
+        }
+      }
+      out <- valid[[chosen]]
+      if (!nrow(out)) stop("Metadata list contains no sample rows.")
+      if (is.null(colnames(out)) || any(!nzchar(trimws(colnames(out))))) {
+        stop("Metadata list must have a non-empty header row.")
+      }
+      colnames(out) <- make.unique(trimws(colnames(out)), sep = "_")
+      list(data = out, delimiter = chosen, path = p)
+    }
+
+    .metadata_manifest_resolve_path <- function(raw_path, root_path = "") {
+      raw <- trimws(as.character(raw_path %||% ""))
+      root <- trimws(as.character(root_path %||% ""))
+      if (!nzchar(raw)) return("")
+      raw_norm <- gsub("\\\\", "/", raw)
+      root_norm <- if (nzchar(root)) normalizePath(root, winslash = "/", mustWork = FALSE) else ""
+      candidates <- character(0)
+      candidates <- c(candidates, raw_norm)
+      if (nzchar(root_norm) && !grepl("^([A-Za-z]:/|/)", raw_norm)) {
+        candidates <- c(candidates, file.path(root_norm, raw_norm))
+      }
+      if (nzchar(root_norm)) {
+        root_base <- basename(root_norm)
+        parts <- strsplit(raw_norm, "/", fixed = TRUE)[[1]]
+        hit <- which(parts == root_base)
+        if (length(hit) && hit[[length(hit)]] < length(parts)) {
+          suffix <- paste(parts[(hit[[length(hit)]] + 1L):length(parts)], collapse = "/")
+          candidates <- c(candidates, file.path(root_norm, suffix))
+        }
+      }
+      for (candidate in unique(candidates)) {
+        if (file.exists(candidate) || dir.exists(candidate)) {
+          return(normalizePath(candidate, winslash = "/", mustWork = FALSE))
+        }
+      }
+      ""
+    }
+
+    .metadata_manifest_is_matrix_dir <- function(path) {
+      p <- as.character(path %||% "")
+      if (!nzchar(p) || !dir.exists(p)) return(FALSE)
+      has_matrix <- file.exists(file.path(p, "matrix.mtx")) || file.exists(file.path(p, "matrix.mtx.gz"))
+      has_barcodes <- file.exists(file.path(p, "barcodes.tsv")) || file.exists(file.path(p, "barcodes.tsv.gz"))
+      has_features <- file.exists(file.path(p, "features.tsv")) || file.exists(file.path(p, "features.tsv.gz")) ||
+        file.exists(file.path(p, "genes.tsv")) || file.exists(file.path(p, "genes.tsv.gz"))
+      isTRUE(has_matrix && has_barcodes && has_features)
+    }
+
+    .metadata_manifest_find_matrix_dir <- function(path, cell_set = "filtered") {
+      p <- as.character(path %||% "")
+      if (!nzchar(p)) return("")
+      if (file.exists(p) && grepl("(^|/)matrix\\.mtx(\\.gz)?$", gsub("\\\\", "/", p), ignore.case = TRUE, perl = TRUE)) {
+        p <- dirname(p)
+      }
+      if (.metadata_manifest_is_matrix_dir(p)) return(normalizePath(p, winslash = "/", mustWork = FALSE))
+      if (!dir.exists(p)) return("")
+      wanted <- if (identical(cell_set, "all_cells")) {
+        c("all_cells", "all", "raw_feature_bc_matrix", "raw_gene_barcodes")
+      } else {
+        c("filtered", "filtered_feature_bc_matrix", "filtered_gene_barcodes")
+      }
+      for (nm in wanted) {
+        candidate <- file.path(p, nm)
+        if (.metadata_manifest_is_matrix_dir(candidate)) {
+          return(normalizePath(candidate, winslash = "/", mustWork = FALSE))
+        }
+      }
+      ""
+    }
+
+    .metadata_manifest_matrix_candidate <- function(raw_path, root_path, cell_set) {
+      p <- .metadata_manifest_resolve_path(raw_path, root_path)
+      if (!nzchar(p)) return("")
+      .metadata_manifest_find_matrix_dir(p, cell_set = cell_set)
+    }
+
+    .metadata_manifest_path_map <- function(df) {
+      nms <- colnames(df)
+      norm <- vapply(nms, .metadata_manifest_norm_col, character(1))
+      pick <- function(aliases = character(0), pattern = NULL) {
+        .metadata_manifest_find_col(df, aliases = aliases, pattern = pattern)
+      }
+      h5 <- pick(
+        aliases = c("h5_path", "hdf5_path", "h5_archive_path", "input_h5_path"),
+        pattern = "(^|_)h(5|df5)(_|$).*path|(^|_)path(_|$).*h(5|df5)"
+      )
+      filtered <- pick(
+        aliases = c("filtered_matrix_path", "filtered_matrix_archive_path", "filtered_input_path"),
+        pattern = "filtered.*matrix.*path|matrix.*filtered.*path"
+      )
+      all_cells <- pick(
+        aliases = c("all_matrix_path", "all_matrix_archive_path", "all_cells_path", "all_cells_matrix_path"),
+        pattern = "all.*(matrix|cell).*path|(matrix|cell).*all.*path"
+      )
+      generic <- pick(
+        aliases = c("relative_input_path", "input_path", "source_path", "matrix_or_h5_path", "path"),
+        pattern = "(^|_)relative.*path$|(^|_)input.*path$|(^|_)source.*path$"
+      )
+      path_cols <- nms[grepl("path|url|archive", norm, perl = TRUE)]
+      list(
+        h5 = h5,
+        filtered = filtered,
+        all_cells = all_cells,
+        generic = generic,
+        path_cols = unique(path_cols)
+      )
+    }
+
+    .metadata_manifest_sidecar <- function(path, file_name) {
+      p <- as.character(path %||% "")
+      if (!nzchar(p)) return("")
+      current <- if (dir.exists(p)) p else dirname(p)
+      current <- normalizePath(current, winslash = "/", mustWork = FALSE)
+      for (i in seq_len(6L)) {
+        for (candidate_name in c(file_name, paste0(file_name, ".gz"))) {
+          candidate <- file.path(current, candidate_name)
+          if (file.exists(candidate) && !dir.exists(candidate)) {
+            return(normalizePath(candidate, winslash = "/", mustWork = FALSE))
+          }
+        }
+        parent <- dirname(current)
+        if (!nzchar(parent) || identical(parent, current)) break
+        current <- parent
+      }
+      ""
+    }
+
+    .metadata_manifest_value <- function(df, row, col, default = "") {
+      if (!nzchar(as.character(col %||% "")) || !(col %in% colnames(df))) return(default)
+      value <- df[[col]][[row]]
+      if (length(value) == 0L || is.na(value)) return(default)
+      trimws(as.character(value))
+    }
+
+    .metadata_manifest_normalize_technology <- function(value, source_path = "") {
+      raw <- trimws(as.character(value %||% ""))
+      low <- tolower(gsub("[^a-z0-9]+", "_", raw))
+      if (grepl("smart.*seq|ssq", low, perl = TRUE)) return("smartseq2")
+      if (grepl("fluidigm|c1", low, perl = TRUE)) return("fluidigm_c1")
+      if (grepl("10x|cell.?ranger|chromium", low, perl = TRUE)) return("10x")
+      path_low <- tolower(gsub("\\\\", "/", as.character(source_path %||% "")))
+      if (grepl("smartseq2|smart_seq2|ssq2", path_low, perl = TRUE)) return("smartseq2")
+      if (grepl("fluidigm|c1", path_low, perl = TRUE)) return("fluidigm_c1")
+      if (grepl("\\.(h5|hdf5)$", path_low, perl = TRUE)) return("10x")
+      if (nzchar(raw)) return(raw)
+      "unknown"
+    }
+
+    .metadata_manifest_normalize_cell_set <- function(value, default = "filtered") {
+      low <- tolower(gsub("[^a-z0-9]+", "_", trimws(as.character(value %||% ""))))
+      if (low %in% c("all", "all_cells", "all_cell", "raw", "raw_cells")) return("all_cells")
+      if (low %in% c("filtered", "filter", "filtered_cells")) return("filtered")
+      default
+    }
+
+    .metadata_manifest_normalize_input_type <- function(value, default = "") {
+      low <- tolower(trimws(as.character(value %||% "")))
+      if (low %in% c("h5", "hdf5", "cellranger_h5", "10x_h5")) return("h5")
+      if (low %in% c("matrix", "mtx", "matrix_market", "matrixmarket")) return("matrix")
+      if (low %in% c("h5ad", "anndata")) return("h5ad")
+      default
+    }
+
+    .metadata_manifest_prepare <- function(table_path, root_path = "") {
+      parsed <- .metadata_manifest_read_table(table_path)
+      df <- parsed$data
+      path_map <- .metadata_manifest_path_map(df)
+      donor_col <- .metadata_manifest_find_col(
+        df,
+        aliases = c("donor_id", "donorid", "donor", "sample_id", "sampleid", "sample_name", "sample", "subject_id", "subjectid", "subject")
+      )
+      if (!nzchar(donor_col)) stop("Metadata list needs a donor or sample identifier column.")
+      technology_col <- .metadata_manifest_find_col(
+        df,
+        aliases = c("technology", "platform", "library_type", "sequencing_technology", "assay")
+      )
+      if (!nzchar(technology_col)) {
+        technology_col <- "Technology"
+        df[[technology_col]] <- rep(NA_character_, nrow(df))
+      }
+      condition_col <- .metadata_manifest_find_col(
+        df,
+        aliases = c("condition", "group", "treatment", "disease_status", "disease", "status")
+      )
+      if (!nzchar(condition_col)) {
+        condition_col <- "Condition"
+        df[[condition_col]] <- rep(NA_character_, nrow(df))
+      }
+      batch_col <- .metadata_manifest_find_col(df, aliases = c("batch", "batch_id", "batch_name", "run_batch"))
+      if (!nzchar(batch_col)) {
+        batch_col <- "Batch"
+        df[[batch_col]] <- rep(NA_character_, nrow(df))
+      }
+      path_map <- .metadata_manifest_path_map(df)
+      original_cols <- colnames(df)
+      metadata_cols <- setdiff(original_cols, path_map$path_cols)
+      metadata_cols <- unique(metadata_cols[nzchar(metadata_cols)])
+      info <- list(
+        source_path = normalizePath(as.character(table_path), winslash = "/", mustWork = FALSE),
+        delimiter = parsed$delimiter,
+        donor_col = donor_col,
+        technology_col = technology_col,
+        condition_col = condition_col,
+        batch_col = batch_col,
+        path_map = path_map,
+        original_cols = original_cols,
+        metadata_cols = metadata_cols,
+        path_cols = path_map$path_cols,
+        skipped_meta_cols = character(0)
+      )
+      internal <- list(
+        `__manifest_row` = seq_len(nrow(df)),
+        `__include_sample` = rep(TRUE, nrow(df)),
+        `__object_name` = rep("", nrow(df)),
+        `__object_name_auto` = rep(TRUE, nrow(df)),
+        `__donor_id` = rep("", nrow(df)),
+        `__technology` = rep("", nrow(df)),
+        `__cell_set` = rep("filtered", nrow(df)),
+        `__input_type` = rep("", nrow(df)),
+        `__selected_path` = rep("", nrow(df)),
+        `__source_h5` = rep("", nrow(df)),
+        `__source_filtered` = rep("", nrow(df)),
+        `__source_all` = rep("", nrow(df)),
+        `__cell_metadata_path` = rep("", nrow(df)),
+        `__qc_metrics_path` = rep("", nrow(df)),
+        `__status` = rep("", nrow(df)),
+        `__status_detail` = rep("", nrow(df)),
+        `__sidecar_status` = rep("", nrow(df)),
+        `__source_signature` = rep("", nrow(df)),
+        `__auto_duplicate` = rep(FALSE, nrow(df)),
+        `__ready` = rep(FALSE, nrow(df))
+      )
+      for (nm in names(internal)) df[[nm]] <- internal[[nm]]
+      list(data = df, info = info)
+    }
+
+    .metadata_manifest_row_signature <- function(df, row, info) {
+      vals <- vapply(info$metadata_cols, function(cc) {
+        if (!(cc %in% colnames(df))) return("")
+        value <- df[[cc]][[row]]
+        if (length(value) == 0L || is.na(value)) "" else as.character(value)
+      }, character(1))
+      paste(c(vals, df$`__cell_set`[[row]], df$`__input_type`[[row]], df$`__selected_path`[[row]]), collapse = "\036")
+    }
+
+    .metadata_manifest_refresh <- function(df, info, root_path = "") {
+      if (is.null(df) || !is.data.frame(df) || !nrow(df)) return(df)
+      map <- info$path_map
+      for (i in seq_len(nrow(df))) {
+        donor <- .metadata_manifest_value(df, i, info$donor_col, default = paste0("sample_", i))
+        raw_tech <- .metadata_manifest_value(df, i, info$technology_col, default = "")
+        raw_h5 <- if (nzchar(map$h5)) .metadata_manifest_value(df, i, map$h5) else ""
+        raw_filtered <- if (nzchar(map$filtered)) .metadata_manifest_value(df, i, map$filtered) else ""
+        raw_all <- if (nzchar(map$all_cells)) .metadata_manifest_value(df, i, map$all_cells) else ""
+        raw_generic <- if (nzchar(map$generic)) .metadata_manifest_value(df, i, map$generic) else ""
+        h5 <- .metadata_manifest_resolve_path(raw_h5, root_path)
+        filtered <- .metadata_manifest_matrix_candidate(raw_filtered, root_path, "filtered")
+        all_cells <- .metadata_manifest_matrix_candidate(raw_all, root_path, "all_cells")
+        generic <- .metadata_manifest_resolve_path(raw_generic, root_path)
+        if (nzchar(generic)) {
+          g_low <- tolower(generic)
+          if (grepl("\\.(h5|hdf5)$", g_low, perl = TRUE)) h5 <- if (nzchar(h5)) h5 else generic
+          if (grepl("\\.h5ad$", g_low, perl = TRUE)) h5 <- if (nzchar(h5)) h5 else generic
+          if (!nzchar(filtered)) filtered <- .metadata_manifest_find_matrix_dir(generic, "filtered")
+          if (!nzchar(all_cells)) all_cells <- .metadata_manifest_find_matrix_dir(generic, "all_cells")
+          if (!nzchar(filtered) && !nzchar(all_cells) && .metadata_manifest_is_matrix_dir(generic)) {
+            if (grepl("all_cells|raw_", tolower(basename(generic)), perl = TRUE)) all_cells <- generic else filtered <- generic
+          }
+        }
+        tech <- .metadata_manifest_normalize_technology(raw_tech, source_path = paste(c(h5, filtered, all_cells, generic), collapse = " "))
+        current_type <- .metadata_manifest_normalize_input_type(df$`__input_type`[[i]], default = "")
+        if (!nzchar(current_type)) {
+          if (identical(tech, "10x") && nzchar(h5)) current_type <- "h5"
+          else if (nzchar(filtered) || nzchar(all_cells)) current_type <- "matrix"
+          else if (nzchar(h5)) current_type <- "h5"
+          else if (nzchar(generic) && grepl("\\.h5ad$", tolower(generic), perl = TRUE)) current_type <- "h5ad"
+        }
+        current_set <- .metadata_manifest_normalize_cell_set(df$`__cell_set`[[i]], default = "")
+        if (!nzchar(current_set) || !(current_set %in% c("filtered", "all_cells"))) {
+          current_set <- if (nzchar(filtered)) "filtered" else if (nzchar(all_cells)) "all_cells" else "filtered"
+        }
+        selected <- ""
+        if (identical(current_type, "h5")) {
+          selected <- h5
+          current_set <- "filtered"
+        } else if (identical(current_type, "matrix")) {
+          selected <- if (identical(current_set, "all_cells")) all_cells else filtered
+        }
+        df$`__donor_id`[[i]] <- donor
+        df$`__technology`[[i]] <- tech
+        if (isTRUE(df$`__object_name_auto`[[i]]) || !nzchar(as.character(df$`__object_name`[[i]] %||% ""))) {
+          df$`__object_name`[[i]] <- .sanitize_sample_name(paste(donor, tech, sep = "__"))
+          df$`__object_name_auto`[[i]] <- TRUE
+        }
+        df$`__cell_set`[[i]] <- current_set
+        df$`__input_type`[[i]] <- current_type
+        df$`__source_h5`[[i]] <- h5
+        df$`__source_filtered`[[i]] <- filtered
+        df$`__source_all`[[i]] <- all_cells
+        df$`__selected_path`[[i]] <- selected
+        df$`__source_signature`[[i]] <- if (nzchar(selected)) normalizePath(selected, winslash = "/", mustWork = FALSE) else ""
+        df$`__cell_metadata_path`[[i]] <- .metadata_manifest_sidecar(selected, "cell_metadata.tsv")
+        df$`__qc_metrics_path`[[i]] <- .metadata_manifest_sidecar(selected, "qc_metrics.tsv")
+        sidecars <- c(
+          if (nzchar(df$`__cell_metadata_path`[[i]])) "cell metadata found" else "cell metadata absent",
+          if (nzchar(df$`__qc_metrics_path`[[i]])) "QC report found" else "QC report absent"
+        )
+        df$`__sidecar_status`[[i]] <- paste(sidecars, collapse = "; ")
+        base_status <- ""
+        if (identical(current_type, "h5ad")) base_status <- "Unsupported in metadata list; use Add H5/H5AD"
+        else if (!identical(current_type, "h5") && !identical(current_type, "matrix")) base_status <- "Input type not detected"
+        else if (!nzchar(selected)) base_status <- "Selected input path not found"
+        else if (identical(current_type, "matrix") && !.metadata_manifest_is_matrix_dir(selected)) base_status <- "Matrix folder is incomplete"
+        else if (identical(current_type, "h5") && !file.exists(selected)) base_status <- "H5 file not found"
+        df$`__status`[[i]] <- base_status
+        df$`__status_detail`[[i]] <- base_status
+        df$`__ready`[[i]] <- nzchar(selected) && !nzchar(base_status)
+      }
+
+      df$`__auto_duplicate` <- FALSE
+      source_keys <- as.character(df$`__source_signature` %||% character(0))
+      source_keys <- source_keys[nzchar(source_keys)]
+      if (length(source_keys)) {
+        for (source in unique(source_keys)) {
+          idx <- which(df$`__source_signature` == source)
+          if (length(idx) < 2L) next
+          signatures <- vapply(idx, function(i) .metadata_manifest_row_signature(df, i, info), character(1))
+          if (length(unique(signatures)) == 1L) {
+            keep_idx <- idx[[1]]
+            for (drop_idx in idx[-1]) {
+              df$`__include_sample`[[drop_idx]] <- FALSE
+              df$`__auto_duplicate`[[drop_idx]] <- TRUE
+              df$`__ready`[[drop_idx]] <- FALSE
+              df$`__status`[[drop_idx]] <- sprintf("Exact duplicate; row %d retained", keep_idx)
+            }
+          } else {
+            for (conflict_idx in idx) {
+              if (!nzchar(df$`__status`[[conflict_idx]])) {
+                df$`__status`[[conflict_idx]] <- "Same source with different metadata; review"
+              }
+            }
+          }
+        }
+      }
+
+      existing_names <- names(shared_data$all_seurat_objects %||% list())
+      active_names <- character(0)
+      for (i in seq_len(nrow(df))) {
+        if (!isTRUE(df$`__include_sample`[[i]]) || isTRUE(df$`__auto_duplicate`[[i]])) next
+        nm <- .sanitize_sample_name(df$`__object_name`[[i]], allow_empty = TRUE)
+        if (!nzchar(nm)) {
+          df$`__ready`[[i]] <- FALSE
+          df$`__status`[[i]] <- "Object name required"
+          next
+        }
+        if (nm %in% existing_names) {
+          df$`__ready`[[i]] <- FALSE
+          df$`__status`[[i]] <- "Object name already exists; rename or exclude"
+        }
+        if (nm %in% active_names) {
+          df$`__ready`[[i]] <- FALSE
+          df$`__status`[[i]] <- "Duplicate object name; rename or exclude"
+        }
+        active_names <- c(active_names, nm)
+      }
+      for (i in seq_len(nrow(df))) {
+        if (!isTRUE(df$`__include_sample`[[i]]) && !isTRUE(df$`__auto_duplicate`[[i]])) {
+          df$`__status`[[i]] <- "Excluded by user"
+        }
+        if (isTRUE(df$`__include_sample`[[i]]) && isTRUE(df$`__ready`[[i]]) && !nzchar(df$`__status`[[i]])) {
+          df$`__status`[[i]] <- "Ready"
+        }
+      }
+      df
+    }
+
+    .metadata_manifest_display_cols <- function(df, info) {
+      internal <- c(
+        "__include_sample", "__object_name", "__donor_id", "__technology", "__cell_set",
+        "__input_type", "__selected_path", "__sidecar_status", "__status"
+      )
+      internal <- internal[internal %in% colnames(df)]
+      meta <- as.character(info$metadata_cols %||% character(0))
+      paths <- as.character(info$path_cols %||% character(0))
+      unique(c(internal, meta[meta %in% colnames(df)], paths[paths %in% colnames(df)]))
+    }
+
+    .metadata_manifest_display_frame <- function(df, info) {
+      cols <- .metadata_manifest_display_cols(df, info)
+      out <- df[, cols, drop = FALSE]
+      if ("__selected_path" %in% colnames(out)) out$`__selected_path` <- vapply(out$`__selected_path`, .display_staged_path, character(1))
+      for (cc in colnames(out)) {
+        if (is.logical(out[[cc]])) out[[cc]][is.na(out[[cc]])] <- FALSE
+        if (is.character(out[[cc]])) out[[cc]][is.na(out[[cc]])] <- ""
+      }
+      out
+    }
+
+    .metadata_manifest_col_label <- function(col) {
+      labels <- c(
+        `__include_sample` = "Include",
+        `__object_name` = "Object Name",
+        `__donor_id` = "Donor ID",
+        `__technology` = "Technology",
+        `__cell_set` = "Cell Set",
+        `__input_type` = "Input Type",
+        `__selected_path` = "Resolved Input",
+        `__sidecar_status` = "Sidecars",
+        `__status` = "Status"
+      )
+      if (col %in% names(labels)) unname(labels[[col]]) else tools::toTitleCase(gsub("_", " ", col))
     }
 
     .h5ad_map_extra_cols <- function(df) {
@@ -1533,7 +2139,38 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
       list(df = out, converted_cols = coerced$converted_cols)
     }
 
+    .wanlab_seurat_v5_runtime <- function() {
+      if (!requireNamespace("SeuratObject", quietly = TRUE)) return(FALSE)
+      if (!exists("CreateAssay5Object", where = asNamespace("SeuratObject"), inherits = FALSE)) return(FALSE)
+      isTRUE(tryCatch(utils::compareVersion(as.character(utils::packageVersion("SeuratObject")), "5.0.0") >= 0, error = function(e) FALSE))
+    }
+
+    .wanlab_open_10x_h5_counts <- function(path) {
+      if (!requireNamespace("BPCells", quietly = TRUE)) stop("BPCells is required for direct 10x HDF5 import.")
+      if (!requireNamespace("hdf5r", quietly = TRUE)) stop("hdf5r is required for direct 10x HDF5 import.")
+      h5 <- hdf5r::H5File$new(path, mode = "r")
+      on.exit(try(h5$close_all(), silent = TRUE), add = TRUE)
+      feature_types <- tryCatch(
+        as.character(h5[["matrix/features/feature_type"]]$read()),
+        error = function(e) character(0)
+      )
+      feature_types <- unique(feature_types[!is.na(feature_types) & nzchar(feature_types)])
+      if (!length(feature_types)) feature_types <- NA_character_
+      mats <- lapply(feature_types, function(feature_type) {
+        BPCells::open_matrix_10x_hdf5(
+          path = path,
+          feature_type = if (is.na(feature_type)) NULL else feature_type
+        )
+      })
+      if (length(mats) == 1L) return(mats[[1]])
+      names(mats) <- feature_types
+      mats
+    }
+
     .create_assay_from_counts <- function(mat) {
+      if (.wanlab_seurat_v5_runtime()) {
+        return(SeuratObject::CreateAssay5Object(counts = mat))
+      }
       tryCatch(
         Seurat::CreateAssayObject(counts = mat),
         error = function(e) {
@@ -1547,7 +2184,7 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
     }
 
     .create_seurat_from_counts <- function(counts, project) {
-      if (inherits(counts, c("dgCMatrix", "matrix"))) {
+      if (inherits(counts, c("dgCMatrix", "matrix", "IterableMatrix"))) {
         return(Seurat::CreateSeuratObject(counts = counts, project = project))
       }
 
@@ -1561,7 +2198,7 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
         for (i in seq_along(counts)) {
           if (i == rna_idx[[1]]) next
           mat <- counts[[i]]
-          if (!inherits(mat, c("dgCMatrix", "matrix"))) next
+          if (!inherits(mat, c("dgCMatrix", "matrix", "IterableMatrix"))) next
           src <- tolower(nm[[i]] %||% paste0("assay", i))
           assay_name <- if (grepl("antibody|adt", src)) {
             "ADT"
@@ -1634,14 +2271,22 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
       tp <- tolower(trimws(as.character(type %||% "")))
       nm <- .sanitize_sample_name(fallback_name)
       if (tp %in% c("h5", "hdf5")) {
-        counts <- Seurat::Read10X_h5(p)
+        counts <- if (.wanlab_seurat_v5_runtime()) {
+          .wanlab_open_10x_h5_counts(p)
+        } else {
+          Seurat::Read10X_h5(p)
+        }
         sobj <- .create_seurat_from_counts(counts = counts, project = nm)
-        return(.ensure_qc_metrics_on_import(sobj))
+        sobj <- .ensure_qc_metrics_on_import(sobj)
+        disk_prep <- .wanlab_prepare_disk_backed_object(sobj, object_name = nm, source_tag = p)
+        return(disk_prep$obj)
       }
       if (tp == "matrix") {
         counts <- Seurat::Read10X(p)
         sobj <- .create_seurat_from_counts(counts = counts, project = nm)
-        return(.ensure_qc_metrics_on_import(sobj))
+        sobj <- .ensure_qc_metrics_on_import(sobj)
+        disk_prep <- .wanlab_prepare_disk_backed_object(sobj, object_name = nm, source_tag = p)
+        return(disk_prep$obj)
       }
       stop("Unsupported sidebar Seurat import type: ", tp)
     }
@@ -1777,6 +2422,8 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
         )
 
         key <- paste0("h5ad_", .sanitize_sample_name(staged_name), "_", i)
+        sobj <- .ensure_qc_metrics_on_import(sobj)
+        disk_prep <- .wanlab_prepare_disk_backed_object(sobj, object_name = project_name, source_tag = p)
         entries[[key]] <- list(
           import_key = key,
           name = auto_name,
@@ -1789,7 +2436,7 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
           split_col = split_col,
           split_value = grp,
           source_cols = list(gsm = gsm_col, condition = condition_col, tissue = tissue_col, species = species_col, batch = batch_col),
-          obj = .ensure_qc_metrics_on_import(sobj)
+          obj = disk_prep$obj
         )
 
         map_rows[[length(map_rows) + 1L]] <- data.frame(
@@ -1831,7 +2478,7 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
       )
     }
 
-    .sidebar_build_seurat_entries <- function(seurat_rows) {
+    .sidebar_build_seurat_entries <- function(seurat_rows, progress = NULL) {
       entries <- list()
       map_df <- data.frame()
       errs <- character(0)
@@ -1840,13 +2487,24 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
         return(list(entries = entries, map_df = map_df, errors = errs, warnings = warnings))
       }
 
-      for (i in seq_len(nrow(seurat_rows))) {
+      total_rows <- nrow(seurat_rows)
+      emit_progress <- function(index, label) {
+        if (!is.function(progress)) return(invisible(NULL))
+        try(progress(index = index, total = total_rows, label = label), silent = TRUE)
+        invisible(NULL)
+      }
+
+      for (i in seq_len(total_rows)) {
         r <- seurat_rows[i, , drop = FALSE]
         nm <- .sanitize_sample_name(as.character(r$name[[1]] %||% paste0("sample_", i)))
         p <- as.character(r$path[[1]] %||% "")
         tp <- tolower(as.character(r$type[[1]] %||% ""))
         cond <- as.character(r$condition[[1]] %||% "Unknown")
         bat <- as.character(r$batch[[1]] %||% "Batch1")
+        emit_progress(
+          i - 1L,
+          sprintf("Loading sample %d of %d: %s", i, total_rows, nm)
+        )
         one <- tryCatch({
           if (tp == "h5ad") {
             .sidebar_load_h5ad_split(
@@ -1872,6 +2530,11 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
                   split_col = "",
                   split_value = "",
                   source_cols = list(),
+                  manifest_row_index = if ("manifest_row_index" %in% colnames(r)) as.integer(r$manifest_row_index[[1]] %||% NA_integer_) else NA_integer_,
+                  manifest_meta = if ("manifest_meta" %in% colnames(r) && is.list(r$manifest_meta[[1]])) r$manifest_meta[[1]] else list(),
+                  manifest_paths = if ("manifest_paths" %in% colnames(r) && is.list(r$manifest_paths[[1]])) r$manifest_paths[[1]] else list(),
+                  cell_metadata_path = if ("cell_metadata_path" %in% colnames(r)) as.character(r$cell_metadata_path[[1]] %||% "") else "",
+                  qc_metrics_path = if ("qc_metrics_path" %in% colnames(r)) as.character(r$qc_metrics_path[[1]] %||% "") else "",
                   obj = obj
                 )
               ),
@@ -1883,7 +2546,13 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
           errs <<- c(errs, sprintf("%s -> %s", nm, conditionMessage(e)))
           NULL
         })
-        if (is.null(one)) next
+        if (is.null(one)) {
+          emit_progress(
+            i,
+            sprintf("Sample %d of %d failed: %s", i, total_rows, nm)
+          )
+          next
+        }
 
         if (is.list(one$entries) && length(one$entries)) {
           cur <- one$entries
@@ -1898,6 +2567,10 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
           map_df <- .bind_rows_safe(map_df, one$map_df)
         }
         warnings <- c(warnings, as.character(one$warnings %||% character(0)))
+        emit_progress(
+          i,
+          sprintf("Loaded sample %d of %d: %s", i, total_rows, nm)
+        )
       }
       list(
         entries = entries,
@@ -2453,6 +3126,8 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
     shinyFileChoose(input, "real_h5_file_btn", roots = volumes, session = session, filetypes = c("h5", "hdf5", "h5ad"))
     shinyDirChoose(input, "real_matrix_dir_btn", roots = volumes, session = session)
     shinyFileChoose(input, "real_csv_file_btn", roots = volumes, session = session, filetypes = c("csv", "tsv", "txt"))
+    shinyFileChoose(input, "real_metadata_file_btn", roots = volumes, session = session, filetypes = c("csv", "tsv", "txt"))
+    shinyDirChoose(input, "real_metadata_root_btn", roots = volumes, session = session)
     shinyFileChoose(input, "real_atac_file_btn", roots = volumes, session = session, filetypes = c("tsv", "gz", "bgz", "tbi"))
 
     observeEvent(input$proxy_h5_btn, {
@@ -2469,6 +3144,15 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
         "var el=document.getElementById('%s'); if(el){ try{ var st=JSON.parse(localStorage.getItem('wanlab_shinyfiles_sort_v4')||'{\\\"column\\\":\\\"Created\\\",\\\"dir\\\":\\\"descending\\\"}'); $(el).data('sort',st.column||'Created').data('sortDir',st.dir||'descending'); }catch(e){} el.click(); }",
         ns("real_csv_file_btn")
       ))
+    })
+    observeEvent(input$proxy_metadata_btn, {
+      shinyjs::runjs(sprintf(
+        "var el=document.getElementById('%s'); if(el){ try{ var st=JSON.parse(localStorage.getItem('wanlab_shinyfiles_sort_v4')||'{\\\"column\\\":\\\"Created\\\",\\\"dir\\\":\\\"descending\\\"}'); $(el).data('sort',st.column||'Created').data('sortDir',st.dir||'descending'); }catch(e){} el.click(); }",
+        ns("real_metadata_file_btn")
+      ))
+    })
+    observeEvent(input$metadata_manifest_choose_root_btn, {
+      shinyjs::runjs(sprintf("var el=document.getElementById('%s'); if(el){ el.click(); }", ns("real_metadata_root_btn")))
     })
     observeEvent(input$proxy_atac_btn, {
       shinyjs::runjs(sprintf(
@@ -2595,7 +3279,7 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
     }
 
     observeEvent(input$real_h5_file_btn, {
-      overlay_show("Processing selected H5/H5AD file(s)…")
+      overlay_show("Processing selected H5/H5AD file(s)…", loader = "import")
       on.exit(overlay_hide(), add = TRUE)
       sel <- input$real_h5_file_btn
       req(!is.null(sel))
@@ -2622,7 +3306,7 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
     })
 
     observeEvent(input$real_matrix_dir_btn, {
-      overlay_show("Processing selected matrix folder…")
+      overlay_show("Processing selected matrix folder…", loader = "import")
       on.exit(overlay_hide(), add = TRUE)
       req(is.list(input$real_matrix_dir_btn))
       dirs <- parseDirPath(volumes, input$real_matrix_dir_btn)
@@ -2641,7 +3325,7 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
     })
 
     observeEvent(input$real_csv_file_btn, {
-      overlay_show("Processing selected tabular file(s)…")
+      overlay_show("Processing selected tabular file(s)…", loader = "parse")
       on.exit(overlay_hide(), add = TRUE)
       sel <- input$real_csv_file_btn
       req(!is.null(sel))
@@ -2666,8 +3350,489 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
       ))
     })
 
+    .metadata_manifest_show <- function() {
+      info <- metadata_manifest_info()
+      showModal(metadata_manifest_modal_content(ns, root_path = as.character(info$root_path %||% "")))
+      invisible(NULL)
+    }
+
+    .metadata_manifest_recompute <- function(df = metadata_manifest_df(), info = metadata_manifest_info()) {
+      if (!is.data.frame(df) || !nrow(df) || !is.list(info) || !length(info)) return(invisible(NULL))
+      root <- as.character(info$root_path %||% "")
+      df <- .metadata_manifest_refresh(df, info, root_path = root)
+      metadata_manifest_info(info)
+      metadata_manifest_df(df)
+      invisible(df)
+    }
+
+    observeEvent(input$real_metadata_file_btn, {
+      overlay_show("Reading metadata list...", loader = "parse")
+      on.exit(overlay_hide(), add = TRUE)
+      sel <- input$real_metadata_file_btn
+      req(!is.null(sel))
+      files <- parseFilePaths(volumes, sel)
+      req(is.data.frame(files), nrow(files) > 0)
+      p <- as.character(files$datapath[[1]] %||% "")
+      if (!nzchar(p) || !file.exists(p)) {
+        showNotification("Metadata list file was not found.", type = "error")
+        return(invisible(NULL))
+      }
+      prepared <- tryCatch(
+        .metadata_manifest_prepare(p, root_path = dirname(p)),
+        error = function(e) {
+          showNotification(conditionMessage(e), type = "error", duration = 10)
+          NULL
+        }
+      )
+      if (is.null(prepared)) return(invisible(NULL))
+      prepared$info$root_path <- normalizePath(dirname(p), winslash = "/", mustWork = FALSE)
+      prepared$data <- .metadata_manifest_refresh(prepared$data, prepared$info, prepared$info$root_path)
+      metadata_manifest_info(prepared$info)
+      metadata_manifest_df(prepared$data)
+      .metadata_manifest_show()
+      invisible(NULL)
+    })
+
+    observeEvent(input$metadata_manifest_apply_root_btn, {
+      info <- metadata_manifest_info()
+      req(is.list(info), length(info))
+      root <- trimws(as.character(input$metadata_manifest_root_path %||% ""))
+      if (!nzchar(root) || !dir.exists(root)) {
+        showNotification("Root folder is missing or invalid.", type = "warning")
+        return(invisible(NULL))
+      }
+      info$root_path <- normalizePath(root, winslash = "/", mustWork = FALSE)
+      metadata_manifest_info(info)
+      .metadata_manifest_recompute()
+      updateTextInput(session, "metadata_manifest_root_path", value = info$root_path)
+      showNotification("Resolved manifest paths against the selected root folder.", type = "message")
+      invisible(NULL)
+    })
+
+    observeEvent(input$real_metadata_root_btn, {
+      sel <- input$real_metadata_root_btn
+      req(!is.null(sel))
+      dirs <- parseDirPath(volumes, sel)
+      if (!length(dirs) || !dir.exists(dirs[[1]])) {
+        showNotification("Metadata root folder was not found.", type = "warning")
+        return(invisible(NULL))
+      }
+      info <- metadata_manifest_info()
+      req(is.list(info), length(info))
+      info$root_path <- normalizePath(dirs[[1]], winslash = "/", mustWork = FALSE)
+      metadata_manifest_info(info)
+      .metadata_manifest_recompute()
+      updateTextInput(session, "metadata_manifest_root_path", value = info$root_path)
+      showNotification("Resolved manifest paths against the selected root folder.", type = "message")
+      invisible(NULL)
+    })
+
+    output$metadata_manifest_status_ui <- renderUI({
+      df <- metadata_manifest_df()
+      info <- metadata_manifest_info()
+      if (!is.data.frame(df) || !nrow(df) || !is.list(info) || !length(info)) return(tags$span("No metadata list loaded."))
+      selected <- sum(as.logical(df$`__include_sample`), na.rm = TRUE)
+      ready <- sum(as.logical(df$`__include_sample`) & as.logical(df$`__ready`), na.rm = TRUE)
+      cell_sidecars <- sum(nzchar(as.character(df$`__cell_metadata_path` %||% character(0))))
+      qc_reports <- sum(nzchar(as.character(df$`__qc_metrics_path` %||% character(0))))
+      tags$span(
+        sprintf(
+          "Detected %s delimiter. Rows: %d. Included: %d. Ready: %d. Cell metadata sidecars: %d. QC reports: %d. Root: %s",
+          toupper(as.character(info$delimiter %||% "")), nrow(df), selected, ready, cell_sidecars, qc_reports,
+          as.character(info$root_path %||% "not set")
+        )
+      )
+    })
+
+    output$metadata_manifest_remove_col_ui <- renderUI({
+      info <- metadata_manifest_info()
+      df <- metadata_manifest_df()
+      if (!is.list(info) || !length(info) || !is.data.frame(df) || !nrow(df)) return(tags$span())
+      protected <- c(info$donor_col, info$technology_col, info$condition_col, info$batch_col)
+      removable <- setdiff(as.character(info$metadata_cols %||% character(0)), protected)
+      removable <- removable[removable %in% colnames(df)]
+      if (!length(removable)) return(tags$span("No removable metadata columns."))
+      div(
+        class = "manifest-inline-row",
+        selectInput(ns("metadata_manifest_remove_col_name"), NULL, choices = removable, selected = removable[[1]], width = "100%"),
+        actionButton(ns("metadata_manifest_remove_col_btn"), "Remove Column", class = "btn btn-outline-secondary")
+      )
+    })
+
+    output$metadata_manifest_table <- renderDT({
+      df <- metadata_manifest_df()
+      info <- metadata_manifest_info()
+      req(is.data.frame(df), nrow(df) > 0, is.list(info), length(info))
+      display <- .metadata_manifest_display_frame(df, info)
+      disp_cols <- colnames(display)
+      labels <- unname(vapply(disp_cols, .metadata_manifest_col_label, character(1)))
+      editable_cols <- setdiff(
+        disp_cols,
+        c("__donor_id", "__technology", "__selected_path", "__sidecar_status", "__status", info$path_cols)
+      )
+      editable_idx <- which(disp_cols %in% editable_cols) - 1L
+      include_idx <- match("__include_sample", disp_cols) - 1L
+      status_idx <- match("__status", disp_cols) - 1L
+      created_js <- sprintf(
+        "function(row, data){ var inc = String(data[%d] || '').toLowerCase(); var st = String(data[%d] || '').toLowerCase(); if(inc === 'false' || st !== 'ready'){ $(row).addClass('manifest-row-invalid'); } else { $(row).removeClass('manifest-row-invalid'); } }",
+        include_idx, status_idx
+      )
+      datatable(
+        display,
+        rownames = FALSE,
+        selection = "multiple",
+        editable = list(target = "cell", disable = list(columns = setdiff(seq_along(disp_cols) - 1L, editable_idx))),
+        class = "compact stripe hover",
+        escape = TRUE,
+        options = list(
+          dom = "t",
+          paging = FALSE,
+          scrollX = TRUE,
+          scrollCollapse = TRUE,
+          autoWidth = FALSE,
+          orderClasses = FALSE,
+          createdRow = DT::JS(created_js)
+        ),
+        colnames = labels
+      )
+    }, server = FALSE)
+
+    observeEvent(input$metadata_manifest_table_cell_edit, {
+      info <- metadata_manifest_info()
+      df <- metadata_manifest_df()
+      req(is.data.frame(df), nrow(df) > 0, is.list(info), length(info))
+      edit <- input$metadata_manifest_table_cell_edit
+      row <- as.integer(edit$row %||% 0L)
+      display_cols <- .metadata_manifest_display_cols(df, info)
+      col_idx <- as.integer(edit$col %||% -1L) + 1L
+      if (row < 1L || row > nrow(df) || col_idx < 1L || col_idx > length(display_cols)) return(invisible(NULL))
+      col <- display_cols[[col_idx]]
+      value <- as.character(edit$value %||% "")
+      if (col %in% c(info$path_cols, "__donor_id", "__technology", "__selected_path", "__sidecar_status", "__status")) return(invisible(NULL))
+      if (identical(col, "__include_sample")) {
+        yes <- tolower(trimws(value)) %in% c("true", "t", "1", "yes", "y")
+        if (isTRUE(yes) && isTRUE(df$`__auto_duplicate`[[row]])) {
+          showNotification("Exact duplicate remains excluded. Remove the duplicate row or edit its metadata.", type = "warning")
+          return(invisible(NULL))
+        }
+        df$`__include_sample`[[row]] <- yes
+      } else if (identical(col, "__object_name")) {
+        df$`__object_name`[[row]] <- trimws(value)
+        df$`__object_name_auto`[[row]] <- FALSE
+      } else if (identical(col, "__cell_set")) {
+        normalized <- .metadata_manifest_normalize_cell_set(value, default = "")
+        if (!(normalized %in% c("filtered", "all_cells"))) {
+          showNotification("Cell Set must be filtered or all_cells.", type = "warning")
+          return(invisible(NULL))
+        }
+        df$`__cell_set`[[row]] <- normalized
+      } else if (identical(col, "__input_type")) {
+        normalized <- .metadata_manifest_normalize_input_type(value, default = "")
+        if (!(normalized %in% c("h5", "matrix"))) {
+          showNotification("Input Type must be h5 or matrix.", type = "warning")
+          return(invisible(NULL))
+        }
+        df$`__input_type`[[row]] <- normalized
+      } else if (col %in% info$metadata_cols) {
+        df[[col]][[row]] <- if (nzchar(trimws(value))) value else NA_character_
+      } else {
+        return(invisible(NULL))
+      }
+      metadata_manifest_df(.metadata_manifest_refresh(df, info, root_path = as.character(info$root_path %||% "")))
+      invisible(NULL)
+    })
+
+    observeEvent(input$metadata_manifest_add_col_btn, {
+      info <- metadata_manifest_info()
+      df <- metadata_manifest_df()
+      req(is.data.frame(df), nrow(df) > 0, is.list(info), length(info))
+      raw <- as.character(input$metadata_manifest_new_col_name %||% "")
+      col_name <- .sanitize_meta_column_name(raw, allow_empty = TRUE)
+      if (!nzchar(col_name)) {
+        showNotification("Enter a metadata column name first.", type = "warning")
+        return(invisible(NULL))
+      }
+      norm_existing <- vapply(colnames(df), .metadata_manifest_norm_col, character(1))
+      if (col_name %in% norm_existing || col_name %in% vapply(colnames(df), .sanitize_meta_column_name, character(1))) {
+        showNotification("That metadata column already exists.", type = "warning")
+        return(invisible(NULL))
+      }
+      df[[col_name]] <- rep(NA_character_, nrow(df))
+      info$metadata_cols <- c(info$metadata_cols, col_name)
+      info$original_cols <- c(info$original_cols, col_name)
+      metadata_manifest_info(info)
+      metadata_manifest_df(.metadata_manifest_refresh(df, info, root_path = as.character(info$root_path %||% "")))
+      updateTextInput(session, "metadata_manifest_new_col_name", value = "")
+    })
+
+    observeEvent(input$metadata_manifest_remove_col_btn, {
+      info <- metadata_manifest_info()
+      df <- metadata_manifest_df()
+      req(is.data.frame(df), nrow(df) > 0, is.list(info), length(info))
+      col_name <- as.character(input$metadata_manifest_remove_col_name %||% "")
+      if (!nzchar(col_name) || !(col_name %in% info$metadata_cols)) return(invisible(NULL))
+      if (col_name %in% c(info$donor_col, info$technology_col, info$condition_col, info$batch_col)) {
+        showNotification("Donor ID, Technology, Condition, and Batch columns are required.", type = "warning")
+        return(invisible(NULL))
+      }
+      df[[col_name]] <- NULL
+      info$metadata_cols <- setdiff(info$metadata_cols, col_name)
+      info$original_cols <- setdiff(info$original_cols, col_name)
+      metadata_manifest_info(info)
+      metadata_manifest_df(.metadata_manifest_refresh(df, info, root_path = as.character(info$root_path %||% "")))
+    })
+
+    observeEvent(input$metadata_manifest_remove_rows_btn, {
+      df <- metadata_manifest_df()
+      req(is.data.frame(df), nrow(df) > 0)
+      selected <- as.integer(input$metadata_manifest_table_rows_selected %||% integer(0))
+      selected <- selected[is.finite(selected) & selected >= 1L & selected <= nrow(df)]
+      if (!length(selected)) {
+        showNotification("Select rows to remove.", type = "warning")
+        return(invisible(NULL))
+      }
+      info <- metadata_manifest_info()
+      df <- df[-selected, , drop = FALSE]
+      if (!nrow(df)) {
+        metadata_manifest_df(df)
+        showNotification("All manifest rows were removed.", type = "message")
+        return(invisible(NULL))
+      }
+      metadata_manifest_df(.metadata_manifest_refresh(df, info, root_path = as.character(info$root_path %||% "")))
+    })
+
+    .metadata_manifest_row_meta <- function(df, row, info) {
+      out <- list()
+      skipped <- as.character(info$skipped_meta_cols %||% character(0))
+      for (cc in as.character(info$metadata_cols %||% character(0))) {
+        if (!(cc %in% colnames(df)) || cc %in% skipped) next
+        key <- .sanitize_meta_column_name(cc, allow_empty = TRUE)
+        if (!nzchar(key)) next
+        value <- df[[cc]][[row]]
+        out[[key]] <- if (length(value) == 0L || is.na(value)) NA_character_ else as.character(value)
+      }
+      out
+    }
+
+    .metadata_manifest_row_paths <- function(df, row, info) {
+      out <- list()
+      for (cc in as.character(info$path_cols %||% character(0))) {
+        if (!(cc %in% colnames(df))) next
+        key <- .sanitize_meta_column_name(cc, allow_empty = TRUE)
+        if (!nzchar(key) || identical(key, "path")) key <- paste0("manifest_", key)
+        value <- df[[cc]][[row]]
+        out[[key]] <- if (length(value) == 0L || is.na(value)) NA_character_ else as.character(value)
+      }
+      out
+    }
+
+    .metadata_manifest_build_rows <- function(df, info) {
+      if (is.null(df) || !is.data.frame(df) || !nrow(df)) return(list(rows = data.frame(), result = data.frame()))
+      included <- as.logical(df$`__include_sample`)
+      ready <- as.logical(df$`__ready`)
+      result <- data.frame(
+        row = as.integer(df$`__manifest_row`),
+        object = as.character(df$`__object_name`),
+        source = as.character(df$`__selected_path`),
+        status = ifelse(included & ready, "Pending", "Skipped"),
+        reason = as.character(df$`__status`),
+        stringsAsFactors = FALSE
+      )
+      rows <- df[included & ready, , drop = FALSE]
+      if (!nrow(rows)) return(list(rows = data.frame(), result = result))
+      out <- data.frame(
+        id = paste0("manifest_", as.integer(rows$`__manifest_row`), "_", seq_len(nrow(rows))),
+        name = as.character(rows$`__object_name`),
+        path = as.character(rows$`__selected_path`),
+        type = as.character(rows$`__input_type`),
+        condition = as.character(rows[[info$condition_col]]),
+        batch = as.character(rows[[info$batch_col]]),
+        manifest_row_index = as.integer(rows$`__manifest_row`),
+        cell_metadata_path = as.character(rows$`__cell_metadata_path`),
+        qc_metrics_path = as.character(rows$`__qc_metrics_path`),
+        stringsAsFactors = FALSE
+      )
+      out$condition[is.na(out$condition) | !nzchar(trimws(out$condition))] <- NA_character_
+      out$batch[is.na(out$batch) | !nzchar(trimws(out$batch))] <- NA_character_
+      out$manifest_meta <- I(lapply(seq_len(nrow(rows)), function(i) {
+        .metadata_manifest_row_meta(rows, i, info)
+      }))
+      out$manifest_paths <- I(lapply(seq_len(nrow(rows)), function(i) {
+        .metadata_manifest_row_paths(rows, i, info)
+      }))
+      list(rows = out, result = result)
+    }
+
+    .metadata_manifest_conflict_cols <- function(entries) {
+      out <- data.frame(column = character(0), existing = character(0), action = character(0), new_name = character(0), stringsAsFactors = FALSE)
+      if (!is.list(entries) || !length(entries)) return(out)
+      for (ent in entries) {
+        obj <- ent$obj
+        if (is.null(obj) || !inherits(obj, "Seurat") || !is.list(ent$manifest_meta)) next
+        md_cols <- colnames(obj@meta.data %||% data.frame())
+        md_norm <- vapply(md_cols, .metadata_manifest_norm_col, character(1))
+        for (cc in names(ent$manifest_meta)) {
+          hit <- which(md_norm == .metadata_manifest_norm_col(cc))
+          if (!length(hit)) next
+          out <- rbind(out, data.frame(
+            column = cc,
+            existing = md_cols[[hit[[1]]]],
+            action = "rename",
+            new_name = paste0("imported_", cc),
+            stringsAsFactors = FALSE
+          ))
+        }
+      }
+      if (!nrow(out)) return(out)
+      out <- out[!duplicated(out$column), , drop = FALSE]
+      rownames(out) <- NULL
+      out
+    }
+
+    output$metadata_manifest_conflict_table <- renderDT({
+      df <- metadata_manifest_conflicts()
+      req(is.data.frame(df), nrow(df) > 0)
+      datatable(
+        df[, c("column", "action", "new_name"), drop = FALSE],
+        rownames = FALSE,
+        selection = "none",
+        editable = list(target = "cell", disable = list(columns = 0)),
+        class = "compact stripe hover",
+        options = list(dom = "t", paging = FALSE, scrollX = TRUE, autoWidth = FALSE),
+        colnames = c("Imported Column", "Action (rename or skip)", "New Name")
+      )
+    }, server = FALSE)
+
+    observeEvent(input$metadata_manifest_conflict_table_cell_edit, {
+      info <- metadata_manifest_conflicts()
+      req(is.data.frame(info), nrow(info) > 0)
+      edit <- input$metadata_manifest_conflict_table_cell_edit
+      row <- as.integer(edit$row %||% 0L)
+      col <- as.integer(edit$col %||% -1L) + 1L
+      if (row < 1L || row > nrow(info) || col < 1L || col > 3L) return(invisible(NULL))
+      if (col == 2L) info$action[[row]] <- tolower(trimws(as.character(edit$value %||% "")))
+      if (col == 3L) info$new_name[[row]] <- trimws(as.character(edit$value %||% ""))
+      metadata_manifest_conflicts(info)
+    })
+
+    output$metadata_manifest_result_table <- renderDT({
+      df <- metadata_manifest_result()
+      req(is.data.frame(df), nrow(df) > 0)
+      datatable(
+        df,
+        rownames = FALSE,
+        selection = "none",
+        class = "compact stripe hover",
+        options = list(
+          dom = "t",
+          paging = FALSE,
+          scrollX = TRUE,
+          scrollY = "55vh",
+          scrollCollapse = TRUE,
+          autoWidth = FALSE,
+          columnDefs = list(
+            list(width = "90px", targets = 0),
+            list(width = "220px", targets = 1),
+            list(width = "520px", targets = 2),
+            list(width = "110px", targets = 3),
+            list(width = "360px", targets = 4)
+          )
+        ),
+        colnames = c("Manifest Row", "Object", "Source", "Status", "Reason")
+      )
+    }, server = FALSE)
+
+    .metadata_manifest_commit_build <- function(build, result_seed) {
+      entries <- build$entries %||% list()
+      errs <- as.character(build$errors %||% character(0))
+      if (is.data.frame(result_seed) && nrow(result_seed) && length(errs)) {
+        for (err in errs) {
+          nm <- sub("\\s*->.*$", "", err)
+          hit <- which(result_seed$object == nm & result_seed$status == "Pending")
+          if (!length(hit)) hit <- which(grepl(nm, result_seed$object, fixed = TRUE) & result_seed$status == "Pending")
+          if (length(hit)) {
+            result_seed$status[[hit[[1]]]] <- "Failed"
+            result_seed$reason[[hit[[1]]]] <- sub("^[^>]*->\\s*", "", err)
+          }
+        }
+      }
+      attr(entries, "batch_manifest") <- TRUE
+      attr(entries, "batch_result_seed") <- result_seed
+      build$entries <- entries
+      conflicts <- .metadata_manifest_conflict_cols(entries)
+      if (is.data.frame(conflicts) && nrow(conflicts)) {
+        metadata_manifest_conflicts(conflicts)
+        metadata_manifest_pending_commit(list(build = build, result_seed = result_seed))
+        removeModal()
+        showModal(metadata_manifest_conflict_modal_content(ns))
+        return(invisible(NULL))
+      }
+      .run_commit_with_options(build, data.frame(), FALSE, data.frame(), conflict_mode = "replace")
+      invisible(NULL)
+    }
+
+    observeEvent(input$metadata_manifest_conflict_cancel_btn, {
+      removeModal()
+      .metadata_manifest_show()
+    })
+
+    observeEvent(input$metadata_manifest_conflict_apply_btn, {
+      pending <- metadata_manifest_pending_commit()
+      conflicts <- metadata_manifest_conflicts()
+      req(is.list(pending), is.data.frame(conflicts), nrow(conflicts) > 0)
+      actions <- tolower(trimws(as.character(conflicts$action %||% "")))
+      if (any(!actions %in% c("rename", "skip"))) {
+        showNotification("Each conflict action must be rename or skip.", type = "warning")
+        return(invisible(NULL))
+      }
+      entries <- pending$build$entries %||% list()
+      existing <- character(0)
+      for (ent in entries) {
+        obj <- ent$obj
+        if (inherits(obj, "Seurat")) existing <- c(existing, colnames(obj@meta.data))
+      }
+      existing_norm <- vapply(existing, .metadata_manifest_norm_col, character(1))
+      target_names <- character(0)
+      for (i in seq_len(nrow(conflicts))) {
+        old <- as.character(conflicts$column[[i]])
+        if (identical(actions[[i]], "skip")) next
+        new <- .sanitize_meta_column_name(conflicts$new_name[[i]], allow_empty = TRUE)
+        if (!nzchar(new)) {
+          showNotification(sprintf("Enter a new name for %s or choose skip.", old), type = "warning")
+          return(invisible(NULL))
+        }
+        if (.metadata_manifest_norm_col(new) %in% existing_norm ||
+            .metadata_manifest_norm_col(new) %in% vapply(target_names, .metadata_manifest_norm_col, character(1)) ||
+            .metadata_manifest_norm_col(new) %in% vapply(as.character(conflicts$column), .metadata_manifest_norm_col, character(1))) {
+          showNotification(sprintf("New metadata name is still conflicting: %s", new), type = "warning")
+          return(invisible(NULL))
+        }
+        target_names <- c(target_names, new)
+      }
+      for (i in seq_len(nrow(conflicts))) {
+        old <- as.character(conflicts$column[[i]])
+        for (key in names(entries)) {
+          meta <- entries[[key]]$manifest_meta
+          if (!is.list(meta) || !(old %in% names(meta))) next
+          if (identical(actions[[i]], "skip")) {
+            meta[[old]] <- NULL
+          } else {
+            new <- .sanitize_meta_column_name(conflicts$new_name[[i]], allow_empty = TRUE)
+            meta[[new]] <- meta[[old]]
+            meta[[old]] <- NULL
+          }
+          entries[[key]]$manifest_meta <- meta
+        }
+      }
+      pending$build$entries <- entries
+      metadata_manifest_pending_commit(NULL)
+      metadata_manifest_conflicts(data.frame())
+      removeModal()
+      .run_commit_with_options(pending$build, data.frame(), FALSE, data.frame(), conflict_mode = "replace")
+    })
+
     observeEvent(input$real_atac_file_btn, {
-      overlay_show("Processing selected ATAC fragment file(s)…")
+      overlay_show("Processing selected ATAC fragment file(s)…", loader = "import")
       on.exit(overlay_hide(), add = TRUE)
       sel <- input$real_atac_file_btn
       req(!is.null(sel))
@@ -3060,6 +4225,95 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
       df[keep, , drop = FALSE]
     }
 
+    .attach_manifest_cell_metadata <- function(obj, cell_metadata_path = "", qc_metrics_path = "") {
+      out <- list(
+        obj = obj,
+        cell_status = if (nzchar(as.character(cell_metadata_path %||% ""))) "not imported" else "absent",
+        cell_matched = 0L,
+        cell_total = tryCatch(ncol(obj), error = function(e) 0L),
+        imported_columns = character(0),
+        skipped_columns = character(0),
+        qc_report_status = if (nzchar(as.character(qc_metrics_path %||% ""))) "report retained" else "absent"
+      )
+      if (is.null(obj) || !inherits(obj, "Seurat")) return(out)
+      if (!is.null(obj@misc) && !is.list(obj@misc)) obj@misc <- list()
+      if (is.null(obj@misc)) obj@misc <- list()
+      obj@misc$batch_import_qc_report <- list(
+        path = as.character(qc_metrics_path %||% ""),
+        status = out$qc_report_status,
+        imported_as_cell_metadata = FALSE
+      )
+      path <- as.character(cell_metadata_path %||% "")
+      if (!nzchar(path) || !file.exists(path)) {
+        out$obj <- obj
+        return(out)
+      }
+      sidecar <- tryCatch(.metadata_manifest_read_table(path)$data, error = function(e) NULL)
+      if (!is.data.frame(sidecar) || !nrow(sidecar)) {
+        out$cell_status <- "unreadable"
+        out$obj <- obj
+        return(out)
+      }
+      id_col <- .metadata_manifest_find_col(
+        sidecar,
+        aliases = c("cell_id", "cell", "barcode", "cell_barcode", "barcode_id", "cell_name")
+      )
+      if (!nzchar(id_col)) {
+        sidecar_ids <- rownames(sidecar)
+        if (!is.null(sidecar_ids) && length(sidecar_ids) == nrow(sidecar) && any(nzchar(sidecar_ids)) &&
+            !all(grepl("^[0-9]+$", sidecar_ids))) {
+          id_col <- "__rownames__"
+          sidecar[[id_col]] <- sidecar_ids
+        }
+      }
+      if (!nzchar(id_col)) {
+        out$cell_status <- "no cell ID column"
+        out$obj <- obj
+        return(out)
+      }
+      ids <- trimws(as.character(sidecar[[id_col]] %||% character(0)))
+      valid_ids <- nzchar(ids) & !is.na(ids)
+      if (!any(valid_ids) || anyDuplicated(ids[valid_ids])) {
+        out$cell_status <- "invalid or duplicated cell IDs"
+        out$obj <- obj
+        return(out)
+      }
+      target_ids <- as.character(colnames(obj) %||% character(0))
+      match_idx <- match(target_ids, ids)
+      matched <- sum(!is.na(match_idx))
+      out$cell_matched <- matched
+      out$cell_total <- length(target_ids)
+      if (!matched) {
+        out$cell_status <- "0 cell IDs matched"
+        out$obj <- obj
+        return(out)
+      }
+      aligned <- sidecar[match_idx, , drop = FALSE]
+      md <- tryCatch(obj@meta.data, error = function(e) data.frame(row.names = target_ids))
+      if (!is.data.frame(md) || nrow(md) != length(target_ids)) md <- data.frame(row.names = target_ids)
+      exclude_cols <- c(id_col, "__rownames__")
+      source_cols <- setdiff(colnames(sidecar), exclude_cols)
+      source_cols <- source_cols[!grepl("path|url|read1|read2|processed_txt", vapply(source_cols, .metadata_manifest_norm_col, character(1)), perl = TRUE)]
+      existing_norm <- vapply(colnames(md), .metadata_manifest_norm_col, character(1))
+      for (cc in source_cols) {
+        if (cc %in% colnames(md) || .metadata_manifest_norm_col(cc) %in% existing_norm) {
+          out$skipped_columns <- c(out$skipped_columns, cc)
+          next
+        }
+        values <- aligned[[cc]]
+        if (is.list(values)) {
+          values <- vapply(values, function(x) if (!length(x) || all(is.na(x))) NA_character_ else paste(as.character(unlist(x, use.names = FALSE)), collapse = ";"), character(1))
+        }
+        md[[cc]] <- values
+        out$imported_columns <- c(out$imported_columns, cc)
+      }
+      rownames(md) <- target_ids
+      obj@meta.data <- md
+      out$cell_status <- sprintf("%d/%d cell IDs matched", matched, length(target_ids))
+      out$obj <- obj
+      out
+    }
+
     .run_commit_with_options <- function(build, csv_rows, has_vdj_cands, vdj_cands, conflict_mode = "replace") {
       entries <- build$entries %||% list()
       attr(entries, "atac_conflict_mode") <- as.character(conflict_mode %||% "replace")
@@ -3078,6 +4332,14 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
       imported_names <- character(0)
       failed_names <- character(0)
       sample_rows <- list()
+      batch_manifest <- isTRUE(attr(entries, "batch_manifest"))
+      batch_results <- attr(entries, "batch_result_seed")
+      if (batch_manifest && (!is.data.frame(batch_results) || !nrow(batch_results))) {
+        batch_results <- data.frame(
+          row = integer(0), object = character(0), source = character(0), status = character(0), reason = character(0),
+          stringsAsFactors = FALSE
+        )
+      }
       conflict_mode <- as.character(attr(entries, "atac_conflict_mode") %||% "replace")
       atac_rows <- .atac_rows_for_confirm()
       map_df <- if (is.data.frame(map_df)) map_df else data.frame()
@@ -3101,7 +4363,15 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
           }
 
           base_obj_name <- if (nrow(row_map)) as.character(row_map$object_name[[1]] %||% "") else as.character(ent$name %||% "")
-          final_name <- .ensure_unique_object_name(base_obj_name, reg = reg, used_names = used)
+          if (batch_manifest) {
+            final_name <- .sanitize_sample_name(base_obj_name, allow_empty = TRUE)
+            if (!nzchar(final_name) || !is.null(reg[[final_name]]) || final_name %in% used) {
+              failed_names <- c(failed_names, base_obj_name)
+              next
+            }
+          } else {
+            final_name <- .ensure_unique_object_name(base_obj_name, reg = reg, used_names = used)
+          }
           used <- c(used, final_name)
           imported_names <- c(imported_names, final_name)
 
@@ -3110,11 +4380,18 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
           final_tissue <- if (nrow(row_map)) as.character(row_map$tissue[[1]] %||% "") else as.character(ent$tissue %||% "")
           final_species <- if (nrow(row_map)) as.character(row_map$species[[1]] %||% "") else as.character(ent$species %||% "")
           final_sample_name <- if (nrow(row_map)) as.character(row_map$sample_name[[1]] %||% "") else final_name
-          if (!nzchar(final_sample_name)) final_sample_name <- final_name
-          if (!nzchar(final_condition)) final_condition <- "Unknown"
-          if (!nzchar(final_batch)) final_batch <- "Batch1"
+          if (is.na(final_sample_name) || !nzchar(trimws(final_sample_name))) final_sample_name <- final_name
+          if (isTRUE(batch_manifest)) {
+            if (is.na(final_condition) || !nzchar(trimws(final_condition))) final_condition <- NA_character_
+            if (is.na(final_batch) || !nzchar(trimws(final_batch))) final_batch <- NA_character_
+          } else {
+            if (is.na(final_condition) || !nzchar(trimws(final_condition))) final_condition <- "Unknown"
+            if (is.na(final_batch) || !nzchar(trimws(final_batch))) final_batch <- "Batch1"
+          }
           extra_meta <- list()
-          if (nrow(row_map)) {
+          if (batch_manifest && is.list(ent$manifest_meta)) {
+            extra_meta <- ent$manifest_meta
+          } else if (nrow(row_map)) {
             extra_cols <- setdiff(colnames(row_map), .h5ad_map_core_cols)
             for (cc in extra_cols) {
               key <- .sanitize_meta_column_name(cc, allow_empty = TRUE)
@@ -3140,9 +4417,29 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
           if (length(extra_meta) && is.data.frame(obj@meta.data) && nrow(obj@meta.data)) {
             for (cc in names(extra_meta)) {
               if (!nzchar(cc)) next
-              val <- as.character(extra_meta[[cc]] %||% "")
+              if (batch_manifest && (cc %in% colnames(obj@meta.data) ||
+                                     .metadata_manifest_norm_col(cc) %in% vapply(colnames(obj@meta.data), .metadata_manifest_norm_col, character(1)))) next
+              val <- extra_meta[[cc]]
+              if (length(val) == 0L || is.na(val[[1]])) val <- NA_character_ else val <- as.character(val[[1]])
               obj@meta.data[[cc]] <- rep(val, nrow(obj@meta.data))
             }
+          }
+
+          manifest_cell_status <- "not applicable"
+          manifest_qc_status <- "not applicable"
+          manifest_cell_cols <- character(0)
+          manifest_cell_skipped <- character(0)
+          if (batch_manifest) {
+            attached <- .attach_manifest_cell_metadata(
+              obj = obj,
+              cell_metadata_path = as.character(ent$cell_metadata_path %||% ""),
+              qc_metrics_path = as.character(ent$qc_metrics_path %||% "")
+            )
+            obj <- attached$obj
+            manifest_cell_status <- as.character(attached$cell_status %||% "absent")
+            manifest_qc_status <- as.character(attached$qc_report_status %||% "absent")
+            manifest_cell_cols <- as.character(attached$imported_columns %||% character(0))
+            manifest_cell_skipped <- as.character(attached$skipped_columns %||% character(0))
           }
 
           # ATAC full carry-through policy: keep peak-usable assay in-object and canonicalize to ATAC.
@@ -3206,6 +4503,43 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
               sample_rows[[length(sample_rows)]][[cc]] <- as.character(extra_meta[[cc]] %||% "")
             }
           }
+          if (batch_manifest) {
+            if (is.list(ent$manifest_paths)) {
+              for (cc in names(ent$manifest_paths)) {
+                value <- ent$manifest_paths[[cc]]
+                sample_rows[[length(sample_rows)]][[cc]] <- if (length(value) == 0L || is.na(value[[1]])) NA_character_ else as.character(value[[1]])
+              }
+            }
+            sample_rows[[length(sample_rows)]]$cell_metadata_path <- as.character(ent$cell_metadata_path %||% "")
+            sample_rows[[length(sample_rows)]]$cell_metadata_status <- manifest_cell_status
+            sample_rows[[length(sample_rows)]]$qc_metrics_status <- manifest_qc_status
+            sample_rows[[length(sample_rows)]]$cell_metadata_columns <- paste(manifest_cell_cols, collapse = ";")
+            sample_rows[[length(sample_rows)]]$cell_metadata_skipped_columns <- paste(manifest_cell_skipped, collapse = ";")
+            sample_rows[[length(sample_rows)]]$qc_metrics_path <- as.character(ent$qc_metrics_path %||% "")
+          }
+          if (batch_manifest && is.data.frame(batch_results) && nrow(batch_results)) {
+            row_idx <- suppressWarnings(as.integer(ent$manifest_row_index %||% NA_integer_))
+            hit <- which(batch_results$row == row_idx)
+            if (length(hit)) {
+              batch_results$status[hit[[1]]] <- "Imported"
+              batch_results$object[hit[[1]]] <- final_name
+              batch_results$reason[hit[[1]]] <- paste(
+                manifest_cell_status,
+                manifest_qc_status,
+                sep = "; "
+              )
+            }
+          }
+        }
+      }
+
+      if (batch_manifest && is.data.frame(batch_results) && nrow(batch_results) && length(failed_names)) {
+        for (failed_name in unique(failed_names)) {
+          hit <- which(batch_results$object == failed_name & batch_results$status %in% c("Pending", "Imported"))
+          if (length(hit)) {
+            batch_results$status[[hit[[1]]]] <- "Failed"
+            batch_results$reason[[hit[[1]]]] <- "Object validation failed during commit"
+          }
         }
       }
 
@@ -3223,6 +4557,12 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
         shared_data$full_sample_sheet <- merged
       }
       shared_data$all_seurat_objects <- reg
+      # This import action creates a new object set. Make its final created
+      # object canonical immediately; landing must not retain an older valid
+      # active object merely because it still exists in the registry.
+      if (length(imported_names)) {
+        shared_data$active_object_name <- imported_names[[length(imported_names)]]
+      }
 
       if (is.data.frame(csv_rows) && nrow(csv_rows)) {
         existing_csv <- shared_data$imported_tabular_files
@@ -3237,9 +4577,20 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
         id = character(0), name = character(0), path = character(0), type = character(0),
         condition = character(0), batch = character(0), stringsAsFactors = FALSE
       ))
+      if (batch_manifest) {
+        metadata_manifest_result(batch_results)
+        metadata_manifest_df(data.frame())
+        metadata_manifest_info(list())
+        metadata_manifest_conflicts(data.frame())
+        metadata_manifest_pending_commit(NULL)
+      }
       h5ad_import_map_df(data.frame())
       h5ad_import_pending(NULL)
       removeModal()
+
+      if (batch_manifest) {
+        showModal(metadata_manifest_result_modal_content(ns))
+      }
 
       showNotification(
         sprintf(
@@ -3300,6 +4651,7 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
           ))
         }
       }
+      invisible(list(imported_names = imported_names, failed_names = failed_names, batch_results = batch_results))
     }
 
     .run_atac_conflict_prompt_or_commit <- function(build, csv_rows, has_vdj_cands, vdj_cands) {
@@ -3372,7 +4724,7 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
       df <- staged_samples()
       req(nrow(df) > 0)
       .vdj_log("btn_confirm_import clicked.", "staged_n=", nrow(df))
-      overlay_show("Importing selected files…")
+      overlay_show("Importing selected files…", loader = "import")
       on.exit(overlay_hide(), add = TRUE)
 
       type_norm <- tolower(trimws(as.character(df$type)))
@@ -3563,6 +4915,83 @@ right_sidebar_server <- function(id, shared_data, parent_session) {
         conflict_mode = "keep_both"
       )
       atac_pending_conflict(NULL)
+    })
+
+    observeEvent(input$metadata_manifest_confirm_btn, {
+      df <- metadata_manifest_df()
+      info <- metadata_manifest_info()
+      req(is.data.frame(df), nrow(df) > 0, is.list(info), length(info))
+      df <- .metadata_manifest_refresh(df, info, root_path = as.character(info$root_path %||% ""))
+      metadata_manifest_df(df)
+      included <- as.logical(df$`__include_sample`)
+      invalid_included <- which(included & !as.logical(df$`__ready`))
+      if (length(invalid_included)) {
+        showNotification(
+          sprintf("Resolve or exclude %d included row(s) before importing. Gray rows show the reason.", length(invalid_included)),
+          type = "warning",
+          duration = 10
+        )
+        return(invisible(NULL))
+      }
+      built <- .metadata_manifest_build_rows(df, info)
+      if (!is.data.frame(built$result) || !nrow(built$result)) {
+        showNotification("No manifest rows are available.", type = "warning")
+        return(invisible(NULL))
+      }
+      if (!is.data.frame(built$rows) || !nrow(built$rows)) {
+        metadata_manifest_result(built$result)
+        metadata_manifest_df(data.frame())
+        metadata_manifest_info(list())
+        removeModal()
+        showModal(metadata_manifest_result_modal_content(ns))
+        return(invisible(NULL))
+      }
+      selected_total <- nrow(built$rows)
+      overlay_show(
+        sprintf("Loading sample 0 of %d...", selected_total),
+        pct = 5,
+        loader = "import"
+      )
+      on.exit(overlay_hide(), add = TRUE)
+      manifest_progress <- function(index = 0L, total = selected_total, label = "") {
+        total_use <- max(1L, as.integer(total %||% selected_total))
+        index_use <- suppressWarnings(as.integer(index %||% 0L))
+        if (!is.finite(index_use)) index_use <- 0L
+        index_use <- max(0L, min(total_use, index_use))
+        pct <- 5 + (80 * index_use / total_use)
+        overlay_show(
+          text = if (nzchar(as.character(label %||% ""))) as.character(label) else "Loading selected manifest inputs...",
+          pct = pct,
+          loader = "import"
+        )
+        invisible(NULL)
+      }
+      manifest_progress(
+        0L,
+        selected_total,
+        sprintf("Preparing %d selected sample(s)...", selected_total)
+      )
+      build <- .sidebar_build_seurat_entries(built$rows, progress = manifest_progress)
+      overlay_show("Saving imported records...", pct = 90, loader = "package")
+      errs <- as.character(build$errors %||% character(0))
+      if (length(errs)) {
+        showNotification(
+          paste("Some manifest rows failed:", paste(head(errs, 4), collapse = " | ")),
+          type = "warning",
+          duration = 12
+        )
+      }
+      warns <- as.character(build$warnings %||% character(0))
+      if (length(warns)) {
+        showNotification(
+          paste("Manifest metadata notes:", paste(head(warns, 3), collapse = " | ")),
+          type = "message",
+          duration = 10
+        )
+      }
+      overlay_show("Finalizing import results...", pct = 98, loader = "package")
+      .metadata_manifest_commit_build(build, built$result)
+      invisible(NULL)
     })
 
     .flush_pending_import_route <- function() {

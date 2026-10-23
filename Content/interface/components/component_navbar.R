@@ -1,12 +1,13 @@
 # Define the navbar UI structure
 wan_lab_navbar <- function(id, theme, welcome_ui, environment_ui, qc_ui, contamination_correction_ui, hto_ui, doublet_ui, vdj_ui, barcode_ui, flowgate_ui,
                            atac_qc_ui, analysis_ui, data_browser_ui, recluster_ui, recluster_new_ui, rna_velocity_ui, rna_velocity_v052_ui, multiome_wnn_ui, multiome_marker_ui,
-                           cellchat_ui, scenic_ui, monocle2_ui, nichenet_ui, niches_ui, sctenifoldknk_ui, cellwhisperer_ui,
+                           cellchat_ui, scenic_ui, monocle2_ui, monocle3_ui, nichenet_ui, niches_ui, sctenifoldknk_ui, cellwhisperer_ui,
                            figure_umap_ui, figure_feature_ui, figure_dotplot_ui, figure_alluvial_ui, figure_cluster_alluvial_ui, figure_tcr_studio_ui, figure_pseudobulk_volcano_hidden_ui,
                            export_ui, export_vdj_safe_ui, multiome_export_check_ui, rds_ui, right_sidebar_ui, APP_VERSION) {
-  # Agent note: Cache-bust global CSS by file modification time. Shiny restarts must
-  # load layout fixes immediately; a stable URL can retain stale CSS across restarts.
+  # Agent note: Cache-bust shell CSS by file modification time. Shiny restarts must
+  # load layout fixes immediately; stable URLs can retain stale CSS across restarts.
   global_css_version <- format(file.info(file.path("www", "global.css"))$mtime, "%Y%m%d%H%M%S")
+  navbar_css_version <- format(file.info(file.path("www", "navbar.css"))$mtime, "%Y%m%d%H%M%S")
   app_page <- function(x) div(class = "app-page", x)
   plotting_page <- function(x) div(class = "app-page plotting-page", x)
   .nav_spacer_safe <- function() {
@@ -35,7 +36,7 @@ wan_lab_navbar <- function(id, theme, welcome_ui, environment_ui, qc_ui, contami
     # Custom CSS inclusions
     header = tags$head(
       tags$link(rel = "stylesheet", type = "text/css", href = sprintf("global.css?v=%s", global_css_version)),
-      tags$link(rel = "stylesheet", type = "text/css", href = "navbar.css?v=leftnav-action-label"),     # <-- New Navbar Style
+      tags$link(rel = "stylesheet", type = "text/css", href = sprintf("navbar.css?v=%s", navbar_css_version)),
       tags$link(rel = "stylesheet", type = "text/css", href = "custom_bslib.css"), # <-- Layout tweaks
       tags$script(HTML(
         "(function(){
@@ -43,10 +44,15 @@ wan_lab_navbar <- function(id, theme, welcome_ui, environment_ui, qc_ui, contami
             if (!nav || nav.dataset.wlRailBound === 'true') return;
             nav.dataset.wlRailBound = 'true';
             nav.addEventListener('mouseenter', function(){ nav.classList.add('wl-nav-expanded'); });
-            nav.addEventListener('mouseover', function(){ nav.classList.add('wl-nav-expanded'); });
             nav.addEventListener('mouseleave', function(){ nav.classList.remove('wl-nav-expanded'); });
-            nav.addEventListener('focusin', function(){ nav.classList.add('wl-nav-expanded'); });
-            nav.addEventListener('focusout', function(){ setTimeout(function(){ if (!nav.contains(document.activeElement)) nav.classList.remove('wl-nav-expanded'); }, 0); });
+            // Mouse clicks leave links focused in Chrome. Expand for keyboard focus only;
+            // do not turn pointer focus into a persistent hover state.
+            nav.addEventListener('focusin', function(event){
+              if (event.target.matches(':focus-visible')) nav.classList.add('wl-nav-expanded');
+            });
+            nav.addEventListener('focusout', function(event){
+              if (!event.relatedTarget || !nav.contains(event.relatedTarget)) nav.classList.remove('wl-nav-expanded');
+            });
           }
           function init(){ document.querySelectorAll('.navbar').forEach(bindRail); }
           if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
@@ -79,7 +85,7 @@ wan_lab_navbar <- function(id, theme, welcome_ui, environment_ui, qc_ui, contami
       .nav_title("QC", "filter"),
       value = "qc_menu",
       nav_panel("Hashtag demultiplexing", value = "hto_tab", plotting_page(hto_ui)),
-      nav_panel("Threshold QC", value = "qc_tab", plotting_page(qc_ui)),
+      nav_panel("RNA QC", value = "qc_tab", plotting_page(qc_ui)),
       nav_panel(wl_alpha_label("Contamination Correction", "hidden"), value = "contam_tab", plotting_page(contamination_correction_ui)),
       nav_panel("Doublet Detection", value = "doublet_tab", plotting_page(doublet_ui)),
       nav_panel("VDJ TCR/BCR", value = "vdj_tab", plotting_page(vdj_ui)),
@@ -100,6 +106,7 @@ wan_lab_navbar <- function(id, theme, welcome_ui, environment_ui, qc_ui, contami
       nav_panel(wl_beta_label("CellChat"), value = "cellchat_tab", plotting_page(cellchat_ui)),
       nav_panel(wl_alpha_label("pySCENIC"), value = "scenic_tab", plotting_page(scenic_ui)),
       nav_panel(wl_beta_label("Monocle2"), value = "monocle2_tab", plotting_page(monocle2_ui)),
+      nav_panel(wl_beta_label("Monocle3"), value = "monocle3_tab", plotting_page(monocle3_ui)),
       nav_panel(wl_alpha_label("NicheNet"), value = "nichenet_tab", plotting_page(nichenet_ui)),
       nav_panel(wl_alpha_label("NICHES"), value = "niches_tab", plotting_page(niches_ui)),
       nav_panel(wl_alpha_label("scTenifoldKnk"), value = "sctenifoldknk_tab", plotting_page(sctenifoldknk_ui)),

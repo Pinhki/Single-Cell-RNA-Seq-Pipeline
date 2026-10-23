@@ -1,4 +1,6 @@
 
+# State-sync contract: read docs/agents/interface/ANALYSIS_STATE_SYNC_CONTRACT.md
+# before changing object selectors, plot tabs, reduction controls, or locks.
 ANALYSIS_UI_TEXT <- list(
   t_btn_download = "Download",
   t_btn_download_pdf = "Download PDF",
@@ -45,6 +47,20 @@ ANALYSIS_UI_TEXT <- list(
   t_label_inte_harmony_note = "fast embedding correction for many batches",
   t_label_inte_merge_title = "No Integration",
   t_label_inte_merge_note = "merge only",
+  t_label_integration_reference_strategy = "Reference strategy:",
+  t_label_integration_use_selected_references = "Use selected reference samples",
+  t_text_integration_all_pairwise_hint = "All-pairwise is used when unchecked.",
+  t_text_integration_reference_unavailable = "Reference selection is available for RPCA only.",
+  t_label_integration_reference_datasets = "Reference datasets",
+  t_text_integration_reference_guidance = paste0(
+    "<strong>Reference guidance:</strong> Choose 2-5 high-quality reference datasets. ",
+    "Prioritize coverage across <strong>batches and chemistries</strong>, and choose samples ",
+    "that represent the biology in your data. More <strong>replicates from one batch</strong> ",
+    "add stability but do not cover <strong>batch effects</strong>. All samples remain in the ",
+    "final integrated object."
+  ),
+  t_text_integration_reference_no_datasets = "No valid integration datasets are available for reference selection.",
+  t_text_integration_reference_minimum = "Select at least two reference datasets, or turn off selected references to use all-pairwise integration.",
   t_hover_inte_cca = "Best for datasets expected to share the same cell types but with substantial batch-driven expression shifts; use cautiously because CCA can aggressively align datasets and may obscure real condition-, genotype-, or disease-specific biology.",
   t_hover_inte_rpca = "Recommended for large datasets with broadly overlapping cell types, because RPCA is faster and less aggressive than CCA; it reduces batch effects while better preserving real biological differences, though it may under-correct strongly divergent batches.",
   t_hover_inte_sct = "Best when each dataset was processed with SCTransform, especially for UMI-based data; it improves normalization of sequencing-depth effects but still requires integration checks because regression choices can remove biology if technical covariates are confounded with condition.",
@@ -82,6 +98,8 @@ ANALYSIS_UI_TEXT <- list(
   t_label_umap_legend_position = "Legend position:",
   t_label_umap_legend_columns = "Legend columns (top/bottom):",
   t_label_use_cluster_column = "Use cluster column:",
+  t_label_umap_cluster_resolution = "Cluster resolution for UMAP:",
+  t_text_umap_cluster_resolution_unavailable = "Run the resolution sweep to select cluster IDs for UMAP color and legend.",
   t_label_umap3d_color = "3D color by:",
   t_label_umap3d_embedding_type = "3D embedding type:",
   t_label_umap3d_split_by = "3D split by:",
@@ -117,6 +135,7 @@ ANALYSIS_UI_TEXT <- list(
   t_text_replace_active_dataset_analysis = "Replace Active Dataset for Analysis:",
   t_text_add_datasets_analysis = "Add Dataset(s) for Analysis:",
   t_text_add_one_more_objects = "Add one or more objects",
+  t_btn_select_all_samples = "Select all samples",
   t_text_enable_reintegration = "Click to enable re-integration.",
   t_text_cancel_reintegration = "Click to cancel re-integration.",
   t_text_reintegration_unavailable = "Re-integration is unavailable because no non-integrated source datasets are loaded.",
@@ -132,6 +151,13 @@ ANALYSIS_UI_TEXT <- list(
   t_text_umap_configuration = "UMAP configuration",
   t_text_embedding_preview_blank = "Review embedding parameters, then click 'Render preview' to generate the embedding.",
   t_text_embedding_preview_stale = "Parameters changed. Render preview again before saving.",
+  t_text_embedding_preview_stored = "Stored embedding shown. Render preview to review current settings before saving.",
+  t_text_embedding_preview_rendering = "Rendering embedding preview...",
+  t_btn_saved = "Saved",
+  t_title_unsaved_embedding_changes = "Unsaved embedding settings",
+  t_text_unsaved_embedding_changes = "Your current embedding dimensions and parameters have not been saved. Click 'Save parameters & continue' to keep them, or continue without saving.",
+  t_btn_stay_embedding_configuration = "Stay here",
+  t_btn_continue_without_saving = "Continue without saving",
   t_title_unlock_embedding_configuration = "Unlock embedding configuration?",
   t_text_unlock_embedding_configuration = "Unlocking lets you change embedding parameters. Your current confirmed UMAP remains active until you save a replacement.",
   t_text_elbow_missing_generate_integration = "Elbow data is missing for this object. Generate it to unlock PCA dims and elbow preview.",
@@ -164,7 +190,7 @@ ANALYSIS_UI_TEXT <- list(
   t_title_pca_elbow_preview = "PCA Elbow (Preview)",
   t_title_pseudobulk_overview = "Pseudobulk overview",
   t_title_pseudobulk_settings = "Pseudobulk settings",
-  t_title_resolution_sweep_per_seurat_presets = "Resolution sweep (per Seurat presets)",
+  t_title_resolution_sweep = "Resolution sweep",
   t_title_umap = "UMAP",
   t_title_umap3d = "3D UMAP",
   t_title_umap3d_preview = "3D UMAP preview",
@@ -310,6 +336,72 @@ SPINNER_OVERLAY_MESSAGE_GENERATE_ELBOW <- "Generating elbow plot..."
 
 ANALYSIS_SPINNER_COLOR <- "#d3d3d3"
 analysis_spinner_style <- "position: relative; height: 52px; width: 52px;"
+.analysis_inline_selector_initialize_js <- paste(
+  "function() {",
+  "  var selectize = this;",
+  "  selectize.__wlSelectionStaged = false;",
+  "  selectize.__wlSelectionDirty = false;",
+  "  var input = selectize.$input && selectize.$input[0];",
+  "  if (!input) return;",
+  "  if (input.__wlSelectionStageGuard) {",
+  "    input.removeEventListener('change', input.__wlSelectionStageGuard, true);",
+  "  }",
+  "  input.__wlSelectionStageGuard = function(event) {",
+  "    if (!selectize.__wlSelectionStaged) return;",
+  "    selectize.__wlSelectionDirty = true;",
+  "    event.preventDefault();",
+  "    event.stopImmediatePropagation();",
+  "  };",
+  "  input.addEventListener('change', input.__wlSelectionStageGuard, true);",
+  "}",
+  sep = "\n"
+)
+.analysis_inline_selector_dropdown_open_js <- sprintf(
+  "function($dropdown) {
+    var selectize = this;
+    selectize.__wlSelectionStaged = true;
+    var values = Object.keys(selectize.options || {});
+    var button = $dropdown.find('.analysis-select-all-samples');
+    if (!values.length) {
+      button.remove();
+      return;
+    }
+    if (button.length) return;
+    button = window.jQuery('<button type=\"button\" class=\"analysis-select-all-samples\"></button>');
+    button.text('%s');
+    button.attr('aria-label', '%s');
+    button.on('mousedown pointerdown', function(event) {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    button.on('click', function(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      selectize.__wlSelectionDirty = true;
+      selectize.setValue(Object.keys(selectize.options || {}));
+    });
+    $dropdown.prepend(button);
+  }",
+  ANALYSIS_UI_TEXT$t_btn_select_all_samples,
+  ANALYSIS_UI_TEXT$t_btn_select_all_samples
+)
+.analysis_inline_selector_dropdown_close_js <- paste(
+  "function() {",
+  "  var selectize = this;",
+  "  if (!selectize.__wlSelectionStaged) return;",
+  "  selectize.__wlSelectionStaged = false;",
+  "  if (!selectize.__wlSelectionDirty) return;",
+  "  selectize.__wlSelectionDirty = false;",
+  "  var input = selectize.$input && selectize.$input[0];",
+  "  if (!input || !window.Shiny || !Shiny.setInputValue) return;",
+  "  var value = selectize.getValue ? selectize.getValue() : [];",
+  "  if (!Array.isArray(value)) value = value ? [value] : [];",
+  "  Shiny.setInputValue(input.id, value, {priority: 'event'});",
+  "  window.__wlAnalysisInlineSelectionSequence = (window.__wlAnalysisInlineSelectionSequence || 0) + 1;",
+  "  Shiny.setInputValue(input.id + '_user_event', {value: value, sequence: window.__wlAnalysisInlineSelectionSequence}, {priority: 'event'});",
+  "}",
+  sep = "\n"
+)
 
 analysis_with_busy_spinner <- function(output_ui, spinner = c("other", "umap", "clustertree")) {
   spinner <- match.arg(spinner)
@@ -370,6 +462,31 @@ analysis_ui <- fluidPage(
       .analysis-load-wrap > .recalculating{
         opacity: 0.30;
       }
+      .analysis-embedding-action-btn{
+        transition: background-color 180ms ease, border-color 180ms ease,
+          color 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+      }
+      .analysis-embedding-action-btn.analysis-embedding-render-needed{
+        background-color: #16a34a !important;
+        border-color: #15803d !important;
+        color: #ffffff !important;
+        box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.24),
+          0 0 16px rgba(34, 197, 94, 0.36) !important;
+      }
+      .analysis-embedding-action-btn.analysis-embedding-save-needed{
+        background-color: #facc15 !important;
+        border-color: #eab308 !important;
+        color: #422006 !important;
+        box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.25),
+          0 0 16px rgba(234, 179, 8, 0.35) !important;
+      }
+      .analysis-embedding-action-btn.analysis-embedding-saved{
+        background-color: #22c55e !important;
+        border-color: #16a34a !important;
+        color: #ffffff !important;
+        box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.22),
+          0 0 12px rgba(34, 197, 94, 0.28) !important;
+      }
       .anno-conf-header-row{
         display:flex;
         align-items:center;
@@ -414,29 +531,34 @@ analysis_ui <- fluidPage(
         position: relative;
         display: block !important;
       }
-      #analysis_prep_row.analysis-integration-locked #normalization_block,
       #analysis_prep_row.analysis-integration-locked #integration_block{
         display: block !important;
       }
-      #analysis_prep_row.analysis-integration-locked > #analysis_prep_left_col > *{
+      /* Agent note: Re-integration lock is intentionally card-scoped. The PCA/dims
+         card remains usable; only the dataset selector and integration card are inert. */
+      #analysis_prep_row.analysis-integration-locked > #analysis_prep_left_col > .analysis-object-selector-card-inline,
+      #analysis_prep_row.analysis-integration-locked > #analysis_prep_left_col > #integration_block_overlay{
         opacity: 0.52;
         pointer-events: none;
         filter: saturate(0.85);
       }
-      #analysis_prep_row.analysis-integration-locked > #analysis_prep_left_col::after{
-        content: 'Locked until re-integration is enabled';
-        position: absolute;
-        inset: 10px 12px auto 12px;
-        z-index: 9;
-        display: inline-block;
-        padding: 6px 10px;
-        border-radius: 999px;
-        background: rgba(255,255,255,0.96);
-        border: 1px solid #d1d5db;
-        color: #374151;
-        font-weight: 600;
-        font-size: 0.92rem;
-        text-align: center;
+      #analysis_prep_row.analysis-integration-locked > #analysis_prep_left_col > #integration_block_overlay{
+        opacity: 1;
+        pointer-events: auto;
+        filter: none;
+      }
+      #analysis_prep_row.analysis-integration-locked #integration_block_overlay > #integration_block{
+        opacity: 0.52;
+        pointer-events: none;
+        filter: saturate(0.85);
+      }
+      /* Agent note: The lock is independent of elbow availability. Keep the
+         missing-elbow generator visible and clickable while other controls stay locked.
+         The :has() scope targets only this warning card, not the full left panel. */
+      #analysis_prep_row.analysis-integration-locked > #analysis_prep_left_col > .shiny-panel-conditional:has(#prep_generate_elbow_btn){
+        opacity: 1;
+        pointer-events: auto;
+        filter: none;
       }
 
       .analysis-object-selector-wrap{
@@ -455,6 +577,23 @@ analysis_ui <- fluidPage(
         background:transparent;
         border:0;
         box-shadow:none;
+      }
+
+      .analysis-select-all-samples{
+        display:block;
+        width:100%;
+        padding:6px 10px;
+        border:0;
+        border-bottom:1px solid #ddd;
+        background:#fff;
+        color:#0d6efd;
+        text-align:left;
+        cursor:pointer;
+      }
+      .analysis-select-all-samples:hover,
+      .analysis-select-all-samples:focus{
+        background:#f5f5f5;
+        outline:0;
       }
 
       .analysis-object-selector-card-inline{
@@ -696,6 +835,69 @@ analysis_ui <- fluidPage(
         height: auto !important;
       }
 
+      /* Agent note: Before the resolution sweep, UMAP must occupy the
+         existing plot card. Keep this contract scoped to the pre-sweep card. */
+      .clustering-umap-pre-sweep-side {
+        display: flex !important;
+        flex-direction: column !important;
+        min-height: 0 !important;
+        height: 100% !important;
+      }
+      .clustering-umap-pre-sweep-side > .shiny-html-output {
+        display: flex !important;
+        flex: 1 1 auto !important;
+        flex-direction: column !important;
+        min-height: 0 !important;
+        height: auto !important;
+      }
+      .clustering-umap-pre-sweep-side > .shiny-html-output > .shiny-plot-output {
+        display: flex !important;
+        flex: 1 1 auto !important;
+        flex-direction: column !important;
+        min-height: 0 !important;
+        height: 100% !important;
+      }
+
+      /* Agent note: ClusterTree and UMAP stay in one desktop row. Their
+         plot heights grow from the active sweep cluster count; do not switch
+         this row to a vertical layout based on resolution count. */
+      .clustertree-umap-layout-row{
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+      }
+      .clustertree-umap-layout-row > [class*='col-']{
+        float: none !important;
+        flex: 0 0 50% !important;
+        width: 50% !important;
+        max-width: 50% !important;
+        min-width: 0 !important;
+      }
+      .clustertree-umap-layout-row .clustertree-umap-card,
+      .clustertree-umap-layout-row .clustertree-umap-card > .shiny-html-output,
+      .clustertree-umap-layout-row .clustertree-umap-card .shiny-plot-output{
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+      }
+      .clustering-resolution-results{
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 12px;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+      }
+      .clustering-resolution-results > .shiny-html-output,
+      .clustering-resolution-results > .wl-side{
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+      }
+
       .integration-method-cards,
       .integration-method-cards .shiny-input-container,
       .integration-method-cards .shiny-options-group,
@@ -805,9 +1007,74 @@ analysis_ui <- fluidPage(
       // Robustly seed/forward plot tab state even if Shiny tab binding lags.
       (function() {
         var DIAG = ", if (isTRUE(get0("WANLAB_DIAG_MODE", ifnotfound = FALSE))) "true" else "false", ";
-        var lastDiagSig = '';
-        var lastSentPlotTab = '';
-        var lastNonEmptyPlotTab = 'normalize / integrate';
+        var unsavedEmbeddingChanges = false;
+        var pendingUnsavedNavigation = null;
+        function navValue(el) {
+          return el && el.getAttribute ? (el.getAttribute('data-value') || '') : '';
+        }
+        function activeNavValue(scope) {
+          if (!scope) return '';
+          var active = scope.querySelector('a.active[data-value], a.nav-link.active[data-value], li.active > a[data-value], [aria-selected=true][data-value]');
+          return navValue(active);
+        }
+        function plotNavRoot() {
+          var root = document.getElementById('analysis_tabs_by_type');
+          return root ? root.querySelector('ul.nav') : null;
+        }
+        function currentPlotTabValue() {
+          var nav = plotNavRoot();
+          return activeNavValue(nav);
+        }
+        function navigationRequestFor(el) {
+          if (!el || !unsavedEmbeddingChanges) return null;
+          var value = navValue(el);
+          if (!value) return null;
+          var plotRoot = document.getElementById('analysis_tabs_by_type');
+          var plotNav = plotNavRoot();
+          if (plotRoot && plotNav && plotRoot.contains(el) && el.closest('ul.nav') === plotNav) {
+            var currentPlot = activeNavValue(plotNav);
+            if (currentPlot === 'umap configuration' && value !== currentPlot) {
+              return {kind: 'plot', target: value};
+            }
+            return null;
+          }
+          var navbar = el.closest('.navbar');
+          if (navbar && currentPlotTabValue() === 'umap configuration' && value !== 'analysis_tab') {
+            return {kind: 'navbar', target: value};
+          }
+          return null;
+        }
+        function requestUnsavedNavigation(request) {
+          if (!request) return;
+          if (pendingUnsavedNavigation) return;
+          pendingUnsavedNavigation = request;
+          if (window.Shiny && Shiny.setInputValue) {
+            Shiny.setInputValue('cfg_unsaved_navigation_request', {
+              kind: request.kind,
+              target: request.target,
+              nonce: Date.now()
+            }, {priority: 'event'});
+          }
+        }
+        function blockUnsavedNavigation(ev, el) {
+          var request = navigationRequestFor(el);
+          if (!request) return false;
+          ev.preventDefault();
+          if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+          requestUnsavedNavigation(request);
+          return true;
+        }
+        document.addEventListener('click', function(ev) {
+          var el = ev && ev.target ? ev.target : null;
+          if (el && el.nodeType !== 1) el = el.parentElement;
+          if (!el || !el.closest) return;
+          var link = el.closest('a[data-value], .nav-link[data-value]');
+          if (link) blockUnsavedNavigation(ev, link);
+        }, true);
+        document.addEventListener('show.bs.tab', function(ev) {
+          var el = ev && ev.target ? ev.target : null;
+          if (el) blockUnsavedNavigation(ev, el);
+        }, true);
         function emitPlotTabEvent(val, source, visible, activeValue, values) {
           if (!DIAG || !window.Shiny || !Shiny.setInputValue) return;
           try {
@@ -816,62 +1083,40 @@ analysis_ui <- fluidPage(
               source: source || '',
               visible: !!visible,
               active_dom: activeValue || '',
-              last_nonempty: lastNonEmptyPlotTab || '',
               tabs_n: (values || []).length,
               ts_ms: Date.now()
             }, {priority: 'event'});
           } catch(e) {}
         }
-        function reconcilePlotTabState(preferredValue) {
-          var root = document.getElementById('analysis_tabs_by_type');
-          if (!root) return '';
+        function publishPlotTabValue(root, value, force) {
+          value = value || '';
+          if (!root || !value || !window.Shiny || !Shiny.setInputValue) return false;
+          // One completed DOM transition owns one Shiny input publication.
+          // Do not inspect Shiny's client-side input cache: during rebind it
+          // can lag or be empty, turning every shiny:value event into a loop.
+          if (!force && root.__analysisLastPublishedPlotTab === value) return false;
+          root.__analysisLastPublishedPlotTab = value;
+          Shiny.setInputValue('plot_tabs', value, {priority: 'event'});
+          return true;
+        }
+        // Agent note: Shiny/Bootstrap can leave a prior pane marked active after
+        // a rebind. Clear only panes referenced by this tabset after a completed
+        // transition; do not observe or rewrite the tabset continuously.
+        function syncPlotTabPaneVisibility(root, selectedLink) {
+          if (!root || !selectedLink) return;
           var nav = root.querySelector('ul.nav');
-          if (!nav) return '';
-          var allTabs = Array.prototype.slice.call(nav.querySelectorAll('a[data-value], .nav-link[data-value]'))
+          if (!nav) return;
+          var links = Array.prototype.slice.call(nav.querySelectorAll('a[data-value], .nav-link[data-value]'))
             .filter(function(a) { return a.closest('ul.nav') === nav; });
-          if (!allTabs.length) return '';
-          var selected = null;
-          if (preferredValue) {
-            for (var i = 0; i < allTabs.length; i++) {
-              if ((allTabs[i].getAttribute('data-value') || '') === preferredValue) {
-                selected = allTabs[i];
-                break;
-              }
-            }
-          }
-          if (!selected) {
-            selected = nav.querySelector('a[aria-selected=\"true\"][data-value], a.active[data-value], li.active a[data-value]');
-          }
-          if (!selected) selected = allTabs[0];
-          var selectedHref = selected.getAttribute('href') || '';
-          var selectedValue = selected.getAttribute('data-value') || '';
-          var paneIds = {};
-          for (var t = 0; t < allTabs.length; t++) {
-            var href = allTabs[t].getAttribute('href') || '';
-            if (href.charAt(0) === '#') paneIds[href.slice(1)] = true;
-            if (allTabs[t].classList.contains('active')) allTabs[t].classList.remove('active');
-            if (allTabs[t].getAttribute('aria-selected') !== 'false') allTabs[t].setAttribute('aria-selected', 'false');
-            if (allTabs[t].parentElement && allTabs[t].parentElement.classList.contains('active')) {
-              allTabs[t].parentElement.classList.remove('active');
-            }
-          }
-          if (!selected.classList.contains('active')) selected.classList.add('active');
-          if (selected.getAttribute('aria-selected') !== 'true') selected.setAttribute('aria-selected', 'true');
-          if (selected.parentElement && !selected.parentElement.classList.contains('active')) selected.parentElement.classList.add('active');
-          Object.keys(paneIds).forEach(function(id) {
-            var pane = document.getElementById(id);
+          links.forEach(function(link) {
+            var href = link.getAttribute('href') || '';
+            if (href.charAt(0) !== '#') return;
+            var pane = document.getElementById(href.slice(1));
             if (!pane) return;
-            if (pane.classList.contains('active')) pane.classList.remove('active');
-            if (pane.classList.contains('show')) pane.classList.remove('show');
+            var selected = link === selectedLink;
+            pane.classList.toggle('active', selected);
+            pane.classList.toggle('show', selected);
           });
-          if (selectedHref.charAt(0) === '#') {
-            var selectedPane = document.getElementById(selectedHref.slice(1));
-            if (selectedPane) {
-              if (!selectedPane.classList.contains('active')) selectedPane.classList.add('active');
-              if (!selectedPane.classList.contains('show')) selectedPane.classList.add('show');
-            }
-          }
-          return selectedValue;
         }
         function pushPlotTabFromDom() {
           try {
@@ -885,26 +1130,14 @@ analysis_ui <- fluidPage(
             var values = allTabs.map(function(a){ return a.getAttribute('data-value') || ''; }).filter(Boolean);
             var visible = !!(root.offsetParent !== null);
             var activeValue = active ? (active.getAttribute('data-value') || '') : '';
+            // DOM is transport only. A transiently empty tab has no command
+            // semantics and must not be replaced by the previous tab.
             if (activeValue) {
-              lastNonEmptyPlotTab = activeValue;
-            }
-            var activeForInput = activeValue || lastNonEmptyPlotTab || '';
-            activeForInput = reconcilePlotTabState(activeForInput) || activeForInput;
-            var sig = [activeForInput, visible ? '1' : '0', values.join(',')].join('|');
-            if (window.Shiny && Shiny.setInputValue && sig !== lastDiagSig) {
-              lastDiagSig = sig;
-              Shiny.setInputValue('plot_tabs_dom_diag', {
-                active: activeForInput,
-                visible: visible,
-                tabs_n: values.length,
-                tabs: values
-              }, {priority: 'event'});
-            }
-            if (activeForInput && window.Shiny && Shiny.setInputValue && activeForInput !== lastSentPlotTab) {
-              lastSentPlotTab = activeForInput;
-              Shiny.setInputValue('plot_tabs', activeForInput, {priority: 'event'});
-              emitPlotTabEvent(activeForInput, 'dom_sync', visible, activeValue, values);
-            } else if (!activeForInput) {
+              syncPlotTabPaneVisibility(root, active);
+              if (publishPlotTabValue(root, activeValue)) {
+                emitPlotTabEvent(activeValue, 'dom_sync', visible, activeValue, values);
+              }
+            } else if (!activeValue) {
               emitPlotTabEvent('', 'dom_sync_drop_empty', visible, activeValue, values);
             }
           } catch (e) {}
@@ -913,41 +1146,23 @@ analysis_ui <- fluidPage(
         document.addEventListener('shown.bs.tab', function(ev) {
           var el = ev && ev.target ? ev.target : null;
           if (!el) return;
-            var root = document.getElementById('analysis_tabs_by_type');
-            if (!root || !root.contains(el)) return;
-            var nav = root.querySelector('ul.nav');
-            if (!nav || el.closest('ul.nav') !== nav) return;
+          var root = document.getElementById('analysis_tabs_by_type');
+          if (!root || !root.contains(el)) return;
+          var nav = root.querySelector('ul.nav');
+          if (!nav || el.closest('ul.nav') !== nav) return;
           var v = el.getAttribute('data-value') || '';
           if (!v) return;
-          lastNonEmptyPlotTab = v;
-          reconcilePlotTabState(v);
-          if (window.Shiny && Shiny.setInputValue) {
-            Shiny.setInputValue('plot_tabs', v, {priority: 'event'});
+          syncPlotTabPaneVisibility(root, el);
+          if (publishPlotTabValue(root, v)) {
             emitPlotTabEvent(v, 'shown_bs_tab', true, v, []);
           }
         }, true);
 
-        function bindRootObserver() {
-          var root = document.getElementById('analysis_tabs_by_type');
-          if (!root || typeof MutationObserver === 'undefined') return;
-          if (root.__analysisPlotTabObserverBound) return;
-          root.__analysisPlotTabObserverBound = true;
-          var queued = false;
-          var schedulePush = function() {
-            if (queued) return;
-            queued = true;
-            window.requestAnimationFrame(function() {
-              queued = false;
-              pushPlotTabFromDom();
-            });
-          };
-          var mo = new MutationObserver(schedulePush);
-          mo.observe(root, { childList: true, subtree: true });
-        }
-
+        var syncLifecycleBound = false;
         function startSync() {
           pushPlotTabFromDom();
-          bindRootObserver();
+          if (syncLifecycleBound) return;
+          syncLifecycleBound = true;
           document.addEventListener('visibilitychange', function() {
             pushPlotTabFromDom();
           });
@@ -956,46 +1171,96 @@ analysis_ui <- fluidPage(
           });
         }
 
+        function activatePlotTabValue(val) {
+          if (!val) return;
+          var root = document.getElementById('analysis_tabs_by_type');
+          if (!root) return;
+          var nav = root.querySelector('ul.nav');
+          if (!nav) return;
+          var links = Array.prototype.slice.call(nav.querySelectorAll('a[data-value]'))
+            .filter(function(a) { return a.closest('ul.nav') === nav; });
+          var node = null;
+          for (var i = 0; i < links.length; i++) {
+            if ((links[i].getAttribute('data-value') || '') === val) {
+              node = links[i];
+              break;
+            }
+          }
+          if (!node) return;
+          if (window.bootstrap && window.bootstrap.Tab) {
+            try { window.bootstrap.Tab.getOrCreateInstance(node).show(); } catch (e) { node.click(); }
+          } else if (window.jQuery && window.jQuery.fn && window.jQuery.fn.tab) {
+            window.jQuery(node).tab('show');
+          } else {
+            node.click();
+          }
+          syncPlotTabPaneVisibility(root, node);
+          // Route re-entry must republish even when Bootstrap kept the same
+          // tab active while its Shiny input was reset during page rebind.
+          publishPlotTabValue(root, val, true);
+        }
+        function activateMainNavValue(val) {
+          if (!val) return;
+          var links = Array.prototype.slice.call(document.querySelectorAll('.navbar a[data-value], .navbar .nav-link[data-value]'));
+          var node = null;
+          for (var i = 0; i < links.length; i++) {
+            if ((links[i].getAttribute('data-value') || '') === val) {
+              node = links[i];
+              break;
+            }
+          }
+          if (!node) return;
+          if (window.bootstrap && window.bootstrap.Tab) {
+            try { window.bootstrap.Tab.getOrCreateInstance(node).show(); } catch (e) { node.click(); }
+          } else if (window.jQuery && window.jQuery.fn && window.jQuery.fn.tab) {
+            window.jQuery(node).tab('show');
+          } else {
+            node.click();
+          }
+        }
         if (window.Shiny && window.Shiny.addCustomMessageHandler && !window.__analysisSetPlotTabBound) {
           window.__analysisSetPlotTabBound = true;
           window.Shiny.addCustomMessageHandler('analysis-set-plot-tab', function(msg) {
-            var val = msg && msg.value ? String(msg.value) : '';
-            if (!val) return;
-            var root = document.getElementById('analysis_tabs_by_type');
-            if (!root) return;
-            var nav = root.querySelector('ul.nav');
-            if (!nav) return;
-            var links = Array.prototype.slice.call(nav.querySelectorAll('a[data-value]'))
-              .filter(function(a) { return a.closest('ul.nav') === nav; });
-            var node = null;
-            for (var i = 0; i < links.length; i++) {
-              if ((links[i].getAttribute('data-value') || '') === val) {
-                node = links[i];
-                break;
-              }
-            }
-            if (!node) return;
-            lastNonEmptyPlotTab = val;
-            lastSentPlotTab = val;
-            if (window.bootstrap && window.bootstrap.Tab) {
-              try { window.bootstrap.Tab.getOrCreateInstance(node).show(); } catch (e) { node.click(); }
-            } else if (window.jQuery && window.jQuery.fn && window.jQuery.fn.tab) {
-              window.jQuery(node).tab('show');
-            } else {
-              node.click();
-            }
-            reconcilePlotTabState(val);
-            if (window.Shiny && window.Shiny.setInputValue) {
-              window.Shiny.setInputValue('plot_tabs', val, {priority: 'event'});
-            }
+            activatePlotTabValue(msg && msg.value ? String(msg.value) : '');
           });
         }
+        if (window.Shiny && window.Shiny.addCustomMessageHandler && !window.__analysisUnsavedNavigationBound) {
+          window.__analysisUnsavedNavigationBound = true;
+          window.Shiny.addCustomMessageHandler('analysis-set-embedding-unsaved', function(msg) {
+            unsavedEmbeddingChanges = !!(msg && msg.unsaved);
+          });
+          window.Shiny.addCustomMessageHandler('analysis-unsaved-navigation-result', function(msg) {
+            var pending = pendingUnsavedNavigation;
+            pendingUnsavedNavigation = null;
+            if (!msg || !msg.proceed) return;
+            unsavedEmbeddingChanges = false;
+            var kind = msg.kind || (pending && pending.kind) || '';
+            var target = msg.target || (pending && pending.target) || '';
+            if (kind === 'plot') activatePlotTabValue(String(target));
+            if (kind === 'navbar') activateMainNavValue(String(target));
+          });
+        }
+
+        function isPlotTabLifecycleTarget(target) {
+          var root = document.getElementById('analysis_tabs_by_type');
+          if (!root || !target) return false;
+          var nav = root.querySelector('ul.nav');
+          return target === root || target.id === 'plot_tabs' || target === nav;
+        }
+        function syncPlotTabLifecycle(ev) {
+          var target = ev && ev.target ? ev.target : null;
+          if (!isPlotTabLifecycleTarget(target)) return;
+          pushPlotTabFromDom();
+        }
+        document.addEventListener('shiny:value', syncPlotTabLifecycle, true);
+        document.addEventListener('shiny:bound', syncPlotTabLifecycle, true);
 
         if (document.readyState === 'loading') {
           document.addEventListener('DOMContentLoaded', startSync, { once: true });
         } else {
           startSync();
         }
+        document.addEventListener('shiny:connected', startSync, { once: false });
       })();
     ")))
   ),
@@ -1049,6 +1314,23 @@ analysis_ui <- fluidPage(
 
                 div(
                   class = "well analysis-object-selector-card analysis-object-selector-card-inline",
+                  # Agent note: Keep this Selectize control in static UI. Rebuilding it after each
+                  # click loses rapid multi-select events and creates a reactive feedback loop.
+                  selectizeInput(
+                    "active_object_name_input_inline",
+                    ANALYSIS_UI_TEXT$t_text_add_datasets_analysis,
+                    choices = character(0),
+                    selected = character(0),
+                    multiple = TRUE,
+                    options = list(
+                      placeholder = ANALYSIS_UI_TEXT$t_text_add_one_more_objects,
+                      plugins = list("remove_button"),
+                      closeAfterSelect = FALSE,
+                      onInitialize = I(.analysis_inline_selector_initialize_js),
+                      onDropdownOpen = I(.analysis_inline_selector_dropdown_open_js),
+                      onDropdownClose = I(.analysis_inline_selector_dropdown_close_js)
+                    )
+                  ),
                   uiOutput("analysis_object_selector_inline_ui")
                 ),
                 
@@ -1077,8 +1359,7 @@ analysis_ui <- fluidPage(
                           actionButton(
                             "to_umap_config_btn",
                             ANALYSIS_UI_TEXT$t_btn_next_umap_configuration,
-                            class = "btn btn-success btn-sm pull-right",
-                            onclick = "if(window.WLSpinnerOverlay){window.WLSpinnerOverlay.show({id:'global_overlay', text:'Preparing embedding preview...'});}"
+                            class = "btn btn-success btn-sm pull-right"
                           ))
                     ),
                     conditionalPanel(
@@ -1100,7 +1381,7 @@ analysis_ui <- fluidPage(
                   )
                 ),
                 conditionalPanel(
-                  condition = "!output.elbow_ready && !output.elbow_locked",
+            condition = "!output.elbow_ready",
                   div(
                     class = "wl-side elbow-missing-warning-card",
                     div(
@@ -1113,66 +1394,100 @@ analysis_ui <- fluidPage(
                 ),
                 
                 # INTEGRATION block (hidden/shown as a whole)
+                # Agent note: Lock overlay must wrap this card so its re-integration action
+                # remains clickable while integration controls stay inert.
                 div(
-                  id = "integration_block",
-                  class = "wl-side",
-                  h4(ANALYSIS_UI_TEXT$t_title_1_integration),
-                  p(ANALYSIS_UI_TEXT$t_text_more_than_one_condition_sample_detected),
-                  uiOutput("integrate_by_var_ui"),
+                  id = "integration_block_overlay",
+                  class = "analysis-selector-overlay-wrap",
                   div(
-                    class = "integration-method-cards",
-                    radioButtons(
-                      "inte_method",
-                      ANALYSIS_UI_TEXT$t_label_normalization_method,
-                      choiceNames = list(
-                        tags$span(
-                          class = "inte-method-card",
-                          tags$span(class = "inte-method-row1", tags$span(class = "inte-method-title", ANALYSIS_UI_TEXT$t_label_inte_cca_title)),
+                    id = "integration_block",
+                    class = "wl-side",
+                    h4(ANALYSIS_UI_TEXT$t_title_1_integration),
+                    p(ANALYSIS_UI_TEXT$t_text_more_than_one_condition_sample_detected),
+                    uiOutput("integrate_by_var_ui"),
+                    div(
+                      class = "integration-method-cards",
+                      radioButtons(
+                        "inte_method",
+                        ANALYSIS_UI_TEXT$t_label_normalization_method,
+                        choiceNames = list(
                           tags$span(
-                            class = "inte-method-row2",
-                            tags$span(class = "inte-method-note", ANALYSIS_UI_TEXT$t_label_inte_cca_note),
-                            tags$span(class = "inte-method-info", title = ANALYSIS_UI_TEXT$t_hover_inte_cca, "i")
+                            class = "inte-method-card",
+                            tags$span(class = "inte-method-row1", tags$span(class = "inte-method-title", ANALYSIS_UI_TEXT$t_label_inte_cca_title)),
+                            tags$span(
+                              class = "inte-method-row2",
+                              tags$span(class = "inte-method-note", ANALYSIS_UI_TEXT$t_label_inte_cca_note),
+                              tags$span(class = "inte-method-info", title = ANALYSIS_UI_TEXT$t_hover_inte_cca, "i")
+                            )
+                          ),
+                          tags$span(
+                            class = "inte-method-card",
+                            tags$span(class = "inte-method-row1", tags$span(class = "inte-method-title", ANALYSIS_UI_TEXT$t_label_inte_rpca_title)),
+                            tags$span(
+                              class = "inte-method-row2",
+                              tags$span(class = "inte-method-note", ANALYSIS_UI_TEXT$t_label_inte_rpca_note),
+                              tags$span(class = "inte-method-info", title = ANALYSIS_UI_TEXT$t_hover_inte_rpca, "i")
+                            )
+                          ),
+                          tags$span(
+                            class = "inte-method-card",
+                            tags$span(class = "inte-method-row1", tags$span(class = "inte-method-title", ANALYSIS_UI_TEXT$t_label_inte_sct_title)),
+                            tags$span(
+                              class = "inte-method-row2",
+                              tags$span(class = "inte-method-note", ANALYSIS_UI_TEXT$t_label_inte_sct_note),
+                              tags$span(class = "inte-method-info", title = ANALYSIS_UI_TEXT$t_hover_inte_sct, "i")
+                            )
+                          ),
+                          tags$span(
+                            class = "inte-method-card",
+                            tags$span(class = "inte-method-row1", tags$span(class = "inte-method-title", ANALYSIS_UI_TEXT$t_label_inte_harmony_title)),
+                            tags$span(
+                              class = "inte-method-row2",
+                              tags$span(class = "inte-method-note", ANALYSIS_UI_TEXT$t_label_inte_harmony_note),
+                              tags$span(class = "inte-method-info", title = ANALYSIS_UI_TEXT$t_hover_inte_harmony, "i")
+                            )
+                          ),
+                          tags$span(
+                            class = "inte-method-card",
+                            tags$span(class = "inte-method-row1", tags$span(class = "inte-method-title", ANALYSIS_UI_TEXT$t_label_inte_merge_title)),
+                            tags$span(class = "inte-method-row2", tags$span(class = "inte-method-note", ANALYSIS_UI_TEXT$t_label_inte_merge_note))
                           )
                         ),
-                        tags$span(
-                          class = "inte-method-card",
-                          tags$span(class = "inte-method-row1", tags$span(class = "inte-method-title", ANALYSIS_UI_TEXT$t_label_inte_rpca_title)),
-                          tags$span(
-                            class = "inte-method-row2",
-                            tags$span(class = "inte-method-note", ANALYSIS_UI_TEXT$t_label_inte_rpca_note),
-                            tags$span(class = "inte-method-info", title = ANALYSIS_UI_TEXT$t_hover_inte_rpca, "i")
-                          )
-                        ),
-                        tags$span(
-                          class = "inte-method-card",
-                          tags$span(class = "inte-method-row1", tags$span(class = "inte-method-title", ANALYSIS_UI_TEXT$t_label_inte_sct_title)),
-                          tags$span(
-                            class = "inte-method-row2",
-                            tags$span(class = "inte-method-note", ANALYSIS_UI_TEXT$t_label_inte_sct_note),
-                            tags$span(class = "inte-method-info", title = ANALYSIS_UI_TEXT$t_hover_inte_sct, "i")
-                          )
-                        ),
-                        tags$span(
-                          class = "inte-method-card",
-                          tags$span(class = "inte-method-row1", tags$span(class = "inte-method-title", ANALYSIS_UI_TEXT$t_label_inte_harmony_title)),
-                          tags$span(
-                            class = "inte-method-row2",
-                            tags$span(class = "inte-method-note", ANALYSIS_UI_TEXT$t_label_inte_harmony_note),
-                            tags$span(class = "inte-method-info", title = ANALYSIS_UI_TEXT$t_hover_inte_harmony, "i")
-                          )
-                        ),
-                        tags$span(
-                          class = "inte-method-card",
-                          tags$span(class = "inte-method-row1", tags$span(class = "inte-method-title", ANALYSIS_UI_TEXT$t_label_inte_merge_title)),
-                          tags$span(class = "inte-method-row2", tags$span(class = "inte-method-note", ANALYSIS_UI_TEXT$t_label_inte_merge_note))
-                        )
+                        choiceValues = c("CCA", "RPCA", "SCT", "Harmony", "merge"),
+                        selected = "CCA"
+                      )
+                    ),
+                    div(
+                      class = "integration-reference-strategy",
+                      tags$label(class = "control-label", ANALYSIS_UI_TEXT$t_label_integration_reference_strategy),
+                      checkboxInput(
+                        "integration_use_selected_references",
+                        ANALYSIS_UI_TEXT$t_label_integration_use_selected_references,
+                        value = FALSE
                       ),
-                      choiceValues = c("CCA", "RPCA", "SCT", "Harmony", "merge"),
-                      selected = "CCA"
-                    )
+                      tags$small(
+                        class = "text-muted",
+                        ANALYSIS_UI_TEXT$t_text_integration_all_pairwise_hint
+                      ),
+                      tags$small(
+                        id = "integration_reference_unavailable_note",
+                        class = "text-muted",
+                        style = "display:none;",
+                        ANALYSIS_UI_TEXT$t_text_integration_reference_unavailable
+                      )
+                    ),
+                    uiOutput("integration_reference_ui"),
+                    actionButton("run_inte_btn", ANALYSIS_UI_TEXT$t_btn_run_integration, icon = icon("cogs"), class = "btn-primary"),
+                    div(style = "margin-top:10px;", uiOutput("integration_timing_ribbon"))
                   ),
-                  actionButton("run_inte_btn", ANALYSIS_UI_TEXT$t_btn_run_integration, icon = icon("cogs"), class = "btn-primary"),
-                  div(style = "margin-top:10px;", uiOutput("integration_timing_ribbon"))
+                  conditionalPanel(
+                    condition = "output.integration_locked",
+                    actionLink(
+                      "analysis_enable_reintegrate_integration_overlay",
+                      label = span(class = "analysis-selector-overlay-note", ANALYSIS_UI_TEXT$t_text_enable_reintegration),
+                      class = "analysis-selector-overlay-link"
+                    )
+                  )
                 )
               ),
               
@@ -1217,9 +1532,14 @@ analysis_ui <- fluidPage(
               column(
                 3,
                 class = "plotting-left-panel",
-                div(class="wl-side",
+                div(
+                  class = "wl-side",
+                  uiOutput("cfg_plot_format_ui")
+                ),
+                div(
+                  class = "analysis-selector-overlay-wrap",
+                  div(class="wl-side",
                     h4(ANALYSIS_UI_TEXT$t_title_embedding_configuration),
-                    uiOutput("cfg_plot_format_ui"),
                     numericInput("cfg_seed_input", ANALYSIS_UI_TEXT$t_label_random_seed, value = 42, min = 1, step = 1),
                     p(class = "text-muted", ANALYSIS_UI_TEXT$t_text_used_reproducible_umap_t_sne_embedding),
                     conditionalPanel(
@@ -1258,26 +1578,30 @@ analysis_ui <- fluidPage(
                     actionButton(
                       "cfg_render_preview_btn",
                       ANALYSIS_UI_TEXT$t_btn_render_embedding_preview,
-                      class = "btn btn-default btn-sm"
+                      class = "btn btn-default btn-sm analysis-embedding-action-btn"
                     ),
                     shinyjs::disabled(actionButton(
                       "cfg_apply_btn",
                       ANALYSIS_UI_TEXT$t_btn_save_parameters_continue,
-                      class = "btn btn-primary btn-sm"
+                      class = "btn btn-primary btn-sm analysis-embedding-action-btn"
                     )),
                     actionButton(
                       "cfg_cancel_changes_btn",
                       ANALYSIS_UI_TEXT$t_btn_cancel_embedding_changes,
                       class = "btn btn-default btn-sm"
-                    ),
-                    conditionalPanel(
-                      condition = "output.cfg_locked",
-                      actionLink(
-                        "cfg_unlock_btn",
-                        ANALYSIS_UI_TEXT$t_btn_unlock_embedding_configuration,
-                        class = "analysis-selector-overlay-link"
-                      )
                     )
+                  ),
+                  conditionalPanel(
+                    condition = "output.cfg_locked",
+                    actionLink(
+                      "cfg_unlock_btn",
+                      label = span(
+                        class = "analysis-selector-overlay-note",
+                        ANALYSIS_UI_TEXT$t_btn_unlock_embedding_configuration
+                      ),
+                      class = "analysis-selector-overlay-link"
+                    )
+                  )
                 )
               ),
               column(
@@ -1306,7 +1630,6 @@ analysis_ui <- fluidPage(
                     uiOutput("umap_reduction_ui"),
                     uiOutput("umap_pca_status_ui"),
                     uiOutput("umap_colorby_ui"),
-                    uiOutput("umap_res_selector_ui"),
                     checkboxInput("umap_split_by_sample", ANALYSIS_UI_TEXT$t_label_facet_sample_if_available, value = FALSE),
                     selectInput(
                       "umap_legend_position",
@@ -1327,15 +1650,10 @@ analysis_ui <- fluidPage(
                     )
                 ),
                 div(class="wl-side",
-                    h4(ANALYSIS_UI_TEXT$t_title_resolution_sweep_per_seurat_presets),
-                    radioButtons(
-                      "sweep_preset", ANALYSIS_UI_TEXT$t_text_preset,
-                      choices = c("Typical (0.4–1.2, step 0.2)" = "typ",
-                                  "Broad (0.2–3.0, step 0.2)"   = "broad",
-                                  "Fine (0.2–1.2, step 0.1)"    = "fine",
-                                  "Custom"                      = "custom"),
-                      selected = "typ"
-                    ),
+                    h4(ANALYSIS_UI_TEXT$t_title_resolution_sweep),
+                    # Agent note: These sliders are intentionally direct controls. Do not
+                    # reintroduce preset synchronization or freeze their Shiny input values;
+                    # a frozen value can remain NULL and terminate the sweep observer.
                     sliderInput("sweep_res_min", ANALYSIS_UI_TEXT$t_label_min_resolution, min = 0.1, max = 3.0, value = 0.4, step = 0.1),
                     sliderInput("sweep_res_max", ANALYSIS_UI_TEXT$t_label_max_resolution, min = 0.1, max = 3.0, value = 1.2, step = 0.1),
                     sliderInput("sweep_res_step",ANALYSIS_UI_TEXT$t_label_step,            min = 0.05, max = 1.0, value = 0.2, step = 0.05),
@@ -1357,14 +1675,18 @@ analysis_ui <- fluidPage(
                 class = "plot_area_card_style",
                 conditionalPanel(
                   condition = "output.sweep_ready",
-                  uiOutput("clustertree_umap_layout_ui"),
-                  div(class="wl-side",
+                  div(
+                    class = "clustering-resolution-results",
+                    uiOutput("clustertree_umap_layout_ui"),
+                    div(
+                      class = "wl-side",
                       DT::dataTableOutput("clustertree_summary_dt")
+                    )
                   )
                 ),
                 conditionalPanel(
                   condition = "!output.sweep_ready",
-                  div(class="wl-side clustering-umap-side",
+                  div(class="wl-side clustering-umap-side clustering-umap-pre-sweep-side",
                       h4(ANALYSIS_UI_TEXT$t_title_umap),
                       uiOutput("umap_plot_ui_pre_sweep")
                   )
@@ -1758,7 +2080,7 @@ analysis_ui <- fluidPage(
                       "download_umap3d_bundle",
                       ANALYSIS_UI_TEXT$t_btn_download_3d_umap_bundle,
                       class = "btn btn-success btn-sm",
-                      onclick = "if(window.WLSpinnerOverlay){window.WLSpinnerOverlay.show({id:'global_overlay', text:'Building 3D UMAP bundle...'});}"
+                      onclick = "if(window.WLSpinnerOverlay){window.WLSpinnerOverlay.show({id:'global_overlay', text:'Building 3D UMAP bundle...', loader:'export'});}"
                     )
                 )
               ),
@@ -1818,36 +2140,13 @@ analysis_ui <- fluidPage(
   out[, cols, drop = FALSE]
 }
 
-.analysis_pca_stdev <- function(sobj) {
-  if (is.null(sobj) || !inherits(sobj, "Seurat")) return(numeric())
-  stdev <- tryCatch({
-    red <- sobj[["pca"]]
-    if (is.null(red)) return(numeric())
-    as.numeric(slot(red, "stdev"))
-  }, error = function(e) numeric())
-  stdev[is.finite(stdev) & !is.na(stdev)]
-}
-
-.analysis_build_elbow_plot <- function(sobj) {
-  stdev <- .analysis_pca_stdev(sobj)
-  if (!length(stdev)) return(NULL)
-  df <- data.frame(
-    PC = seq_along(stdev),
-    Standard.Deviation = stdev,
-    stringsAsFactors = FALSE
-  )
-  ggplot2::ggplot(df, ggplot2::aes(x = PC, y = Standard.Deviation)) +
-    ggplot2::geom_point(size = 2.6, color = "black") +
-    ggplot2::labs(x = "PC", y = "Standard Deviation") +
-    ggplot2::theme_minimal(base_size = 12)
-}
-
-
 analysis_server <- function(input, output, session, shared_data) {
   options(shiny.progress.showAfter = 0)   # show right away
   `%||%` <- function(a, b) if (!is.null(a)) a else b
   .db_server_fn <- get0("data_browser_server", mode = "function", ifnotfound = NULL)
   if (is.function(.db_server_fn)) {
+    # Agent note: Legacy inner Data Browser owns one observer set per session.
+    # Registering it twice creates competing reactive writers for active state.
     .db_server_fn(input, output, session, shared_data)
   }
   .analysis_get_assay_data <- function(sobj, assay = NULL, layer = "data") {
@@ -1947,6 +2246,7 @@ analysis_server <- function(input, output, session, shared_data) {
   .perf_now <- function() proc.time()[["elapsed"]]
   .wall_now <- function() as.numeric(Sys.time())
   .perf_log <- function(stage, t0 = NULL, details = NULL) {
+    if (!isTRUE(get0("WANLAB_DIAG_MODE", ifnotfound = FALSE))) return(invisible(NULL))
     ts <- format(Sys.time(), "%H:%M:%OS3")
     dt <- if (!is.null(t0) && is.finite(as.numeric(t0))) {
       sprintf(" | +%.3fs", .perf_now() - as.numeric(t0))
@@ -1969,15 +2269,18 @@ analysis_server <- function(input, output, session, shared_data) {
     if (!length(y)) return(default)
     y[[1]]
   }
-  .analysis_diag_last <- reactiveVal("")
+  .analysis_last_ui_state_signature <- reactiveVal("")
+  .analysis_last_plot_tab_log_signature <- reactiveVal("")
   .get_active_entry <- function(sd) {
     nm <- .scalar_chr(sd$active_object_name, default = "")
     if (!nzchar(nm)) return(NULL)
     raw <- sd$all_seurat_objects[[nm]]
+    # Agent note: Read helpers must stay side-effect free. Registry
+    # canonicalization belongs at object-commit boundaries; writing here can
+    # invalidate every reactive consumer while it is only trying to read.
     if (exists("wanlab_canonicalize_object_entry", mode = "function", inherits = TRUE)) {
-      can <- tryCatch(wanlab_canonicalize_object_entry(raw), error = function(e) NULL)
+      can <- tryCatch(wanlab_canonicalize_object_entry(raw, object_name = nm), error = function(e) NULL)
       if (!is.null(can)) {
-        sd$all_seurat_objects[[nm]] <- can
         return(can)
       }
     }
@@ -1990,7 +2293,10 @@ analysis_server <- function(input, output, session, shared_data) {
     entry <- sd$all_seurat_objects[[nm]]
     if (exists("wanlab_canonicalize_object_entry", mode = "function", inherits = TRUE)) {
       can <- tryCatch(
-        wanlab_canonicalize_object_entry(utils::modifyList(as.list(entry %||% list()), list(obj = sobj))),
+        wanlab_canonicalize_object_entry(
+          utils::modifyList(as.list(entry %||% list()), list(obj = sobj)),
+          object_name = nm
+        ),
         error = function(e) NULL
       )
       if (!is.null(can)) {
@@ -2006,6 +2312,7 @@ analysis_server <- function(input, output, session, shared_data) {
     invisible(TRUE)
   }
   analysis_selected_names <- reactiveVal(character(0))
+  analysis_inline_selector_signature <- reactiveVal("")
   analysis_reintegration_enabled <- reactiveVal(FALSE)
   analysis_prefer_integrated_boot_pending <- reactiveVal(TRUE)
   analysis_registry_names_seen <- reactiveVal("")
@@ -2021,25 +2328,35 @@ analysis_server <- function(input, output, session, shared_data) {
   elbow_render_overlay_owned <- reactiveVal(FALSE)
   .umap3d_error <- reactiveVal(NULL)
   .umap3d_requested <- reactiveVal(FALSE)
+  .umap3d_prepared <- reactiveVal(NULL)
   .cfg_keeper_dirty <- reactiveVal(FALSE)
+  .cfg_unsaved_preview_objects <- reactiveVal(character())
+  .cfg_unsaved_warning_open <- reactiveVal(FALSE)
+  .cfg_unsaved_warning_context <- reactiveVal("")
+  .cfg_unsaved_navigation_target <- reactiveVal(list(kind = "", target = ""))
   .cfg_preview_by_object <- reactiveVal(list())
+  .cfg_preview_in_progress <- reactiveVal(FALSE)
+  .cfg_auto_preview_attempt <- reactiveVal("")
   .cfg_unlocked_by_object <- reactiveVal(character())
   analysis_route_trace <- reactiveVal(list(
     active = FALSE,
     token = 0L,
     started_at = NA_real_,
-    last_heartbeat = NA_real_,
-    ensure_attempts = 0L
+    landing_applied = FALSE,
+    scaffold_flushed = FALSE
   ))
-  route_heartbeat_tick <- reactiveVal(0L)
-  route_ensure_tick <- reactiveVal(0L)
+  # Non-reactive lifecycle ownership lets onFlushed callbacks reject stale
+  # route work without reading reactive inputs outside a consumer.
+  analysis_route_lifecycle <- new.env(parent = emptyenv())
+  analysis_route_lifecycle$token <- 0L
+  analysis_route_lifecycle$active <- FALSE
+  analysis_route_lifecycle$scaffold_flushed <- FALSE
   analysis_plot_tabs_initialized <- reactiveVal(FALSE)
   analysis_last_nonempty_plot_tab <- reactiveVal("normalize / integrate")
-  analysis_last_dom_tab_restore <- reactiveVal("")
-  analysis_last_dom_tab_restore_at <- reactiveVal(0)
   analysis_last_overlay_signature <- reactiveVal("")
   umap_viz_global_overlay_active <- reactiveVal(FALSE)
   umap_viz_overlay_shown_at <- reactiveVal(as.numeric(NA))
+  umap_viz_overlay_signature <- reactiveVal("")
   umap_cfg_global_overlay_active <- reactiveVal(FALSE)
   umap_cfg_overlay_shown_at <- reactiveVal(as.numeric(NA))
   .umap3d_active_object_name <- reactive({
@@ -2051,7 +2368,7 @@ analysis_server <- function(input, output, session, shared_data) {
     if (!length(registry)) return("")
     selected <- intersect(as.character(analysis_selected_names() %||% character(0)), registry)
     if (length(selected)) return(selected[[1]])
-    registry[[1]]
+    registry[[length(registry)]]
   })
   
   .get_obj_from_entry <- function(entry) {
@@ -2079,7 +2396,14 @@ analysis_server <- function(input, output, session, shared_data) {
     has_quick_umap <- !is.null(tryCatch(sobj@misc$umap_quick, error = function(e) NULL))
     elbow_source <- .scalar_chr(tryCatch(entry$plots$elbow_source, error = function(e) ""), default = "")
     stage_now <- tolower(.scalar_chr(tryCatch(entry$meta$stage, error = function(e) ""), default = ""))
-    confirmed_dims <- suppressWarnings(as.integer(tryCatch(entry$prefs$confirmed_dims$value, error = function(e) NULL)))
+    if (!is.null(plot_obj) && !identical(elbow_source, "analysis")) {
+      # Agent note: Older imports may carry the temporary blue-line elbow object.
+      # Normalize only an existing plot; a genuinely missing plot must still show
+      # the explicit Generate elbow plot card.
+      standard_plot <- tryCatch(wanlab_build_standard_elbow_plot(sobj), error = function(e) NULL)
+      if (!is.null(standard_plot)) plot_obj <- standard_plot
+    }
+    confirmed_dims <- wanlab_get_active_embedding_dims(entry)
     has_confirmed_dims <- length(confirmed_dims) && is.finite(confirmed_dims[[1]]) && !is.na(confirmed_dims[[1]])
     # Agent note: VDJ/QC quick UMAP state can carry incidental PCA or cached plots.
     # Unmarked legacy elbow cannot override explicit quick-UMAP provenance.
@@ -2105,7 +2429,7 @@ analysis_server <- function(input, output, session, shared_data) {
     has_quick_umap <- !is.null(tryCatch(sobj@misc$umap_quick, error = function(e) NULL))
     # Explicit QC/VDJ provenance wins over legacy preferences or caches.
     if (isTRUE(has_quick_umap)) return(FALSE)
-    dims_now <- suppressWarnings(as.integer(tryCatch(entry$prefs$confirmed_dims$value, error = function(e) NULL)))
+    dims_now <- wanlab_get_active_embedding_dims(entry)
     if (length(dims_now) && is.finite(dims_now[[1]]) && !is.na(dims_now[[1]])) return(TRUE)
     sweep_cache <- tryCatch(entry$analysis_cache$cluster_sweep, error = function(e) NULL)
     if (is.list(sweep_cache) && length(suppressWarnings(as.numeric(sweep_cache$resolutions %||% numeric()))) > 0L) return(TRUE)
@@ -2125,7 +2449,7 @@ analysis_server <- function(input, output, session, shared_data) {
     # Lock only after user has explicitly confirmed PCA dims for downstream steps.
     # Presence of temporary PCA/UMAP reductions alone (e.g., imported/workflow side-effects)
     # must not lock Normalize/Integrate controls.
-    confirmed_dims <- suppressWarnings(as.integer(tryCatch(entry$prefs$confirmed_dims$value, error = function(e) NULL)))
+    confirmed_dims <- wanlab_get_active_embedding_dims(entry)
     has_confirmed_dims <- length(confirmed_dims) >= 1L &&
       is.finite(confirmed_dims[[1]]) &&
       !is.na(confirmed_dims[[1]]) &&
@@ -2134,15 +2458,28 @@ analysis_server <- function(input, output, session, shared_data) {
     sobj <- .get_obj_from_entry(entry)
     if (is.null(sobj) || !inherits(sobj, "Seurat")) return(FALSE)
     reds <- tolower(tryCatch(names(sobj@reductions), error = function(e) character(0)))
-    has_umap <- "umap" %in% reds
+    umap_name <- wanlab_resolve_embedding_reduction(sobj, "umap", preferred_dims = confirmed_dims)
+    has_umap <- nzchar(umap_name)
     has_pca <- "pca" %in% reds
     isTRUE(has_umap && has_pca)
   }
-  
+
   .analysis_selectable_choices <- reactive({
     names(shared_data$all_seurat_objects %||% list())
   })
   observe({
+    signature <- paste(
+      .scalar_chr(input$main_navbar, default = "<empty>"),
+      .scalar_chr(input$plot_tabs, default = "<empty>"),
+      .scalar_chr(shared_data$active_object_name, default = "<empty>"),
+      .scalar_chr(input$active_object_name_input, default = "<empty>"),
+      .scalar_chr(input$active_object_name_input_inline, default = "<empty>"),
+      sep = "|"
+    )
+    if (identical(signature, isolate(.analysis_last_ui_state_signature()))) {
+      return(invisible(NULL))
+    }
+    .analysis_last_ui_state_signature(signature)
     .perf_log("trace:ui_state", details = c(
       sprintf("main_navbar=%s", .scalar_chr(input$main_navbar, default = "<empty>")),
       sprintf("plot_tabs=%s", .scalar_chr(input$plot_tabs, default = "<empty>")),
@@ -2154,7 +2491,20 @@ analysis_server <- function(input, output, session, shared_data) {
   })
   observeEvent(input$plot_tabs, {
     tab_now <- .scalar_chr(input$plot_tabs, default = "")
-    if (nzchar(tab_now)) analysis_last_nonempty_plot_tab(tab_now)
+    if (nzchar(tab_now)) {
+      analysis_plot_tabs_initialized(TRUE)
+      analysis_last_nonempty_plot_tab(tab_now)
+    }
+    log_signature <- paste(
+      tab_now,
+      .scalar_chr(analysis_last_nonempty_plot_tab(), default = "<empty>"),
+      .scalar_chr(input$main_navbar, default = "<empty>"),
+      sep = "|"
+    )
+    if (identical(log_signature, isolate(.analysis_last_plot_tab_log_signature()))) {
+      return(invisible(NULL))
+    }
+    .analysis_last_plot_tab_log_signature(log_signature)
     .perf_log("plot_tabs:changed", details = c(
       sprintf("value=%s", if (nzchar(tab_now)) tab_now else "<empty>"),
       sprintf("effective=%s", .scalar_chr(analysis_last_nonempty_plot_tab(), default = "<empty>")),
@@ -2175,32 +2525,9 @@ analysis_server <- function(input, output, session, shared_data) {
     ))
     invisible(NULL)
   }, ignoreInit = FALSE)
-  observeEvent(input$plot_tabs_dom_diag, {
-    d <- input$plot_tabs_dom_diag
-    if (is.null(d)) return(invisible(NULL))
-    active <- .scalar_chr(d$active, "<empty>")
-    visible <- isTRUE(d$visible)
-    tabs <- as.character(d$tabs %||% character(0))
-    tabs <- tabs[nzchar(tabs)]
-    sig <- paste(active, as.character(visible), paste(tabs, collapse = ","), sep = "|")
-    if (identical(sig, .analysis_diag_last())) return(invisible(NULL))
-    .analysis_diag_last(sig)
-    .perf_log("dom:plot_tabs_diag", details = c(
-      sprintf("active=%s", active),
-      sprintf("visible=%s", as.character(visible)),
-      sprintf("tabs_n=%d", length(tabs)),
-      sprintf("tabs=%s", if (length(tabs)) paste(tabs, collapse = ",") else "<none>")
-    ))
-    invisible(NULL)
-  }, ignoreInit = FALSE)
   .current_plot_tab <- function() {
     tab_now <- .scalar_chr(input$plot_tabs, default = "")
     if (nzchar(tab_now)) return(tab_now)
-    d <- input$plot_tabs_dom_diag
-    if (!is.null(d)) {
-      dtab <- .scalar_chr(d$active, default = "")
-      if (nzchar(dtab)) return(dtab)
-    }
     .scalar_chr(analysis_last_nonempty_plot_tab(), default = "normalize / integrate")
   }
   .analysis_plot_tab_active <- function(tab_label) {
@@ -2212,7 +2539,8 @@ analysis_server <- function(input, output, session, shared_data) {
     switch(
       tab_now,
       "normalize / integrate" = "prep_elbow_ui",
-      "umap configuration" = "umap_config_static_plot",
+      # Agent note: UMAP configuration owns a two-phase preview controller below;
+      # the generic tab overlay must not hide on its placeholder output.
       "clustering resolution" = "clustertree_umap_layout_ui",
       "annotation tools" = "anno_results_table",
       "differential expression analysis" = "jjvolcano_plot_ui",
@@ -2226,157 +2554,146 @@ analysis_server <- function(input, output, session, shared_data) {
     nm <- .scalar_chr(shared_data$active_object_name, default = "")
     if (!nzchar(nm)) return("normalize / integrate")
     entry <- tryCatch(shared_data$all_seurat_objects[[nm]], error = function(e) NULL)
-    dims_now <- suppressWarnings(as.integer(tryCatch(entry$prefs$confirmed_dims$value, error = function(e) NULL)))
+    dims_now <- wanlab_get_active_embedding_dims(entry)
     has_confirmed_dims <- length(dims_now) >= 1L && is.finite(dims_now[[1]]) && !is.na(dims_now[[1]]) && dims_now[[1]] >= 2L
     if (isTRUE(has_confirmed_dims)) return("umap configuration")
     "normalize / integrate"
   }
-  observe({
-    if (!identical(.scalar_chr(input$main_navbar, default = ""), "analysis_tab")) return(invisible(NULL))
-    tab_now <- .scalar_chr(input$plot_tabs, default = "")
-    if (nzchar(tab_now)) return(invisible(NULL))
-    d <- input$plot_tabs_dom_diag
-    if (is.null(d)) return(invisible(NULL))
-    dtab <- .scalar_chr(d$active, default = "")
-    if (!nzchar(dtab)) return(invisible(NULL))
-    now_ts <- as.numeric(Sys.time())
-    last_tab <- .scalar_chr(analysis_last_dom_tab_restore(), default = "")
-    last_ts <- suppressWarnings(as.numeric(analysis_last_dom_tab_restore_at() %||% 0))
-    if (identical(dtab, last_tab) && is.finite(last_ts) && (now_ts - last_ts) < 1.0) {
-      return(invisible(NULL))
-    }
-    dtab_js <- gsub("'", "\\\\'", dtab, fixed = TRUE)
-    suppressWarnings(try(shinyjs::runjs(sprintf(
-      "if(window.Shiny){Shiny.setInputValue('plot_tabs','%s',{priority:'event'});}",
-      dtab_js
-    )), silent = TRUE))
-    analysis_last_dom_tab_restore(dtab)
-    analysis_last_dom_tab_restore_at(now_ts)
-    .perf_log("plot_tabs:restored_from_dom", details = c(
-      sprintf("active=%s", dtab),
-      "reason=input_plot_tabs_empty"
-    ))
-    invisible(NULL)
-  })
+  # Plot-tab state is forwarded by the page JavaScript after DOM binding.
+  # Server-side time-based restoration creates a second input transition.
 
   observeEvent(input$main_navbar, {
     tab_now <- .scalar_chr(input$main_navbar, default = "")
-    if (!identical(tab_now, "analysis_tab")) return(invisible(NULL))
+    if (!identical(tab_now, "analysis_tab")) {
+      analysis_route_lifecycle$active <- FALSE
+      .cfg_preview_in_progress(FALSE)
+      .cfg_auto_preview_attempt("")
+      try(.umap_cfg_hide_overlay(), silent = TRUE)
+      umap_viz_global_overlay_active(FALSE)
+      umap_viz_overlay_signature("")
+      umap_viz_overlay_shown_at(as.numeric(NA))
+      st_leave <- isolate(analysis_route_trace())
+      if (isTRUE(st_leave$active)) {
+        analysis_route_trace(modifyList(st_leave, list(active = FALSE, scaffold_flushed = FALSE)))
+      }
+      return(invisible(NULL))
+    }
     st <- isolate(analysis_route_trace())
     token <- as.integer(st$token %||% 0L) + 1L
     now <- .wall_now()
+    analysis_route_lifecycle$token <- token
+    analysis_route_lifecycle$active <- TRUE
+    analysis_route_lifecycle$scaffold_flushed <- FALSE
+    analysis_route_lifecycle$landing_applied <- FALSE
     analysis_route_trace(list(
       active = TRUE,
       token = token,
       started_at = now,
-      last_heartbeat = now,
-      ensure_attempts = 0L
+      landing_applied = FALSE,
+      scaffold_flushed = FALSE
     ))
-    route_heartbeat_tick(isolate(route_heartbeat_tick()) + 1L)
-    route_ensure_tick(isolate(route_ensure_tick()) + 1L)
     analysis_plot_tabs_initialized(FALSE)
+    .cfg_preview_in_progress(FALSE)
+    .cfg_auto_preview_attempt("")
+    # A previous UMAP/Data Browser render may have left its overlay flag set
+    # while this page was hidden. Clear old ownership before route loading.
+    try(.umap_cfg_hide_overlay(), silent = TRUE)
+    umap_viz_global_overlay_active(FALSE)
+    umap_viz_overlay_signature("")
+    umap_viz_overlay_shown_at(as.numeric(NA))
     .perf_log("route_enter", details = c(
       sprintf("token=%d", token),
       sprintf("active=%s", .scalar_chr(shared_data$active_object_name, default = "<empty>")),
       sprintf("plot_tabs=%s", .scalar_chr(input$plot_tabs, default = "<empty>"))
     ))
     overlay_show("Loading Analysis page...")
+    session$onFlushed(function() {
+      if (!isTRUE(analysis_route_lifecycle$active) ||
+          !identical(as.integer(analysis_route_lifecycle$token), token)) {
+        return(invisible(NULL))
+      }
+      context_snapshot <- isolate(list(
+        active = .scalar_chr(shared_data$active_object_name, default = "<empty>"),
+        landing = .analysis_default_landing_tab()
+      ))
+      # Server route state is authoritative while browser tab input rebinds.
+      # Publish landing value as fallback for consumers during that rebind.
+      analysis_last_nonempty_plot_tab(context_snapshot$landing)
+      analysis_route_lifecycle$scaffold_flushed <- TRUE
+      st_flush <- isolate(analysis_route_trace())
+      if (!isTRUE(st_flush$active) ||
+          !identical(as.integer(st_flush$token), token)) {
+        return(invisible(NULL))
+      }
+      analysis_route_trace(modifyList(st_flush, list(scaffold_flushed = TRUE)))
+      .perf_log("route_scaffold_flushed", details = c(
+        sprintf("token=%d", token),
+        sprintf("active=%s", context_snapshot$active),
+        sprintf("landing=%s", context_snapshot$landing)
+      ))
+      # One canonical tab publication closes the gap where Bootstrap has a
+      # visible default tab but Shiny input$plot_tabs is still NULL.
+      analysis_route_lifecycle$landing_applied <- TRUE
+      analysis_route_trace(modifyList(st_flush, list(
+        scaffold_flushed = TRUE,
+        landing_applied = TRUE
+      )))
+      session$sendCustomMessage("analysis-set-plot-tab", list(value = context_snapshot$landing))
+      if (isTRUE(isolate(.analysis_data_is_ready_flag())) &&
+          !isTRUE(isolate(umap_cfg_global_overlay_active())) &&
+          !isTRUE(isolate(.cfg_preview_in_progress()))) {
+        # Agent note: Route overlay must end at flushed, object-ready Analysis
+        # scaffold. Browser tab input may still be empty during rebind; it is
+        # not a valid reason to keep the whole page locked.
+        .perf_log("route_scaffold_ready_hide_overlay", details = c(
+          sprintf("token=%d", token),
+          sprintf("active=%s", context_snapshot$active),
+          sprintf("landing=%s", context_snapshot$landing)
+        ))
+        try(overlay_hide(), silent = TRUE)
+      }
+      invisible(NULL)
+    }, once = TRUE)
     nm_enter <- .scalar_chr(shared_data$active_object_name, default = "")
     if (nzchar(nm_enter)) {
+      .cfg_reset_static_plot()
       .cfg_preview_cache(list(key = NULL, result = NULL))
       .sync_active_elbow_preview(nm_enter)
       entry_enter <- shared_data$all_seurat_objects[[nm_enter]]
-      preferred_fmt_enter <- .preferred_cfg_plot_format(entry_enter)
-      updateSelectInput(session, "cfg_plot_format", selected = preferred_fmt_enter)
-      if (isTRUE(.cfg_is_confirmed(entry_enter))) .cfg_restore_confirmed_controls(nm_enter)
+      if (isTRUE(.cfg_is_confirmed_for_current_dims(entry_enter))) .cfg_restore_confirmed_controls(nm_enter)
       preview_enter <- isolate(.cfg_preview_by_object())[[nm_enter]]
-      if (is.list(preview_enter) && !is.null(preview_enter$result)) {
+      sobj_enter <- .get_obj_from_entry(entry_enter)
+      preview_result_enter <- tryCatch(preview_enter$result, error = function(e) NULL)
+      if (is.list(preview_enter) &&
+          isTRUE(preview_result_enter$render_valid) &&
+          isTRUE(.analysis_preview_result_matches_active(preview_result_enter, nm_enter))) {
+        # Agent note: Keep an unsaved rendered preview across page re-entry. The
+        # active object remains unchanged until Save parameters & continue.
+        .cfg_preview_cache(preview_enter)
+      } else if (is.list(preview_enter) &&
+                 !is.null(preview_enter$result) &&
+                 .cfg_preview_matches_default_reduction(preview_enter, sobj_enter)) {
         .cfg_preview_cache(preview_enter)
       } else {
         .seed_cfg_preview_cache(nm_enter)
       }
     }
-    landing_tab_now <- .analysis_default_landing_tab()
-    # Force one post-flush tab seed after the Analysis DOM is fully bound.
-    session$onFlushed(function() {
-      .go_plot_tab(landing_tab_now)
-    }, once = TRUE)
   }, ignoreInit = FALSE)
-
-  observe({
-    route_heartbeat_tick()
-    st <- isolate(analysis_route_trace())
-    if (!isTRUE(st$active)) return(invisible(NULL))
-    isolate({
-      now <- .wall_now()
-      started <- suppressWarnings(as.numeric(st$started_at %||% NA_real_))
-      elapsed <- if (is.finite(started)) now - started else NA_real_
-      .perf_log("route_heartbeat", details = c(
-        sprintf("token=%s", as.character(st$token %||% NA_integer_)),
-        sprintf("elapsed=%.3fs", if (is.finite(elapsed)) elapsed else NA_real_),
-        sprintf("main_navbar=%s", .scalar_chr(input$main_navbar, default = "<empty>")),
-        sprintf("plot_tabs=%s", .scalar_chr(.current_plot_tab(), default = "<empty>")),
-        sprintf("active=%s", .scalar_chr(shared_data$active_object_name, default = "<empty>")),
-        sprintf("ready=%s", as.character(isTRUE(.analysis_data_is_ready_flag())))
-      ))
-      if (is.finite(elapsed) && elapsed > 8 && (round(elapsed) %% 5L) == 0L) {
-        .perf_log("route_waiting", details = c(
-          sprintf("token=%s", as.character(st$token %||% NA_integer_)),
-          sprintf("elapsed=%.1fs", elapsed),
-          sprintf("plot_tabs=%s", .scalar_chr(.current_plot_tab(), default = "<empty>")),
-          "status=still_waiting_for_plot_tabs_bind"
-        ))
-      }
-    })
-    invalidateLater(1000, session)
-    invisible(NULL)
-  })
-
-  observe({
-    route_ensure_tick()
-    st <- isolate(analysis_route_trace())
-    if (!isTRUE(st$active)) return(invisible(NULL))
-    tab_now <- isolate(.scalar_chr(input$main_navbar, default = ""))
-    if (!identical(tab_now, "analysis_tab")) return(invisible(NULL))
-    if (isTRUE(isolate(analysis_plot_tabs_initialized()))) return(invisible(NULL))
-    plot_tab_input <- isolate(.scalar_chr(input$plot_tabs, default = ""))
-    if (nzchar(plot_tab_input)) return(invisible(NULL))
-
-    attempts <- as.integer(st$ensure_attempts %||% 0L)
-    should_probe <- (attempts < 40L) || ((attempts %% 5L) == 0L)
-    landing_tab <- .analysis_default_landing_tab()
-    if (isTRUE(should_probe)) {
-      .go_plot_tab(landing_tab)
-    }
-    if ((attempts %% 10L) == 0L) {
-      .perf_log("route_ensure_plot_tab", details = c(
-        sprintf("token=%s", as.character(st$token %||% NA_integer_)),
-        sprintf("attempt=%d", attempts + 1L),
-        sprintf("selected=%s", landing_tab),
-        sprintf("probe=%s", as.character(isTRUE(should_probe)))
-      ))
-    }
-    analysis_route_trace(modifyList(st, list(ensure_attempts = attempts + 1L)))
-    invalidateLater(500, session)
-    invisible(NULL)
-  })
 
   observe({
     st <- analysis_route_trace()
     if (!isTRUE(st$active)) return(invisible(NULL))
     plot_tab_input_now <- .scalar_chr(input$plot_tabs, default = "")
     plot_tab_effective_now <- .scalar_chr(.current_plot_tab(), default = "")
-    plot_tab_present_now <- nzchar(plot_tab_input_now) || nzchar(plot_tab_effective_now)
-    selector_main_now <- .scalar_chr(input$active_object_name_input, default = "")
-    selector_inline_now <- .scalar_chr(input$active_object_name_input_inline, default = "")
-    selector_umap_inline_now <- .scalar_chr(input$active_object_name_input_umap_inline, default = "")
-    selector_ready <- nzchar(selector_main_now) || nzchar(selector_inline_now) || nzchar(selector_umap_inline_now)
+    active_now <- .scalar_chr(shared_data$active_object_name, default = "")
+    registry_now <- shared_data$all_seurat_objects %||% list()
+    selector_ready <- nzchar(active_now) && active_now %in% names(registry_now)
+    # Browser tab input may be empty/stale during return from Data Browser.
+    # It must not keep global route loading overlay locked after server flush.
     route_ready <- isTRUE(.analysis_data_is_ready_flag()) &&
-      identical(.scalar_chr(input$main_navbar, default = ""), "analysis_tab") &&
-      (isTRUE(analysis_plot_tabs_initialized()) || isTRUE(plot_tab_present_now)) &&
-      isTRUE(plot_tab_present_now) &&
-      isTRUE(selector_ready) &&
-      nzchar(.scalar_chr(shared_data$active_object_name, default = ""))
+      isTRUE(st$scaffold_flushed) &&
+      isTRUE(st$landing_applied) &&
+      isTRUE(selector_ready)
     if (!isTRUE(route_ready)) return(invisible(NULL))
     now <- .wall_now()
     started <- suppressWarnings(as.numeric(st$started_at %||% NA_real_))
@@ -2389,15 +2706,32 @@ analysis_server <- function(input, output, session, shared_data) {
       sprintf("selector_main=%s", .scalar_chr(input$active_object_name_input, default = "<empty>")),
       sprintf("selector_inline=%s", .scalar_chr(input$active_object_name_input_inline, default = "<empty>"))
     ))
-    try(overlay_hide(), silent = TRUE)
+    if (!isTRUE(isolate(umap_cfg_global_overlay_active())) &&
+        !isTRUE(isolate(.cfg_preview_in_progress()))) {
+      try(overlay_hide(), silent = TRUE)
+    }
     showNotification("Analysis page is ready.", type = "message", duration = 2)
-    analysis_route_trace(modifyList(st, list(active = FALSE, last_heartbeat = now)))
+    analysis_route_lifecycle$active <- FALSE
+    analysis_route_trace(modifyList(st, list(active = FALSE)))
     invisible(NULL)
   })
 
   observeEvent(input$plot_tabs, {
     if (!identical(.scalar_chr(input$main_navbar, default = ""), "analysis_tab")) return(invisible(NULL))
     tab_now <- .scalar_chr(input$plot_tabs, default = "")
+    if (!nzchar(tab_now)) {
+      # Bootstrap can briefly report an empty tab while activating a real tab.
+      # Invalidate any prior server request so its flush callback cannot leave
+      # the page locked while waiting for a DOM node that may not exist.
+      analysis_last_overlay_signature("")
+      umap_viz_global_overlay_active(FALSE)
+      umap_viz_overlay_signature("")
+      umap_viz_overlay_shown_at(as.numeric(NA))
+      if (!isTRUE(isolate(umap_cfg_global_overlay_active()))) {
+        try(overlay_hide(), silent = TRUE)
+      }
+      return(invisible(NULL))
+    }
     if (nzchar(tab_now)) {
       analysis_plot_tabs_initialized(TRUE)
       analysis_last_nonempty_plot_tab(tab_now)
@@ -2409,10 +2743,18 @@ analysis_server <- function(input, output, session, shared_data) {
     if (!identical(.scalar_chr(input$main_navbar, default = ""), "analysis_tab")) return(invisible(NULL))
     tab_now <- .scalar_chr(input$plot_tabs, default = "")
     if (!nzchar(tab_now)) return(invisible(NULL))
-    target_output <- .analysis_overlay_target_for_plot_tab(tab_now)
-    if (!nzchar(target_output)) return(invisible(NULL))
     active_now <- .scalar_chr(shared_data$active_object_name, default = "")
     sig_now <- paste(tab_now, active_now, sep = "||")
+    previous_sig <- .scalar_chr(analysis_last_overlay_signature(), default = "")
+    if (nzchar(previous_sig) && !identical(previous_sig, sig_now) &&
+        !isTRUE(isolate(umap_cfg_global_overlay_active()))) {
+      try(overlay_hide(), silent = TRUE)
+    }
+    target_output <- .analysis_overlay_target_for_plot_tab(tab_now)
+    if (!nzchar(target_output)) {
+      analysis_last_overlay_signature(sig_now)
+      return(invisible(NULL))
+    }
     if (identical(sig_now, .scalar_chr(analysis_last_overlay_signature(), default = ""))) {
       .perf_log("analysis_tab_overlay:skip_duplicate", details = c(
         sprintf("tab=%s", tab_now),
@@ -2426,18 +2768,21 @@ analysis_server <- function(input, output, session, shared_data) {
       sprintf("target_output=%s", target_output)
     ))
     try(overlay_show(sprintf("Loading %s...", tab_now)), silent = TRUE)
-    try(overlay_hide_when_output_ready(target_output, timeout_ms = 120000L), silent = TRUE)
+    # Server flush is the lifecycle boundary. Browser DOM polling cannot
+    # distinguish hidden, dynamic, or failed outputs and caused long freezes.
+    try(session$onFlushed(function() {
+      tab_after <- isolate(.scalar_chr(input$plot_tabs, default = ""))
+      active_after <- isolate(.scalar_chr(shared_data$active_object_name, default = ""))
+      signature_after <- isolate(.scalar_chr(analysis_last_overlay_signature(), default = ""))
+      if (identical(signature_after, sig_now) &&
+          identical(tab_after, tab_now) &&
+          identical(active_after, active_now) &&
+          !isTRUE(isolate(umap_cfg_global_overlay_active()))) {
+        try(overlay_hide(), silent = TRUE)
+      }
+    }, once = TRUE), silent = TRUE)
     invisible(NULL)
   }, ignoreInit = TRUE)
-
-  observeEvent(input$plot_tabs_dom_diag, {
-    if (!identical(.scalar_chr(input$main_navbar, default = ""), "analysis_tab")) return(invisible(NULL))
-    dtab <- .scalar_chr(input$plot_tabs_dom_diag$active, default = "")
-    if (!nzchar(dtab)) return(invisible(NULL))
-    analysis_plot_tabs_initialized(TRUE)
-    analysis_last_nonempty_plot_tab(dtab)
-    invisible(NULL)
-  }, ignoreInit = FALSE)
 
   .analysis_integrated_choices <- reactive({
     analysis_integrated_object_names(shared_data$all_seurat_objects %||% list())
@@ -2509,10 +2854,11 @@ analysis_server <- function(input, output, session, shared_data) {
     nonintegrated_sel <- setdiff(sel, integrated_sel)
     if (length(sel) > 0L) {
       .perf_log("analysis_selector:selection_profile", details = c(
-        sprintf("selected=%s", paste(sel, collapse = ",")),
-        sprintf("integrated=%s", paste(integrated_sel, collapse = ",")),
-        sprintf("nonintegrated=%s", paste(nonintegrated_sel, collapse = ",")),
-        unlist(lapply(sel, .integrated_reason), use.names = FALSE)
+        sprintf("selected_n=%d", length(sel)),
+        sprintf("integrated_n=%d", length(integrated_sel)),
+        sprintf("nonintegrated_n=%d", length(nonintegrated_sel)),
+        sprintf("selected_head=%s", paste(head(sel, 5L), collapse = ",")),
+        unlist(lapply(head(sel, 5L), .integrated_reason), use.names = FALSE)
       ))
     }
     list(
@@ -2531,6 +2877,11 @@ analysis_server <- function(input, output, session, shared_data) {
     if (!isTRUE(prof$integrated_single)) return(FALSE)
     !identical(.scalar_chr(input$analysis_inobject_reintegrate_switch, default = "TRUE"), "FALSE")
   })
+  .analysis_should_lock_integration <- function() {
+    reintegration_gate_locked <- isTRUE(.analysis_show_reintegrate_entry()) &&
+      !isTRUE(analysis_reintegration_enabled())
+    isTRUE(reintegration_gate_locked) || isTRUE(.analysis_should_lock_elbow_preview())
+  }
   .refresh_normalize_integration_visibility <- function() {
     mode_now <- .analysis_selector_mode()
     prof <- .analysis_selection_profile()
@@ -2538,14 +2889,20 @@ analysis_server <- function(input, output, session, shared_data) {
     sobj <- .get_active_sobj(shared_data)
     num_samples <- max(length(sel), if (!is.null(sobj)) length(unique(sobj$orig.ident)) else 1L)
     inobject_active <- isTRUE(.analysis_inobject_reintegrate_active())
-    reintegrate_locked <- isTRUE(.analysis_should_lock_elbow_preview())
+    reintegrate_locked <- isTRUE(.analysis_should_lock_integration())
     hide_preprocess_cards <- (identical(mode_now, "replace") &&
       !isTRUE(analysis_reintegration_enabled()) &&
       !isTRUE(inobject_active) &&
-      !isTRUE(prof$non_integrated_only)) || isTRUE(reintegrate_locked)
+      !isTRUE(prof$non_integrated_only) &&
+      !isTRUE(reintegrate_locked))
     if (isTRUE(hide_preprocess_cards)) {
       shinyjs::hide("normalization_block")
       shinyjs::hide("integration_block")
+      return(invisible(FALSE))
+    }
+    if (isTRUE(reintegrate_locked)) {
+      shinyjs::show("integration_block")
+      shinyjs::hide("normalization_block")
       return(invisible(FALSE))
     }
     integration_allowed <- (mode_now %in% c("multi", "reintegrate")) ||
@@ -2616,6 +2973,56 @@ analysis_server <- function(input, output, session, shared_data) {
     }
     choices
   })
+  # Agent note: Reference choices mirror the post-merge object labels used by
+  # SplitObject; do not merge objects just to populate this picker before the
+  # expensive integration run.
+  .integration_reference_choices <- reactive({
+    entries <- .integration_target_entries()
+    if (!length(entries)) return(character(0))
+    grouping <- .scalar_chr(input$integrate_by_var, default = "")
+    if (!nzchar(grouping)) return(character(0))
+
+    records <- lapply(names(entries), function(nm) {
+      obj <- tryCatch(.get_obj_from_entry(entries[[nm]]), error = function(e) NULL)
+      if (!inherits(obj, "Seurat")) return(NULL)
+      md <- tryCatch(obj@meta.data, error = function(e) NULL)
+      if (!is.data.frame(md) || !nrow(md)) return(NULL)
+      group_values <- if (identical(grouping, "orig.ident")) {
+        rep(nm, nrow(md))
+      } else if (grouping %in% colnames(md)) {
+        as.character(md[[grouping]])
+      } else {
+        return(NULL)
+      }
+      group_values[is.na(group_values) | !nzchar(group_values)] <- "NA"
+      context_cols <- c("batch", "chemistry", "technology")
+      context <- lapply(context_cols, function(col) {
+        if (col %in% colnames(md)) as.character(md[[col]]) else rep(NA_character_, nrow(md))
+      })
+      names(context) <- context_cols
+      out <- data.frame(group = group_values, stringsAsFactors = FALSE)
+      for (col in context_cols) out[[col]] <- context[[col]]
+      out
+    })
+    records <- records[!vapply(records, is.null, logical(1))]
+    if (!length(records)) return(character(0))
+    records <- do.call(rbind, records)
+    groups <- unique(records$group)
+    labels <- vapply(groups, function(group_name) {
+      rows <- records[records$group == group_name, , drop = FALSE]
+      parts <- sprintf("%s - %s cells", group_name, format(nrow(rows), big.mark = ","))
+      for (col in c("batch", "chemistry", "technology")) {
+        vals <- unique(as.character(rows[[col]]))
+        vals <- vals[!is.na(vals) & nzchar(vals)]
+        if (length(vals)) {
+          shown <- if (length(vals) > 2L) "mixed" else paste(vals, collapse = "/")
+          parts <- c(parts, paste0(col, "=", shown))
+        }
+      }
+      paste(parts, collapse = "; ")
+    }, character(1))
+    stats::setNames(groups, labels)
+  })
   output$integrate_by_var_ui <- renderUI({
     choices <- .integration_grouping_choices()
     if (!length(choices)) {
@@ -2646,11 +3053,35 @@ analysis_server <- function(input, output, session, shared_data) {
       )
     )
   })
-  
-  .db_server <- get0("data_browser_server", mode = "function", ifnotfound = NULL)
-  if (is.function(.db_server)) {
-    .db_server(input, output, session, shared_data)
-  }
+  output$integration_reference_ui <- renderUI({
+    if (!identical(.scalar_chr(input$inte_method, default = "CCA"), "RPCA") ||
+        !isTRUE(input$integration_use_selected_references)) {
+      return(NULL)
+    }
+    choices <- .integration_reference_choices()
+    if (!length(choices)) {
+      return(tags$div(
+        class = "text-warning",
+        tags$small(ANALYSIS_UI_TEXT$t_text_integration_reference_no_datasets)
+      ))
+    }
+    selected <- intersect(integration_reference_selection(), unname(choices))
+    tagList(
+      selectizeInput(
+        "integration_reference_datasets",
+        ANALYSIS_UI_TEXT$t_label_integration_reference_datasets,
+        choices = choices,
+        selected = selected,
+        multiple = TRUE,
+        options = list(placeholder = "Search/select reference samples...")
+      ),
+      tags$p(
+        class = "help-block",
+        style = "margin-top:-4px;",
+        HTML(ANALYSIS_UI_TEXT$t_text_integration_reference_guidance)
+      )
+    )
+  })
   
   .selected_analysis_names <- reactive({
     sel <- analysis_selected_names()
@@ -2668,10 +3099,9 @@ analysis_server <- function(input, output, session, shared_data) {
     tab_name <- .scalar_chr(tab_name, default = "")
     if (!nzchar(tab_name)) return(invisible(NULL))
     analysis_last_nonempty_plot_tab(tab_name)
-    suppressWarnings(try(
-      updateTabsetPanel(session, inputId = "plot_tabs", selected = tab_name),
-      silent = TRUE
-    ))
+    # Bootstrap/DOM is the sole tab writer. Sending updateTabsetPanel here as
+    # well creates a second transition and can expose Shiny's transient empty
+    # input to route observers.
     session$sendCustomMessage("analysis-set-plot-tab", list(value = tab_name))
     invisible(NULL)
   }
@@ -2685,7 +3115,7 @@ analysis_server <- function(input, output, session, shared_data) {
         selected <- active_selected
       }
     }
-    if (!length(selected) && !isTRUE(allow_empty)) selected <- object_choices[[1]]
+    if (!length(selected) && !isTRUE(allow_empty)) selected <- object_choices[[length(object_choices)]]
     selected
   }
   .normalize_selector_selection <- reactive({
@@ -2713,6 +3143,20 @@ analysis_server <- function(input, output, session, shared_data) {
   # flag that the sweep has produced something we can show
   .sweep_ready <- reactiveVal(FALSE)
   .cfg_preview_cache <- reactiveVal(list(key = NULL, result = NULL))
+  .cfg_static_plot_state <- reactiveVal(list(key = NULL, plot = NULL, error = NULL))
+  .cfg_static_plot_pending_key <- reactiveVal("")
+  .cfg_reset_static_plot <- function() {
+    .cfg_static_plot_pending_key("")
+    .cfg_static_plot_state(list(key = NULL, plot = NULL, error = NULL))
+    invisible(NULL)
+  }
+  .umap_cfg_hide_overlay <- function() {
+    if (!isTRUE(isolate(umap_cfg_global_overlay_active()))) return(invisible(NULL))
+    try(overlay_hide(), silent = TRUE)
+    umap_cfg_global_overlay_active(FALSE)
+    umap_cfg_overlay_shown_at(as.numeric(NA))
+    invisible(NULL)
+  }
   .cfg_preview_pending_key <- reactiveVal(NULL)
   .cfg_params_signature <- function(params) {
     if (!is.list(params)) return("")
@@ -2725,19 +3169,131 @@ analysis_server <- function(input, output, session, shared_data) {
     confirmation <- .cfg_confirmation(entry)
     is.list(confirmation) && isTRUE(confirmation$confirmed) && nzchar(.scalar_chr(confirmation$params_signature, default = ""))
   }
+  .cfg_is_confirmed_for_current_dims <- function(entry) {
+    if (!isTRUE(.cfg_is_confirmed(entry))) return(FALSE)
+    current_dims <- wanlab_get_active_embedding_dims(entry)
+    saved_dims <- suppressWarnings(as.integer(tryCatch(
+      entry$prefs$embedding_params$dims,
+      error = function(e) NULL
+    )))
+    current_dims <- current_dims[is.finite(current_dims) & !is.na(current_dims)]
+    saved_dims <- saved_dims[is.finite(saved_dims) & !is.na(saved_dims)]
+    length(current_dims) == 1L &&
+      length(saved_dims) == 1L &&
+      identical(current_dims[[1]], saved_dims[[1]])
+  }
   .cfg_active_name <- function() .scalar_chr(shared_data$active_object_name, default = "")
   .cfg_is_unlocked <- reactive({
     nm <- .cfg_active_name()
     nzchar(nm) && nm %in% .cfg_unlocked_by_object()
   })
+  .cfg_set_unsaved_preview <- function(nm, unsaved = TRUE) {
+    nm <- .scalar_chr(nm, default = "")
+    if (!nzchar(nm)) return(invisible(NULL))
+    objects <- as.character(isolate(.cfg_unsaved_preview_objects()) %||% character())
+    objects <- if (isTRUE(unsaved)) unique(c(objects, nm)) else setdiff(objects, nm)
+    .cfg_unsaved_preview_objects(objects)
+    invisible(NULL)
+  }
+  .cfg_has_unsaved_embedding_changes <- function() {
+    nm <- .cfg_active_name()
+    if (!nzchar(nm)) return(FALSE)
+    isTRUE(isolate(.cfg_keeper_dirty())) || nm %in% isolate(.cfg_unsaved_preview_objects())
+  }
+  .show_cfg_unsaved_warning <- function(context = "plot") {
+    if (!isTRUE(.cfg_has_unsaved_embedding_changes()) ||
+        isTRUE(isolate(.cfg_unsaved_warning_open()))) {
+      return(invisible(NULL))
+    }
+    context <- .scalar_chr(context, default = "plot")
+    .cfg_unsaved_warning_context(context)
+    .cfg_unsaved_warning_open(TRUE)
+    .perf_log("cfg_unsaved_warning:show", details = c(
+      sprintf("context=%s", context),
+      sprintf("object=%s", .cfg_active_name())
+    ))
+    showModal(modalDialog(
+      title = ANALYSIS_UI_TEXT$t_title_unsaved_embedding_changes,
+      p(ANALYSIS_UI_TEXT$t_text_unsaved_embedding_changes),
+      footer = tagList(
+        actionButton(
+          "cfg_unsaved_stay_btn",
+          ANALYSIS_UI_TEXT$t_btn_stay_embedding_configuration,
+          class = "btn btn-default"
+        ),
+        actionButton(
+          "cfg_unsaved_continue_btn",
+          ANALYSIS_UI_TEXT$t_btn_continue_without_saving,
+          class = "btn btn-warning"
+        )
+      ),
+      easyClose = FALSE
+    ))
+    invisible(NULL)
+  }
+  observe({
+    dirty_now <- isTRUE(.cfg_keeper_dirty())
+    unsaved_objects <- as.character(.cfg_unsaved_preview_objects() %||% character())
+    active_now <- .cfg_active_name()
+    session$sendCustomMessage("analysis-set-embedding-unsaved", list(
+      unsaved = isTRUE(dirty_now || (nzchar(active_now) && active_now %in% unsaved_objects))
+    ))
+  })
+  observeEvent(input$cfg_unsaved_navigation_request, {
+    request <- input$cfg_unsaved_navigation_request
+    kind <- .scalar_chr(request$kind, default = "")
+    target <- .scalar_chr(request$target, default = "")
+    if (!kind %in% c("plot", "navbar") || !nzchar(target)) return(invisible(NULL))
+    .cfg_unsaved_navigation_target(list(kind = kind, target = target))
+    .perf_log("cfg_unsaved_navigation:request", details = c(
+      sprintf("kind=%s", kind),
+      sprintf("target=%s", target)
+    ))
+    if (!isTRUE(.cfg_has_unsaved_embedding_changes())) {
+      session$sendCustomMessage("analysis-unsaved-navigation-result", list(
+        proceed = TRUE,
+        kind = kind,
+        target = target
+      ))
+      .cfg_unsaved_navigation_target(list(kind = "", target = ""))
+      return(invisible(NULL))
+    }
+    .show_cfg_unsaved_warning(context = kind)
+  }, ignoreInit = TRUE)
   .cfg_store_session_preview <- function(nm, cache) {
+    .cfg_reset_static_plot()
     previews <- isolate(.cfg_preview_by_object())
     previews[[nm]] <- cache
     .cfg_preview_by_object(previews)
     .cfg_preview_cache(cache)
     invisible(NULL)
   }
-  
+  .cfg_session_preview <- function(nm, cache = NULL) {
+    nm <- .scalar_chr(nm, default = "")
+    if (!nzchar(nm)) return(NULL)
+    candidate <- cache
+    if (!is.list(candidate) || !is.list(candidate$result) ||
+        !isTRUE(.analysis_preview_result_matches_active(candidate$result, nm))) {
+      candidate <- isolate(.cfg_preview_by_object())[[nm]]
+    }
+    if (!is.list(candidate) || !is.list(candidate$result) ||
+        !isTRUE(.analysis_preview_result_matches_active(candidate$result, nm))) {
+      return(NULL)
+    }
+    candidate
+  }
+  .cfg_clear_session_preview <- function(nm) {
+    nm <- .scalar_chr(nm, default = "")
+    previews <- isolate(.cfg_preview_by_object())
+    if (nzchar(nm)) previews[[nm]] <- NULL
+    .cfg_preview_by_object(previews)
+    .cfg_preview_cache(list(key = NULL, result = NULL))
+    .cfg_reset_static_plot()
+    .cfg_auto_preview_attempt("")
+    .cfg_set_unsaved_preview(nm, FALSE)
+    invisible(NULL)
+  }
+
   .coerce_dims <- function(x, default = 30L) {
     d <- suppressWarnings(as.integer(x %||% default))
     if (!length(d)) d <- as.integer(default)
@@ -2748,10 +3304,7 @@ analysis_server <- function(input, output, session, shared_data) {
   }
   .get_confirmed_dims <- function(nm = shared_data$active_object_name) {
     if (is.null(nm)) return(NULL)
-    suppressWarnings(as.integer(tryCatch(
-      shared_data$all_seurat_objects[[nm]]$prefs$confirmed_dims$value,
-      error = function(e) NULL
-    )))
+    wanlab_get_active_embedding_dims(shared_data$all_seurat_objects[[nm]])
   }
   .effective_dims <- function(nm = shared_data$active_object_name, allow_slider_fallback = TRUE) {
     d <- .get_confirmed_dims(nm)
@@ -2761,14 +3314,15 @@ analysis_server <- function(input, output, session, shared_data) {
   }
   .commit_dims_for_object <- function(nm, dims, source = "normalize_integrate_next") {
     req(nm)
-    if (is.null(shared_data$all_seurat_objects[[nm]]$prefs)) {
-      shared_data$all_seurat_objects[[nm]]$prefs <- list()
+    registry <- isolate(shared_data$all_seurat_objects %||% list())
+    entry <- registry[[nm]]
+    if (is.null(entry) || !is.list(entry)) {
+      stop(sprintf("Active analysis object package '%s' is unavailable.", nm))
     }
-    shared_data$all_seurat_objects[[nm]]$prefs$confirmed_dims <- list(
-      value = .coerce_dims(dims),
-      source = as.character(source %||% "manual"),
-      updated_at = Sys.time()
-    )
+    entry <- wanlab_set_active_embedding_dims(entry, .coerce_dims(dims), source = source)
+    registry[[nm]] <- entry
+    shared_data$all_seurat_objects <- registry
+    invisible(TRUE)
   }
 
   .ct_plot_height_from_cache <- function(cache) {
@@ -2785,26 +3339,74 @@ analysis_server <- function(input, output, session, shared_data) {
     if (!is.finite(n_at_max) || is.na(n_at_max) || n_at_max <= 0) {
       return(620L)
     }
-    h <- 560 + (max(0L, n_at_max - 12L) * 26L)
-    as.integer(max(560L, min(760L, h)))
+    h <- 560 + (max(0L, n_at_max - 12L) * 30L)
+    as.integer(max(560L, h))
   }
-  .cluster_sweep_resolution_count <- function(cache) {
-    if (is.null(cache) || inherits(cache, "try-error")) return(0L)
-    vals <- suppressWarnings(as.numeric(cache$resolutions %||% numeric()))
-    vals <- sort(unique(vals[is.finite(vals)]))
-    if (length(vals)) return(as.integer(length(vals)))
-    sm <- cache$summary
-    if (is.data.frame(sm) && "resolution" %in% colnames(sm)) {
-      vals_sm <- suppressWarnings(as.numeric(sm$resolution))
-      vals_sm <- sort(unique(vals_sm[is.finite(vals_sm)]))
-      return(as.integer(length(vals_sm)))
+  .clustertree_umap_shared_plot_height_px <- function(cache) {
+    h <- .ct_plot_height_from_cache(cache)
+    sobj <- tryCatch(.get_active_sobj(shared_data), error = function(e) NULL)
+    entry <- tryCatch(.get_active_entry(shared_data), error = function(e) NULL)
+    sample_col <- tryCatch(entry$prefs$sample_col %||% "", error = function(e) "")
+    if (!isTRUE(input$umap_split_by_sample) ||
+        !nzchar(sample_col) ||
+        is.null(sobj) ||
+        !sample_col %in% colnames(sobj@meta.data)) {
+      return(as.integer(h))
     }
-    0L
+
+    plot_w <- suppressWarnings(as.numeric(
+      session$clientData$output_umap_plot_width %||%
+        session$clientData$output_umap_plot_ui_width %||%
+        1000
+    ))
+    if (!is.finite(plot_w) || is.na(plot_w) || plot_w <= 0) plot_w <- 1000
+    split_vals <- as.character(sobj@meta.data[[sample_col]])
+    split_vals[is.na(split_vals) | !nzchar(split_vals)] <- "NA"
+    n_facets <- max(1L, length(.sort_levels_natural(split_vals)))
+    n_cols <- max(1L, min(n_facets, floor(plot_w / 320)))
+    n_rows <- max(1L, ceiling(n_facets / n_cols))
+    facet_h <- (plot_w / n_cols) * n_rows * 0.82 + 160
+    as.integer(max(560, h, facet_h))
   }
-  .clustertree_umap_layout_mode <- function(cache, threshold = 10L) {
-    threshold <- suppressWarnings(as.integer(threshold))
-    if (!is.finite(threshold) || is.na(threshold)) threshold <- 10L
-    if (.cluster_sweep_resolution_count(cache) > as.integer(threshold)) "stacked" else "side_by_side"
+  .clustertree_umap_cluster_choices <- function(sobj, cache = NULL) {
+    if (is.null(sobj) || !inherits(sobj, "Seurat")) return(stats::setNames(character(), character()))
+    md_cols <- tryCatch(colnames(sobj@meta.data), error = function(e) character())
+    if (!length(md_cols)) return(stats::setNames(character(), character()))
+
+    sm <- if (is.list(cache) && is.data.frame(cache$summary)) cache$summary else NULL
+    if (!is.null(sm) && nrow(sm) && all(c("resolution", "colname") %in% colnames(sm))) {
+      res_vals <- suppressWarnings(as.numeric(sm$resolution))
+      col_vals <- as.character(sm$colname)
+      valid <- is.finite(res_vals) & !is.na(res_vals) & nzchar(col_vals) & col_vals %in% md_cols
+      if (any(valid)) {
+        idx <- which(valid)
+        idx <- idx[order(res_vals[idx], col_vals[idx])]
+        cols <- unique(col_vals[idx])
+        col_res <- vapply(cols, function(col) {
+          pos <- which(col_vals == col & valid)
+          if (!length(pos)) NA_real_ else res_vals[pos[[1]]]
+        }, numeric(1))
+        labels <- ifelse(
+          is.finite(col_res),
+          sprintf("Resolution %.2f (%s)", col_res, cols),
+          cols
+        )
+        return(stats::setNames(cols, make.unique(labels)))
+      }
+    }
+
+    cols <- .umap_cluster_id_columns(sobj)
+    if (!length(cols)) return(stats::setNames(character(), character()))
+    res_vals <- suppressWarnings(vapply(cols, .parse_res_value, numeric(1)))
+    res_order <- ifelse(is.finite(res_vals), res_vals, Inf)
+    cols <- cols[order(res_order, cols)]
+    res_vals <- suppressWarnings(vapply(cols, .parse_res_value, numeric(1)))
+    labels <- ifelse(
+      is.finite(res_vals),
+      sprintf("Resolution %.2f (%s)", res_vals, cols),
+      cols
+    )
+    stats::setNames(cols, make.unique(labels))
   }
 
   .compact_clustertree_plot <- function(plt) {
@@ -3068,9 +3670,12 @@ analysis_server <- function(input, output, session, shared_data) {
     if (!length(reds)) return(NULL)
     red_use <- as.character(reduction_name %||% "")
     if (!nzchar(red_use) || !(red_use %in% reds)) {
-      red_l <- tolower(reds)
-      red_use <- if ("umap" %in% red_l) reds[[match("umap", red_l)]] else reds[[1]]
+      red_use <- wanlab_resolve_embedding_reduction(
+        sobj,
+        requested = if (nzchar(red_use)) red_use else "umap"
+      )
     }
+    if (!nzchar(red_use)) return(NULL)
 
     p_tmp <- tryCatch(Seurat::DimPlot(sobj, reduction = red_use, group.by = group_col), error = function(e) NULL)
     if (is.null(p_tmp) || !inherits(p_tmp, "ggplot")) return(NULL)
@@ -3366,6 +3971,27 @@ analysis_server <- function(input, output, session, shared_data) {
     
     cand[is_cluster_col]
   }
+
+  .umap_cluster_id_columns <- function(sobj) {
+    cols <- tryCatch(colnames(sobj@meta.data), error = function(e) character())
+    if (!length(cols)) return(character())
+
+    lower_cols <- tolower(cols)
+    candidates <- unique(c(
+      cols[grepl("(^|_)(seurat_clusters|cluster(?:s)?|clust|snn_res|leiden_res)(\\.|_|$)", lower_cols)],
+      cols[grepl("_res\\.[0-9]", lower_cols)],
+      .find_resolution_columns(sobj)
+    ))
+    if (!length(candidates)) return(character())
+
+    is_cluster_id <- vapply(candidates, function(nm) {
+      values <- tryCatch(sobj@meta.data[[nm]], error = function(e) NULL)
+      if (is.null(values)) return(FALSE)
+      levels <- levels(.factor_numeric_first(values))
+      length(levels) > 1L && all(grepl("^[0-9]+$", levels))
+    }, logical(1))
+    candidates[is_cluster_id]
+  }
   
   # Parse numeric resolution value from a column name
   # e.g. "seurat_clusters_res.0.4" → 0.4
@@ -3471,10 +4097,18 @@ analysis_server <- function(input, output, session, shared_data) {
     unique(c(preferred[preferred %in% cols], clus, other))
   }
   .reduction_choices <- function(sobj) {
-    r <- tolower(tryCatch(names(sobj@reductions), error = function(e) character()))
-    if (!length(r)) r <- character()
-    r <- setdiff(r, c("umap3d"))
-    unique(c(r, "umap","tsne","pca"))
+    r_real <- tryCatch(names(sobj@reductions), error = function(e) character())
+    if (!length(r_real)) return(character())
+    r_real <- r_real[tolower(r_real) != "umap3d"]
+    r <- tolower(r_real)
+    # Agent note: This dropdown must expose stored reductions only. A canonical
+    # "umap" placeholder is invalid when the designated embedding is named
+    # (for example, umap_pca_30); the renderer resolves legacy input separately.
+    unique(c(
+      r_real[startsWith(r, "umap")],
+      r_real[startsWith(r, "tsne")],
+      r_real[!startsWith(r, "umap") & !startsWith(r, "tsne")]
+    ))
   }
   .resolve_reduction_name_ci <- function(sobj, reduction_name) {
     red <- .scalar_chr(reduction_name, default = "")
@@ -3523,14 +4157,119 @@ analysis_server <- function(input, output, session, shared_data) {
     x <- tolower(.scalar_chr(sel, default = ""))
     if (grepl("tsne", x, fixed = TRUE)) "tSNE" else "UMAP"
   }
-  .cfg_plot_reduction_choices <- function(sobj) {
+  .cfg_plot_reduction_choices <- function(sobj, preferred_dims = NULL, include_pending = TRUE) {
     reds <- tryCatch(names(sobj@reductions), error = function(e) character(0))
-    if (!length(reds)) return(character(0))
-    keep <- vapply(reds, function(red) {
+    if (length(reds)) {
+      keep <- vapply(reds, function(red) {
+        emb <- tryCatch(Seurat::Embeddings(sobj, red), error = function(e) NULL)
+        is.matrix(emb) && ncol(emb) >= 2L && grepl("(umap|tsne)", tolower(red))
+      }, logical(1))
+      reds <- reds[keep]
+    }
+
+    dims <- suppressWarnings(as.integer(preferred_dims))
+    dims <- dims[is.finite(dims) & !is.na(dims) & dims >= 2L]
+    target_names <- character(0)
+    if (length(dims)) {
+      target_names <- c(
+        sprintf("umap_pca_%d", dims[[1]]),
+        sprintf("tsne_pca_%d", dims[[1]])
+      )
+      if (isTRUE(include_pending) &&
+          any(tolower(tryCatch(names(sobj@reductions), error = function(e) character(0))) == "pca")) {
+        reds <- unique(c(reds, target_names))
+      }
+    }
+
+    # UMAP is the declared default. Keep the reduction matching confirmed PCA
+    # dims first; keep both older stored reductions and pending targets listed.
+    lc <- tolower(reds)
+    if (any(grepl("^umap_pca_", lc))) reds <- reds[lc != "umap"]
+    lc <- tolower(reds)
+    if (any(grepl("^tsne_pca_", lc))) reds <- reds[lc != "tsne"]
+    lc <- tolower(reds)
+    preferred <- reds[match(target_names, lc, nomatch = 0L)]
+    preferred <- preferred[nzchar(preferred)]
+    remaining <- reds[!lc %in% tolower(preferred)]
+    lc_remaining <- tolower(remaining)
+    c(
+      preferred,
+      remaining[grepl("umap", lc_remaining)],
+      remaining[grepl("tsne", lc_remaining)]
+    )
+  }
+  .cfg_default_plot_reduction <- function(sobj, preferred_dims = NULL) {
+    reds <- .cfg_plot_reduction_choices(sobj, preferred_dims = preferred_dims)
+    if (length(reds)) reds[[1]] else "umap"
+  }
+  .cfg_plot_reduction_label <- function(sobj, reduction_name, object_name = "") {
+    reds <- tryCatch(names(sobj@reductions), error = function(e) character(0))
+    red_lc <- tolower(.scalar_chr(reduction_name, default = ""))
+    if (nzchar(red_lc) && red_lc %in% tolower(reds)) {
+      return(.reduction_pca_dims_label(
+        sobj,
+        reds[[match(red_lc, tolower(reds))]],
+        include_provenance = TRUE
+      ))
+    }
+    hit <- regexec("^(umap|tsne)_pca_([0-9]+)$", red_lc, perl = TRUE)
+    parts <- regmatches(red_lc, hit)[[1]]
+    if (length(parts) >= 3L) {
+      owner <- .scalar_chr(object_name, default = "unknown")
+      if (!nzchar(owner)) owner <- "unknown"
+      return(sprintf(
+        "%s_PCA_%d - object: %s",
+        if (identical(parts[[2]], "tsne")) "TSNE" else "UMAP",
+        as.integer(parts[[3]]),
+        owner
+      ))
+    }
+    if (grepl("tsne", red_lc, fixed = TRUE)) "TSNE_PCA" else "UMAP_PCA"
+  }
+  .cfg_preview_matches_default_reduction <- function(cache, sobj) {
+    if (!is.list(cache) || !is.list(cache$result)) return(FALSE)
+    actual <- tolower(.scalar_chr(
+      cache$result$reduction %||% cache$result$params$reduction_name,
+      default = ""
+    ))
+    dims <- tryCatch(cache$result$params$dims, error = function(e) NULL)
+    target <- tolower(.cfg_default_plot_reduction(sobj, preferred_dims = dims))
+    nzchar(actual) && nzchar(target) && identical(actual, target)
+  }
+  # Agent note: Existing coordinates may be shown only when their PCA pairing
+  # is explicit in the reduction name or provenance. Do not treat bare UMAP as
+  # a match because its PCA dimensions are unknown.
+  .cfg_exact_reduction_for_dims <- function(sobj, family, dims) {
+    if (is.null(sobj) || !inherits(sobj, "Seurat")) return("")
+    family <- tolower(.scalar_chr(family, default = ""))
+    if (!family %in% c("umap", "tsne")) return("")
+    dims <- .wanlab_valid_dims(dims)
+    if (is.na(dims)) return("")
+    red_names <- tryCatch(names(sobj@reductions), error = function(e) character())
+    if (!length(red_names)) return("")
+    valid <- vapply(red_names, function(red) {
       emb <- tryCatch(Seurat::Embeddings(sobj, red), error = function(e) NULL)
-      is.matrix(emb) && ncol(emb) >= 2L && grepl("(umap|tsne)", tolower(red))
+      is.matrix(emb) && ncol(emb) >= 2L && grepl(sprintf("^%s($|_)", family), tolower(red))
     }, logical(1))
-    reds[keep]
+    red_names <- red_names[valid]
+    if (!length(red_names)) return("")
+    red_lc <- tolower(red_names)
+    exact_name <- sprintf("%s_pca_%d", family, as.integer(dims))
+    exact_idx <- match(exact_name, red_lc)
+    if (!is.na(exact_idx)) return(red_names[[exact_idx]])
+    for (red in red_names) {
+      provenance <- wanlab_get_reduction_provenance(sobj, red)
+      provenance_dims <- .wanlab_valid_dims(provenance$pca_dims %||% NA_integer_)
+      if (is.na(provenance_dims)) {
+        provenance_dims <- .wanlab_valid_dims(
+          tryCatch(sobj@reductions[[red]]@misc$cfg_signature$dims, error = function(e) NA_integer_)
+        )
+      }
+      if (!is.na(provenance_dims) && identical(as.integer(provenance_dims), as.integer(dims))) {
+        return(red)
+      }
+    }
+    ""
   }
   .grouping_columns <- function(sobj) {
     cols <- tryCatch(colnames(sobj@meta.data), error = function(e) character())
@@ -3603,8 +4342,11 @@ analysis_server <- function(input, output, session, shared_data) {
   }
   .analysis_reduction_signature <- function(sobj, reduction_name = "umap") {
     if (is.null(sobj) || !inherits(sobj, "Seurat")) return("")
-    red <- .scalar_chr(reduction_name, default = "umap")
-    if (!nzchar(red)) red <- "umap"
+    red <- wanlab_resolve_embedding_reduction(
+      sobj,
+      requested = .scalar_chr(reduction_name, default = "umap")
+    )
+    if (!nzchar(red)) return("")
     emb <- tryCatch(Seurat::Embeddings(sobj, reduction = red), error = function(e) NULL)
     if (is.null(emb) || !is.matrix(emb) || !nrow(emb) || !ncol(emb)) return("")
     misc_sig <- tryCatch(sobj@reductions[[red]]@misc$cfg_signature, error = function(e) NULL)
@@ -3620,25 +4362,45 @@ analysis_server <- function(input, output, session, shared_data) {
     )
   }
   .cfg_reduction_for_display <- function(sobj, params = NULL, fallback = "umap") {
-    sobj <- sobj %||% NULL
-    reds_real <- tryCatch(names(sobj@reductions), error = function(e) character(0))
-    reds <- tolower(reds_real)
-    if (!length(reds)) return("")
-    explicit_red <- tolower(.scalar_chr(params$reduction_name %||% "", default = ""))
-    if (nzchar(explicit_red) && explicit_red %in% reds) return(reds_real[[match(explicit_red, reds)]])
+    if (is.null(sobj) || !inherits(sobj, "Seurat")) return("")
+    params <- if (is.list(params)) params else list()
+    dims_pref <- .wanlab_valid_dims(params$dims)
+    explicit_red <- .scalar_chr(params$reduction_name %||% "", default = "")
+    if (nzchar(explicit_red) && !tolower(explicit_red) %in% c("umap3d", "tsne3d")) {
+      explicit_lc <- tolower(explicit_red)
+      explicit_family <- if (grepl("^tsne($|_)", explicit_lc)) {
+        "tsne"
+      } else if (grepl("^umap($|_)", explicit_lc)) {
+        "umap"
+      } else {
+        ""
+      }
+      if (nzchar(explicit_family) && !is.na(dims_pref)) {
+        resolved <- wanlab_resolve_embedding_reduction(
+          sobj,
+          explicit_family,
+          preferred_dims = dims_pref
+        )
+        if (nzchar(resolved)) return(resolved)
+      }
+      resolved <- wanlab_resolve_embedding_reduction(sobj, explicit_red)
+      if (nzchar(resolved)) return(resolved)
+    }
     fmt <- toupper(.scalar_chr(params$plot_format %||% "", default = ""))
     prefer <- if (identical(fmt, "TSNE")) "tsne" else if (identical(fmt, "UMAP")) "umap" else ""
-    fb <- tolower(.scalar_chr(fallback, default = "umap"))
     if (nzchar(prefer)) {
-      prefer_idx <- which(startsWith(reds, prefer))
-      if (length(prefer_idx)) return(reds_real[[prefer_idx[[1]]]])
+      resolved <- wanlab_resolve_embedding_reduction(sobj, prefer, preferred_dims = dims_pref)
+      if (nzchar(resolved)) return(resolved)
     }
-    if (nzchar(fb)) {
-      fb_idx <- which(startsWith(reds, fb))
-      if (length(fb_idx)) return(reds_real[[fb_idx[[1]]]])
+    fallback_name <- .scalar_chr(fallback, default = "umap")
+    if (nzchar(fallback_name) && !tolower(fallback_name) %in% c("umap3d", "tsne3d")) {
+      resolved <- wanlab_resolve_embedding_reduction(
+        sobj,
+        fallback_name,
+        preferred_dims = if (tolower(fallback_name) %in% c("umap", "tsne")) dims_pref else NULL
+      )
+      if (nzchar(resolved)) return(resolved)
     }
-    if (any(startsWith(reds, "umap"))) return(reds_real[[which(startsWith(reds, "umap"))[[1]]]])
-    if (any(startsWith(reds, "tsne"))) return(reds_real[[which(startsWith(reds, "tsne"))[[1]]]])
     ""
   }
   .resolution_values <- function(sobj, cache_res = NULL) {
@@ -4209,31 +4971,24 @@ function(el, x) {
       report('diag_error', String(e && e.message ? e.message : e));
     }
   }
-  setTimeout(checkCanvas, 0);
-  setTimeout(checkCanvas, 250);
-  setTimeout(function() {
-    try {
-      if (window.Plotly && Plotly.Plots && typeof Plotly.Plots.resize === 'function') {
-        Plotly.Plots.resize(el);
-      }
-      if (window.Plotly && typeof Plotly.redraw === 'function') {
-        Plotly.redraw(el);
-      }
-    } catch (e) {}
-  }, 80);
-  setTimeout(function() {
+  function resizePlotOnce() {
     try {
       if (window.Plotly && Plotly.Plots && typeof Plotly.Plots.resize === 'function') {
         Plotly.Plots.resize(el);
       }
     } catch (e) {}
-  }, 320);
+  }
+  var initialResizeDone = false;
   if (el.on) {
     el.on('plotly_webglcontextlost', function() {
       report('webgl_context_lost', 'plotly_webglcontextlost');
     });
     el.on('plotly_afterplot', function() {
       checkCanvas();
+      if (!initialResizeDone) {
+        initialResizeDone = true;
+        resizePlotOnce();
+      }
     });
   }
 }
@@ -5207,12 +5962,12 @@ function(el, x, data) {
   .analysis_data_is_ready_flag <- reactive({
     reg <- shared_data$all_seurat_objects %||% list()
     if (!length(reg)) return(FALSE)
-    has_any_seurat <- any(vapply(reg, .analysis_entry_has_seurat, logical(1)))
-    if (!isTRUE(has_any_seurat)) return(FALSE)
-
     nm <- trimws(.scalar_chr(shared_data$active_object_name, default = ""))
-    if (nzchar(nm) && !is.null(reg[[nm]])) return(TRUE)
-    TRUE
+    # Agent note: A registry with some Seurat object is not enough. Every
+    # analysis output reads the canonical active entry, so readiness must wait
+    # for that exact name/object pair instead of rendering an unknown object.
+    if (!nzchar(nm) || is.null(reg[[nm]])) return(FALSE)
+    .analysis_entry_has_seurat(reg[[nm]])
   })
 
   output$analysis_data_is_ready <- renderText({
@@ -5278,7 +6033,7 @@ function(el, x, data) {
     if (!nzchar(fallback_active) || is.null(reg[[fallback_active]])) {
       reg_names <- names(reg)
       reg_names <- reg_names[!is.na(reg_names) & nzchar(reg_names)]
-      if (length(reg_names)) fallback_active <- reg_names[[1]]
+      if (length(reg_names)) fallback_active <- reg_names[[length(reg_names)]]
     }
     if (nzchar(fallback_active) && !identical(current_active, fallback_active)) {
       shared_data$active_object_name <- fallback_active
@@ -5328,9 +6083,13 @@ function(el, x, data) {
     isTRUE(.analysis_should_lock_elbow_preview())
   })
   outputOptions(output, "elbow_locked", suspendWhenHidden = FALSE)
+  output$integration_locked <- reactive({
+    isTRUE(.analysis_should_lock_integration())
+  })
+  outputOptions(output, "integration_locked", suspendWhenHidden = FALSE)
   .sync_integration_lock_layout <- function() {
     tab_now <- .scalar_chr(input$plot_tabs, default = "")
-    lock_now <- isTRUE(.analysis_should_lock_elbow_preview())
+    lock_now <- isTRUE(.analysis_should_lock_integration())
     if (identical(tab_now, "normalize / integrate") && isTRUE(lock_now)) {
       shinyjs::addClass(id = "analysis_prep_row", class = "analysis-integration-locked")
     } else {
@@ -5338,7 +6097,7 @@ function(el, x, data) {
     }
     invisible(NULL)
   }
-  observe({ .analysis_should_lock_elbow_preview(); .sync_integration_lock_layout() })
+  observe({ .analysis_should_lock_integration(); .sync_integration_lock_layout() })
   observeEvent(input$plot_tabs, { .sync_integration_lock_layout() }, ignoreInit = FALSE)
   
   observeEvent(input$to_umap_config_btn, {
@@ -5350,7 +6109,17 @@ function(el, x, data) {
       showNotification("No active analysis object is available. Please select/add an object first.", type = "error")
       return()
     }
+    # Agent note: This is a short navigation lock only. It ends after the UMAP tab
+    # has flushed its UI, so it never waits for the plot output to be mounted.
+    flush_hide_scheduled <- FALSE
+    overlay_show("Opening UMAP configuration...", pct = 0, lock = TRUE)
+    on.exit({
+      if (!isTRUE(flush_hide_scheduled)) try(overlay_hide(), silent = TRUE)
+    }, add = TRUE)
+    previous_dims <- suppressWarnings(as.integer(.get_confirmed_dims(nm)))
+    previous_dims <- previous_dims[is.finite(previous_dims) & !is.na(previous_dims)]
     dims_now <- .coerce_dims(input$prep_dims_slider %||% 30L)
+    dims_changed <- length(previous_dims) != 1L || !identical(previous_dims[[1]], dims_now)
     .perf_log("to_umap_config_btn:committing_dims", t0 = t_btn, details = c(
       sprintf("object=%s", nm),
       sprintf("dims=%d", dims_now)
@@ -5364,9 +6133,27 @@ function(el, x, data) {
       FALSE
     })
     if (!isTRUE(ok)) return()
+    if (isTRUE(dims_changed)) .cfg_clear_session_preview(nm)
     showNotification(sprintf("Confirmed PCA dims: %d", dims_now), type = "message", duration = 2)
     .perf_log("to_umap_config_btn:go_plot_tab", t0 = t_btn, details = "target=umap configuration")
     .go_plot_tab("umap configuration")
+    session$onFlushed(function() {
+      # onFlushed runs outside reactive consumers; isolate active-object reads.
+      sobj_target <- tryCatch(isolate(.get_active_sobj(shared_data)), error = function(e) NULL)
+      if (inherits(sobj_target, "Seurat")) {
+        target_reduction <- .cfg_default_plot_reduction(
+          sobj_target,
+          preferred_dims = dims_now
+        )
+        if (nzchar(target_reduction)) {
+          updateSelectInput(session, "cfg_plot_format", selected = target_reduction)
+        }
+      }
+    }, once = TRUE)
+    session$onFlushed(function() {
+      try(overlay_hide(), silent = TRUE)
+    }, once = TRUE)
+    flush_hide_scheduled <- TRUE
     # do NOT set .sweep_ready(TRUE) here – it should only be TRUE after a sweep
   }, ignoreInit = TRUE)
 
@@ -5387,51 +6174,77 @@ function(el, x, data) {
     if (!nzchar(nm_chr)) return(invisible(NULL))
     entry <- shared_data$all_seurat_objects[[nm_chr]]
     # Agent note: Existing workspace reductions may be displayed immediately, but only rendered or explicitly confirmed previews may be saved as reviewed configuration.
-    is_confirmed <- isTRUE(.cfg_is_confirmed(entry))
+    is_confirmed <- isTRUE(.cfg_is_confirmed_for_current_dims(entry))
     sobj <- .get_obj_from_entry(entry)
     if (is.null(sobj) || !inherits(sobj, "Seurat")) return(invisible(NULL))
-    reds <- tolower(tryCatch(names(sobj@reductions), error = function(e) character()))
-    if (!length(reds)) return(invisible(NULL))
-
     p <- tryCatch(entry$prefs$embedding_params, error = function(e) NULL)
     if (!is.list(p)) p <- list()
-    fmt <- toupper(as.character(p$plot_format %||% ""))
-    dims_pref <- .coerce_dims(tryCatch(entry$prefs$confirmed_dims$value, error = function(e) NULL) %||% p$dims %||% 30L)
-    red_dim <- if (identical(fmt, "TSNE")) sprintf("tsne_pca_%d", dims_pref) else sprintf("umap_pca_%d", dims_pref)
-    confirmed_red <- tolower(.scalar_chr(.cfg_confirmation(entry)$reduction, default = ""))
+    dims_pref <- wanlab_get_active_embedding_dims(entry)
+    if (!length(dims_pref)) dims_pref <- p$dims %||% 30L
+    dims_pref <- .coerce_dims(dims_pref)
+    # Agent note: This cache may be seeded before the dynamic selector is mounted.
+    # Use the current valid choice or the reduction matching confirmed PCA dims;
+    # include a pending dims-specific target when it has not been rendered yet.
+    reds <- tolower(tryCatch(
+      .cfg_plot_reduction_choices(sobj, preferred_dims = dims_pref),
+      error = function(e) character()
+    ))
+    if (!length(reds)) return(invisible(NULL))
     selected_red <- tolower(.scalar_chr(isolate(input$cfg_plot_format), default = ""))
-    stored_red <- tolower(.scalar_chr(tryCatch(entry$plots$default_reduction, error = function(e) NULL), default = ""))
-    red <- if (nzchar(selected_red) && selected_red %in% reds) {
-      selected_red
-    } else if (nzchar(confirmed_red) && confirmed_red %in% reds) {
+    confirmed_red <- tolower(.scalar_chr(.cfg_confirmation(entry)$reduction, default = ""))
+    saved_red <- tolower(.scalar_chr(p$reduction_name, default = ""))
+    preferred_red <- if (is_confirmed && confirmed_red %in% reds) {
       confirmed_red
-    } else if (nzchar(stored_red) && stored_red %in% reds) {
-      stored_red
-    } else if (identical(fmt, "TSNE")) {
-      if (red_dim %in% reds) red_dim else if (any(startsWith(reds, "tsne"))) reds[[which(startsWith(reds, "tsne"))[[1]]]] else NULL
-    } else if (identical(fmt, "UMAP")) {
-      if (red_dim %in% reds) red_dim else if (any(startsWith(reds, "umap"))) reds[[which(startsWith(reds, "umap"))[[1]]]] else NULL
-    } else NULL
-    if (is.null(red)) {
-      red_dim <- sprintf("umap_pca_%d", dims_pref)
-      if (red_dim %in% reds) red <- red_dim
-      else if (any(startsWith(reds, "umap"))) red <- reds[[which(startsWith(reds, "umap"))[[1]]]]
-      else if (any(startsWith(reds, "tsne"))) red <- reds[[which(startsWith(reds, "tsne"))[[1]]]]
+    } else if (is_confirmed && saved_red %in% reds) {
+      saved_red
+    } else {
+      ""
     }
-    if (is.null(red) || !red %in% reds) return(invisible(NULL))
+    selected_family <- if (grepl("^tsne($|_)", selected_red)) "tsne" else "umap"
+    selected_current_red <- if (nzchar(selected_red) && selected_red %in% reds && length(dims_pref)) {
+      tolower(.scalar_chr(
+        tryCatch(
+          wanlab_resolve_embedding_reduction(sobj, selected_family, preferred_dims = dims_pref),
+          error = function(e) ""
+        ),
+        default = ""
+      ))
+    } else {
+      selected_red
+    }
+    selected_is_current <- nzchar(selected_red) && selected_red %in% reds &&
+      (!is_confirmed || identical(selected_red, selected_current_red))
+    red <- if (isTRUE(selected_is_current)) {
+      selected_red
+    } else if (nzchar(preferred_red)) {
+      preferred_red
+    } else {
+      .cfg_default_plot_reduction(sobj, preferred_dims = dims_pref)
+    }
+    red_actual <- .resolve_reduction_name_ci(sobj, red)
+    exact_red <- .cfg_exact_reduction_for_dims(sobj, selected_family, dims_pref)
+    stored_reduction_valid <- nzchar(exact_red) && nzchar(red_actual) &&
+      identical(tolower(red_actual), tolower(exact_red))
+    if (isTRUE(stored_reduction_valid)) {
+      red <- exact_red
+    } else if (nzchar(red_actual)) {
+      red <- red_actual
+    }
 
     params <- list(
-      reduction_name = .scalar_chr(p$reduction_name, default = red),
-      plot_format = .scalar_chr(p$plot_format, default = if (startsWith(red, "tsne")) "TSNE" else "UMAP"),
+      reduction_name = red,
+      object_name = nm,
+      pca_reduction = "pca",
+      plot_format = .cfg_plot_format_method(red),
       dims = dims_pref,
       seed = suppressWarnings(as.integer(p$seed %||% 42L)),
       umap_neighbors = suppressWarnings(as.integer(p$umap_neighbors %||% 30L)),
       umap_min_dist = suppressWarnings(as.numeric(p$umap_min_dist %||% 0.3)),
       umap_spread = suppressWarnings(as.numeric(p$umap_spread %||% 1.0)),
-      tsne_perplexity = suppressWarnings(as.numeric(p$tsne_perplexity %||% 30)),
-      tsne_theta = suppressWarnings(as.numeric(p$tsne_theta %||% 0.5)),
+      tsne_perplexity = suppressWarnings(as.numeric(p$tsne_perplexity %||% 20)),
+      tsne_theta = suppressWarnings(as.numeric(p$tsne_theta %||% 0.8)),
       tsne_eta = suppressWarnings(as.numeric(p$tsne_eta %||% 200)),
-      tsne_iter = suppressWarnings(as.integer(p$tsne_iter %||% 1000))
+      tsne_iter = suppressWarnings(as.integer(p$tsne_iter %||% 500))
     )
     cache_key <- paste(
       .cfg_object_signature(sobj, object_name = nm),
@@ -5439,6 +6252,12 @@ function(el, x, data) {
       sep = "||"
     )
     if (is_confirmed && !identical(.cfg_params_signature(params), .scalar_chr(.cfg_confirmation(entry)$params_signature, default = ""))) {
+      .perf_log("cfg_seed_preview_cache:confirmation_mismatch", details = c(
+        sprintf("object=%s", nm_chr),
+        sprintf("reduction=%s", red),
+        sprintf("dims=%s", as.character(dims_pref)),
+        sprintf("seed_fields=%s", paste(names(params), collapse = ","))
+      ))
       return(invisible(NULL))
     }
     cache <- list(
@@ -5449,48 +6268,40 @@ function(el, x, data) {
         plot = NULL,
         reduction = red,
         params = params,
-        render_valid = is_confirmed
+        render_valid = FALSE,
+        stored_reduction_valid = isTRUE(stored_reduction_valid)
       )
     )
     .cfg_store_session_preview(nm_chr, cache)
     invisible(NULL)
   }
   observeEvent(input$cfg_plot_format, {
-    cache <- isolate(.cfg_preview_cache())
-    if (isTRUE(cache$result$render_valid)) return(invisible(NULL))
-    .seed_cfg_preview_cache(.cfg_active_name())
-  }, ignoreInit = TRUE)
-  .preferred_cfg_plot_format <- function(entry) {
-    sobj <- .get_obj_from_entry(entry)
-    reds <- tryCatch(names(sobj@reductions), error = function(e) character())
-    reds_lc <- tolower(reds)
-    prefs <- tryCatch(entry$prefs$embedding_params, error = function(e) NULL)
-    # Agent note: Both embedding selectors must follow the explicitly confirmed reduction, not reduction insertion order.
-    confirmed_red <- tolower(.scalar_chr(.cfg_confirmation(entry)$reduction, default = ""))
-    if (nzchar(confirmed_red) && confirmed_red %in% reds_lc) return(reds[[match(confirmed_red, reds_lc)]])
-    saved_red <- tolower(.scalar_chr(prefs$reduction_name, default = ""))
-    if (nzchar(saved_red) && saved_red %in% reds_lc) return(reds[[match(saved_red, reds_lc)]])
-    pref_fmt <- toupper(as.character(prefs$plot_format %||% ""))
-    dims_pref <- suppressWarnings(as.integer(tryCatch(entry$prefs$confirmed_dims$value, error = function(e) NULL) %||% prefs$dims %||% NA_integer_))
-    dims_pref <- dims_pref[is.finite(dims_pref) & !is.na(dims_pref)]
-    if (length(dims_pref)) {
-      dim_tag <- as.integer(dims_pref[[1]])
-      if (!identical(pref_fmt, "TSNE")) {
-        hit <- match(sprintf("umap_pca_%d", dim_tag), reds_lc)
-        if (!is.na(hit)) return(reds[[hit]])
-      }
-      if (!identical(pref_fmt, "UMAP")) {
-        hit <- match(sprintf("tsne_pca_%d", dim_tag), reds_lc)
-        if (!is.na(hit)) return(reds[[hit]])
-      }
+    nm <- .cfg_active_name()
+    sel <- .scalar_chr(input$cfg_plot_format, default = "")
+    preview_saved <- isolate(.cfg_preview_by_object())[[nm]]
+    preview_result <- tryCatch(preview_saved$result, error = function(e) NULL)
+    preview_red <- .scalar_chr(
+      tryCatch(preview_result$reduction %||% preview_result$params$reduction_name, error = function(e) ""),
+      default = ""
+    )
+    if (isTRUE(preview_result$render_valid) &&
+        nzchar(sel) && nzchar(preview_red) &&
+        identical(tolower(sel), tolower(preview_red))) {
+      # Agent note: Selector rebinds can emit the same value after navigation.
+      # Preserve matching preview state; only a different selection invalidates it.
+      .cfg_preview_cache(preview_saved)
+      .perf_log("cfg_plot_format:restore_session_preview", details = c(
+        sprintf("object=%s", nm),
+        sprintf("reduction=%s", preview_red)
+      ))
+      return(invisible(NULL))
     }
-    if (identical(pref_fmt, "TSNE") && any(startsWith(reds_lc, "tsne"))) return(reds[[which(startsWith(reds_lc, "tsne"))[[1]]]])
-    if (identical(pref_fmt, "UMAP") && any(startsWith(reds_lc, "umap"))) return(reds[[which(startsWith(reds_lc, "umap"))[[1]]]])
-    if (any(startsWith(reds_lc, "umap"))) return(reds[[which(startsWith(reds_lc, "umap"))[[1]]]])
-    if (any(startsWith(reds_lc, "tsne"))) return(reds[[which(startsWith(reds_lc, "tsne"))[[1]]]])
-    if (length(reds)) return(reds[[1]])
-    "umap"
-  }
+    # A different dropdown value invalidates the previous plot view; it must
+    # never keep displaying a saved/designated reduction after that selection.
+    .cfg_reset_static_plot()
+    .cfg_preview_cache(list(key = NULL, result = NULL))
+    .seed_cfg_preview_cache(nm)
+  }, ignoreInit = TRUE)
   .is_umap3d_tab <- function(x) {
     tab <- tolower(trimws(.scalar_chr(x, default = "")))
     tab %in% c("umap3d_tab", "3d umap")
@@ -5503,6 +6314,9 @@ function(el, x, data) {
     t_active <- .perf_now()
     nm <- .scalar_chr(shared_data$active_object_name, default = "")
     .perf_log("active_object_name:reset_preview_state", details = sprintf("object=%s", if (nzchar(nm)) nm else "<empty>"))
+    .cfg_preview_in_progress(FALSE)
+    .cfg_auto_preview_attempt("")
+    .cfg_reset_static_plot()
     .cfg_preview_cache(list(key = NULL, result = NULL))
     .cfg_keeper_dirty(FALSE)
     tab_now <- .scalar_chr(input$plot_tabs, default = "")
@@ -5518,9 +6332,7 @@ function(el, x, data) {
       updateSliderInput(session, "prep_dims_slider", value = .coerce_dims(dims_saved))
     }
     entry <- shared_data$all_seurat_objects[[nm]]
-    preferred_fmt <- .preferred_cfg_plot_format(entry)
-    updateSelectInput(session, "cfg_plot_format", selected = preferred_fmt)
-    if (isTRUE(.cfg_is_confirmed(entry))) .cfg_restore_confirmed_controls(nm)
+    if (isTRUE(.cfg_is_confirmed_for_current_dims(entry))) .cfg_restore_confirmed_controls(nm)
     sobj_now <- .get_obj_from_entry(entry)
     cache_now <- tryCatch(entry$analysis_cache$cluster_sweep, error = function(e) NULL)
     cache_res_now <- suppressWarnings(as.numeric(cache_now$resolutions %||% numeric()))
@@ -5535,7 +6347,9 @@ function(el, x, data) {
     }
     .sweep_ready(sweep_ready_bootstrapped)
     preview_saved <- isolate(.cfg_preview_by_object())[[nm]]
-    if (is.list(preview_saved) && !is.null(preview_saved$result)) {
+    if (is.list(preview_saved) &&
+        !is.null(preview_saved$result) &&
+        .cfg_preview_matches_default_reduction(preview_saved, sobj_now)) {
       .cfg_preview_cache(preview_saved)
     } else {
       .seed_cfg_preview_cache(nm)
@@ -5589,7 +6403,7 @@ function(el, x, data) {
       analysis_reintegration_enabled(FALSE)
     }
   })
-  observeEvent(input$analysis_enable_reintegrate_overlay, {
+  .show_reintegration_confirm <- function() {
     if (!isTRUE(.analysis_show_reintegrate_entry())) return(invisible(NULL))
     .clear_analysis_switch_overlay()
     removeModal()
@@ -5602,6 +6416,13 @@ function(el, x, data) {
       ),
       p(ANALYSIS_UI_TEXT$t_text_reintegration_confirm)
     ))
+    invisible(NULL)
+  }
+  observeEvent(input$analysis_enable_reintegrate_overlay, {
+    .show_reintegration_confirm()
+  }, ignoreInit = TRUE)
+  observeEvent(input$analysis_enable_reintegrate_integration_overlay, {
+    .show_reintegration_confirm()
   }, ignoreInit = TRUE)
   observeEvent(input$analysis_enable_reintegrate_dims_overlay, {
     if (!isTRUE(.analysis_should_lock_elbow_preview())) return(invisible(NULL))
@@ -5651,11 +6472,15 @@ function(el, x, data) {
     analysis_reintegration_enabled(FALSE)
   }, ignoreInit = TRUE)
   observeEvent(input$run_norm_btn, {
+    .cfg_reset_static_plot()
     .cfg_preview_cache(list(key = NULL, result = NULL))
+    .cfg_auto_preview_attempt("")
     .cfg_keeper_dirty(TRUE)
   }, ignoreInit = TRUE)
   observeEvent(input$run_inte_btn, {
+    .cfg_reset_static_plot()
     .cfg_preview_cache(list(key = NULL, result = NULL))
+    .cfg_auto_preview_attempt("")
     .cfg_keeper_dirty(TRUE)
   }, ignoreInit = TRUE)
   observeEvent(list(
@@ -5696,6 +6521,16 @@ function(el, x, data) {
     mode_now <- toupper(.scalar_chr(input$umap3d_embedding_type %||% "UMAP", default = "UMAP"))
     label_now <- if (identical(mode_now, "TSNE")) "3D tSNE" else "3D UMAP"
     showNotification(sprintf("Generating %s preview...", label_now), type = "message", duration = 2)
+    prepared <- tryCatch(
+      .build_umap3d_prepared(),
+      error = function(e) {
+        msg <- paste(label_now, "error:", conditionMessage(e))
+        .umap3d_error(msg)
+        showNotification(msg, type = "error", duration = 8)
+        NULL
+      }
+    )
+    .umap3d_prepared(prepared)
   }, ignoreInit = TRUE)
 
   observeEvent(input$umap3d_embedding_type, {
@@ -5707,9 +6542,22 @@ function(el, x, data) {
     .umap3d_requested(FALSE)
     .umap3d_requested(TRUE)
     showNotification(sprintf("Switched to %s. Regenerating preview...", label_now), type = "message", duration = 2)
+    prepared <- tryCatch(
+      .build_umap3d_prepared(),
+      error = function(e) {
+        msg <- paste(label_now, "error:", conditionMessage(e))
+        .umap3d_error(msg)
+        showNotification(msg, type = "error", duration = 8)
+        NULL
+      }
+    )
+    .umap3d_prepared(prepared)
   }, ignoreInit = TRUE)
   
   observeEvent(shared_data$active_object_name, {
+    .umap3d_prepared(NULL)
+    .umap3d_requested(FALSE)
+    .umap3d_error(NULL)
     boot <- shared_data$analysis_boot
     active <- .scalar_chr(boot$active_object %||% shared_data$active_object_name, default = "")
     if (!nzchar(active)) return(invisible(NULL))
@@ -5732,10 +6580,12 @@ function(el, x, data) {
     prof <- .analysis_selection_profile()
     inobject_active <- isTRUE(.analysis_inobject_reintegrate_active())
     reintegrate_mode <- identical(.analysis_selector_mode(), "reintegrate")
+    reintegrate_locked <- isTRUE(.analysis_should_lock_integration())
     should_disable <- identical(method, "merge") ||
       (!isTRUE(reintegrate_mode) && isTRUE(prof$mixed)) ||
       (!isTRUE(reintegrate_mode) && isTRUE(prof$integrated_multi)) ||
-      (isTRUE(prof$integrated_single) && !isTRUE(inobject_active))
+      (isTRUE(prof$integrated_single) && !isTRUE(inobject_active)) ||
+      isTRUE(reintegrate_locked)
     if (isTRUE(should_disable)) {
       shinyjs::disable("run_inte_btn")
     } else {
@@ -5743,53 +6593,17 @@ function(el, x, data) {
     }
     .refresh_normalize_integration_visibility()
   })
-  
-  
-  .render_analysis_object_selector_input <- function(input_id, multiple = TRUE, enabled = TRUE, object_choices = NULL, allow_empty_selection = FALSE, selected_override = NULL) {
-    object_choices <- object_choices %||% .analysis_selectable_choices()
-    object_choices <- intersect(as.character(object_choices %||% character(0)), .analysis_selectable_choices())
-    if (!length(object_choices)) {
-      return(helpText("No objects loaded for analysis."))
-    }
-    selected <- if (!is.null(selected_override)) {
-      intersect(as.character(selected_override %||% character(0)), object_choices)
+  observe({
+    reference_compatible <- identical(.scalar_chr(input$inte_method, default = "CCA"), "RPCA")
+    if (isTRUE(reference_compatible)) {
+      shinyjs::enable("integration_use_selected_references")
+      shinyjs::hide("integration_reference_unavailable_note")
     } else {
-      .analysis_selection_for_choices(
-        object_choices = object_choices,
-        allow_empty = allow_empty_selection,
-        fallback_to_active = TRUE
-      )
+      shinyjs::disable("integration_use_selected_references")
+      shinyjs::show("integration_reference_unavailable_note")
     }
-    if (!isTRUE(multiple)) {
-      active_selected <- .scalar_chr(shared_data$active_object_name, default = "")
-      if (!nzchar(active_selected) || !active_selected %in% object_choices) {
-        active_selected <- .scalar_chr(selected[[1]], default = object_choices[[1]])
-      }
-      control <- (
-        selectInput(
-          input_id,
-          ANALYSIS_UI_TEXT$t_text_replace_active_dataset_analysis,
-          choices = object_choices,
-          selected = active_selected
-        )
-      )
-      if (!isTRUE(enabled)) control <- shinyjs::disabled(control)
-      return(control)
-    }
-    control <- selectizeInput(
-      input_id,
-      ANALYSIS_UI_TEXT$t_text_add_datasets_analysis,
-      choices = object_choices,
-      selected = selected,
-      multiple = TRUE,
-      options = list(
-        placeholder = ANALYSIS_UI_TEXT$t_text_add_one_more_objects,
-        plugins = list("remove_button")
-      )
-    )
-    if (!isTRUE(enabled)) control <- shinyjs::disabled(control)
-    control
-  }
+  })
+
 
   output$analysis_object_selector_inline_ui <- renderUI({
     mode_now <- .analysis_selector_mode()
@@ -5817,14 +6631,7 @@ function(el, x, data) {
       NULL
     }
     if (identical(mode_now, "replace")) {
-      control <- .render_analysis_object_selector_input(
-        "active_object_name_input_inline",
-        enabled = TRUE,
-        object_choices = .analysis_selectable_choices(),
-        selected_override = .normalize_selector_selection()
-      )
       return(tagList(
-        control,
         .state_note(),
         if (isTRUE(.analysis_show_reintegrate_entry())) {
           div(
@@ -5844,18 +6651,53 @@ function(el, x, data) {
         )
       ))
     }
-    tagList(
-      .render_analysis_object_selector_input(
-        "active_object_name_input_inline",
-        enabled = isTRUE(.analysis_normalize_multiselect_enabled()),
-        object_choices = if (identical(mode_now, "reintegrate")) .analysis_source_choices() else .analysis_selectable_choices(),
-        allow_empty_selection = identical(mode_now, "reintegrate"),
-        selected_override = .normalize_selector_selection()
-      ),
-      .state_note()
-    )
+    .state_note()
   })
   outputOptions(output, "analysis_object_selector_inline_ui", suspendWhenHidden = FALSE)
+
+  observe({
+    mode_now <- .analysis_selector_mode()
+    object_choices <- if (identical(mode_now, "reintegrate")) {
+      .analysis_source_choices()
+    } else {
+      .analysis_selectable_choices()
+    }
+    object_choices <- as.character(object_choices %||% character(0))
+    object_choices <- object_choices[!is.na(object_choices) & nzchar(object_choices)]
+    selected <- intersect(as.character(.normalize_selector_selection() %||% character(0)), object_choices)
+    enabled <- (identical(mode_now, "replace") || isTRUE(.analysis_normalize_multiselect_enabled())) &&
+      !isTRUE(.analysis_should_lock_integration())
+    signature <- paste(
+      mode_now,
+      as.character(isTRUE(enabled)),
+      paste(object_choices, collapse = "\r"),
+      paste(selected, collapse = "\r"),
+      sep = "\n"
+    )
+    if (identical(signature, analysis_inline_selector_signature())) {
+      return(invisible(NULL))
+    }
+    analysis_inline_selector_signature(signature)
+    suppressWarnings(try(freezeReactiveValue(input, "active_object_name_input_inline"), silent = TRUE))
+    updateSelectizeInput(
+      session,
+      "active_object_name_input_inline",
+      choices = object_choices,
+      selected = selected
+    )
+    if (isTRUE(enabled)) {
+      shinyjs::enable("active_object_name_input_inline")
+    } else {
+      shinyjs::disable("active_object_name_input_inline")
+    }
+    .perf_log("analysis_selector:sync_inline", details = c(
+      sprintf("mode=%s", mode_now),
+      sprintf("choices=%d", length(object_choices)),
+      sprintf("selected=%d", length(selected)),
+      sprintf("enabled=%s", as.character(isTRUE(enabled)))
+    ))
+    invisible(NULL)
+  })
 
   .apply_analysis_selection <- function(sel, replace_all = FALSE) {
     if (is.null(sel) || !length(sel)) return(invisible(NULL))
@@ -5875,7 +6717,8 @@ function(el, x, data) {
       return(invisible(NULL))
     }
     .perf_log("apply_analysis_selection", details = c(
-      sprintf("selected=%s", paste(sel, collapse = ",")),
+      sprintf("selected_n=%d", length(sel)),
+      sprintf("selected_head=%s", paste(head(sel, 5L), collapse = ",")),
       sprintf("prev_active=%s", prev_active)
     ))
     analysis_prefer_integrated_boot_pending(FALSE)
@@ -5924,7 +6767,11 @@ function(el, x, data) {
     shared_data = shared_data,
     input_id = "active_object_name_input",
     choices = .analysis_selectable_choices,
-    enabled = reactive(.analysis_replace_selector_enabled()),
+    # The page-header selector switches the active object independently from
+    # the inline selector, which is locked while integration is unavailable.
+    # Header selector always switches the canonical active object. Integration
+    # mode only controls the inline multi-object selector below.
+    enabled = reactive(TRUE),
     active = reactive(identical(.scalar_chr(input$main_navbar, default = ""), "analysis_tab")),
     on_user_selection = function(selected, previous) {
       .perf_log(
@@ -5938,42 +6785,44 @@ function(el, x, data) {
     }
   )
 
-  observeEvent(input$plot_tabs, {
-    if (!identical(.scalar_chr(input$main_navbar, default = ""), "analysis_tab")) return(invisible(NULL))
-    tab_now <- .scalar_chr(input$plot_tabs, default = "")
-    if (nzchar(tab_now)) return(invisible(NULL))
-    d <- input$plot_tabs_dom_diag
-    d_active <- .scalar_chr(d$active, default = "")
-    if (!is.null(d) && isTRUE(d$visible) && nzchar(d_active)) {
-      return(invisible(NULL))
-    }
-    fallback_tab <- .scalar_chr(analysis_last_nonempty_plot_tab(), default = "normalize / integrate")
-    if (!nzchar(fallback_tab)) fallback_tab <- "normalize / integrate"
-    .perf_log("plot_tabs:empty_restore", details = c(
-      sprintf("fallback=%s", fallback_tab),
-      sprintf("active=%s", .scalar_chr(shared_data$active_object_name, default = "<empty>"))
-    ))
-    .go_plot_tab(fallback_tab)
-    invisible(NULL)
-  }, ignoreInit = FALSE)
-
-  observeEvent(input$active_object_name_input_inline, {
+  observeEvent(input$active_object_name_input_inline_user_event, {
     if (!identical(.scalar_chr(input$main_navbar, default = ""), "analysis_tab")) {
       return(invisible(NULL))
     }
-    .apply_analysis_selection(input$active_object_name_input_inline)
+    event <- input$active_object_name_input_inline_user_event
+    selected <- if (is.list(event) && !is.null(event$value)) event$value else event
+    .apply_analysis_selection(selected)
   }, ignoreInit = TRUE)
 
-  observeEvent(input$active_object_name_input_umap_inline, {
+  observeEvent(input$active_object_name_input_umap_inline_user_event, {
     if (!identical(.scalar_chr(input$main_navbar, default = ""), "analysis_tab")) {
       return(invisible(NULL))
     }
-    .apply_analysis_selection(input$active_object_name_input_umap_inline)
+    event <- input$active_object_name_input_umap_inline_user_event
+    selected <- if (is.list(event) && !is.null(event$value)) event$value else event
+    .apply_analysis_selection(selected)
   }, ignoreInit = TRUE)
   INTE_SUFFIX_MIN_LEN <- 2L
   INTE_SUFFIX_MAX_LEN <- 10L
+  # Agent note: Keep reference selection separate from the method input so
+  # switching away from RPCA hides/disables the picker without discarding the
+  # user's reviewed references.
+  integration_reference_selection <- reactiveVal(character(0))
+  integration_pending_reference_datasets <- reactiveVal(character(0))
   integration_pending_sel <- reactiveVal(character(0))
   integration_preflight_pending_sel <- reactiveVal(character(0))
+  observeEvent(input$integration_reference_datasets, {
+    if (is.null(input$integration_reference_datasets)) return(invisible(NULL))
+    selected <- as.character(input$integration_reference_datasets)
+    selected <- selected[!is.na(selected) & nzchar(selected)]
+    integration_reference_selection(unique(selected))
+  }, ignoreNULL = FALSE)
+  observe({
+    choices <- .integration_reference_choices()
+    current <- integration_reference_selection()
+    valid <- intersect(current, unname(choices))
+    if (!identical(current, valid)) integration_reference_selection(valid)
+  })
   integration_timing <- reactiveVal(list(
     start = NULL,
     end = NULL,
@@ -6069,28 +6918,32 @@ function(el, x, data) {
     out
   }
   
-  .inte_run <- function(sel, alias_map = NULL) {
+  .inte_run <- function(sel, alias_map = NULL, reference_datasets = character(0)) {
+    reference_datasets <- unique(as.character(reference_datasets %||% character(0)))
+    reference_datasets <- reference_datasets[!is.na(reference_datasets) & nzchar(reference_datasets)]
     start_ts <- Sys.time()
-    elbow_overlay_handoff <- FALSE
     integration_timing(list(start = start_ts, end = NULL, duration_sec = NULL, status = "running"))
     .inte_overlay <- function(msg = SPINNER_OVERLAY_MESSAGE_RUN_INTE_BTN, pct = NULL) {
-      overlay_show(text = msg, pct = pct)
+      overlay_show(text = msg, pct = pct, loader = "integration")
     }
+    elbow_render_overlay_owned(FALSE)
     .inte_overlay(SPINNER_OVERLAY_MESSAGE_RUN_INTE_BTN, pct = 1)
-    elbow_render_overlay_owned(TRUE)
-    # Agent note: Successful integration hands overlay ownership to prep_elbow_plot readiness; errors and early returns still hide here.
     on.exit({
-      if (!isTRUE(elbow_overlay_handoff)) {
-        elbow_render_overlay_owned(FALSE)
-        overlay_hide()
-      }
+      # Keep overlay visible when elbow generation has handed ownership to the
+      # plot render; prep_elbow_plot hides it after the first completed render.
+      if (!isTRUE(isolate(elbow_render_overlay_owned()))) overlay_hide()
     }, add = TRUE)
     
-    updateTabsetPanel(session, inputId = "plot_tabs", selected = "normalize / integrate")
+    .go_plot_tab("normalize / integrate")
     reg <- shared_data$all_seurat_objects %||% list()
     sel <- intersect(as.character(sel), names(reg))
     if (!length(sel)) {
       showNotification(ANALYSIS_UI_TEXT$t_text_integration_no_selected, type = "error")
+      return(invisible(NULL))
+    }
+    method_now <- .scalar_chr(input$inte_method, default = "CCA")
+    if (length(reference_datasets) && !identical(method_now, "RPCA")) {
+      showNotification("Selected reference datasets are supported only for RPCA.", type = "error", duration = NULL)
       return(invisible(NULL))
     }
     contam_flags <- vapply(sel, function(nm) {
@@ -6119,24 +6972,47 @@ function(el, x, data) {
         showNotification("Some selected entries are not valid Seurat objects.", type = "error")
         return(invisible(NULL))
       }
-      ids <- sel
-      if (!is.null(alias_map)) {
-        ids <- unname(alias_map[sel])
+      ids <- if (is.null(alias_map)) {
+        unname(.inte_make_unique_aliases(sel))
+      } else {
+        unname(alias_map[sel])
       }
-      if (!length(ids) || length(ids) != length(sel) || any(!nzchar(ids)) || anyDuplicated(ids)) {
+      if (!length(ids) || length(ids) != length(sel) || any(!nzchar(ids)) || anyDuplicated(ids) ||
+          any(nchar(ids) < INTE_SUFFIX_MIN_LEN | nchar(ids) > INTE_SUFFIX_MAX_LEN) ||
+          any(!grepl("^[A-Z0-9]+$", ids))) {
         showNotification(ANALYSIS_UI_TEXT$t_text_integration_invalid_suffix_map, type = "error")
         return(invisible(NULL))
       }
       seurat_obj <- tryCatch({
-        objs <- Map(function(obj, nm) {
+        # Agent note: Apply the confirmed barcode suffix before merging. Do not
+        # use merge(add.cell.ids=...), which creates the Loupe-incompatible
+        # `ALIAS_barcode` prefix form. The export normalizer remains available
+        # for legacy objects that already carry that old prefix form.
+        objs <- Map(function(obj, nm, alias) {
           obj$orig.ident <- nm
+          old_names <- colnames(obj)
+          new_names <- paste0(old_names, "_", alias)
+          if (anyDuplicated(new_names)) {
+            stop("Barcode suffixing produced duplicated cell names for ", nm)
+          }
+          obj <- SeuratObject::RenameCells(object = obj, new.names = new_names)
+          obj$barcode_suffix_alias <- rep(alias, ncol(obj))
+          obj$barcode_suffix_source <- rep(nm, ncol(obj))
           obj
-        }, objs, sel)
-        if (length(objs) == 2L) {
-          merge(x = objs[[1]], y = objs[[2]], add.cell.ids = ids, project = "analysis_temp")
+        }, objs, sel, ids)
+        merged_obj <- if (length(objs) == 2L) {
+          merge(x = objs[[1]], y = objs[[2]], project = "analysis_temp")
         } else {
-          merge(x = objs[[1]], y = objs[-1], add.cell.ids = ids, project = "analysis_temp")
+          merge(x = objs[[1]], y = objs[-1], project = "analysis_temp")
         }
+        merged_obj@misc$barcode_suffix <- list(
+          enabled = TRUE,
+          delimiter = "_",
+          alias_by = "orig.ident",
+          alias_map = as.list(setNames(ids, sel)),
+          applied_at = as.character(Sys.time())
+        )
+        merged_obj
       }, error = function(e) {
         showNotification(paste("Failed to combine selected objects for integration:", e$message), type = "error", duration = 8)
         NULL
@@ -6242,31 +7118,165 @@ function(el, x, data) {
     original_lib_paths <- .libPaths(); .libPaths(c(shared_data$active_environment$path, original_lib_paths))
     on.exit({ .libPaths(original_lib_paths) }, add = TRUE)
     
+    method_now <- .scalar_chr(input$inte_method, default = "CCA")
+    method_key <- toupper(method_now)
+    # Agent note: Integration progress is stage-weighted because Seurat exposes
+    # granular work counts only during anchor search. Core callbacks count the
+    # other stages and per-sample work; anchor messages fill the anchor range.
+    inte_progress_plan <- switch(
+      method_key,
+      CCA = list(
+        starting = c(start = 1, end = 3),
+        split = c(start = 3, end = 6),
+        sample_preprocessing = c(start = 6, end = 25),
+        feature_setup = c(start = 25, end = 32),
+        anchor_search = c(start = 32, end = 82),
+        integration_data = c(start = 82, end = 91),
+        post_integration_pca = c(start = 91, end = 99)
+      ),
+      RPCA = list(
+        starting = c(start = 1, end = 3),
+        split = c(start = 3, end = 6),
+        sample_preprocessing = c(start = 6, end = 24),
+        feature_setup = c(start = 24, end = 31),
+        method_preparation = c(start = 31, end = 48),
+        anchor_search = c(start = 48, end = 84),
+        integration_data = c(start = 84, end = 92),
+        post_integration_pca = c(start = 92, end = 99)
+      ),
+      SCT = list(
+        starting = c(start = 1, end = 3),
+        split = c(start = 3, end = 6),
+        sample_preprocessing = c(start = 6, end = 38),
+        feature_setup = c(start = 38, end = 46),
+        anchor_search = c(start = 46, end = 83),
+        integration_data = c(start = 83, end = 92),
+        post_integration_pca = c(start = 92, end = 99)
+      ),
+      HARMONY = list(
+        starting = c(start = 1, end = 3),
+        split = c(start = 3, end = 6),
+        sample_preprocessing = c(start = 6, end = 25),
+        method_preparation = c(start = 25, end = 55),
+        harmony_run = c(start = 55, end = 94),
+        post_integration_pca = c(start = 94, end = 99)
+      ),
+      stop("Unsupported integration method for progress tracking: ", method_now)
+    )
+
     prog <- NULL
     on.exit({
       if (!is.null(prog)) prog$close()
     }, add = TRUE)
-    prog_val <- 0L
-    .open_prog <- function() {
-      if (is.null(prog)) {
-        prog <<- shiny::Progress$new(session, min = 0, max = 100)
-        prog_val <<- 1L
-        .inte_overlay(sprintf("Integrating (%s)…", input$inte_method), pct = prog_val)
+    progress_state <- new.env(parent = emptyenv())
+    progress_state$pct <- 1
+    progress_state$stage <- "starting"
+    progress_state$counter_done <- NA_real_
+    progress_state$counter_total <- NA_real_
+
+    .inte_fraction <- function(completed, total) {
+      if (is.null(completed) || is.null(total) || length(completed) != 1L || length(total) != 1L) {
+        return(NA_real_)
+      }
+      completed <- suppressWarnings(as.numeric(completed))
+      total <- suppressWarnings(as.numeric(total))
+      if (!is.finite(completed) || !is.finite(total) || total <= 0) return(NA_real_)
+      max(0, min(1, completed / total))
+    }
+
+    .inte_stage_pct <- function(stage, completed = NULL, total = NULL) {
+      if (identical(stage, "complete")) return(100)
+      spec <- inte_progress_plan[[stage]]
+      if (is.null(spec)) stop("Unknown integration progress stage: ", stage)
+      frac <- .inte_fraction(completed, total)
+      if (is.na(frac)) return(as.numeric(spec[["start"]]))
+      as.numeric(spec[["start"]] + frac * (spec[["end"]] - spec[["start"]]))
+    }
+
+    .inte_progress_push <- function(detail_txt = "Running…",
+                                     stage = NULL,
+                                     completed = NULL,
+                                     total = NULL,
+      pct = NULL) {
+      if (!is.null(stage)) {
+        progress_state$stage <- stage
+        pct <- .inte_stage_pct(stage, completed = completed, total = total)
+      }
+      if (!is.null(pct)) {
+        pct <- suppressWarnings(as.numeric(pct))
+        if (!is.finite(pct)) stop("Integration progress percentage is invalid.")
+        progress_state$pct <- round(max(0, min(100, pct)), 1)
+      }
+      detail_txt <- as.character(detail_txt %||% "Running…")[[1]]
+      .inte_overlay(
+        sprintf("Integrating (%s)… %s", method_now, detail_txt),
+        pct = progress_state$pct
+      )
+      if (!is.null(prog)) {
         prog$set(
-          message = sprintf("Integrating (%s)…", input$inte_method),
-          detail = "Running…",
-          value = prog_val
+          message = sprintf("Integrating (%s)…", method_now),
+          detail = detail_txt,
+          value = progress_state$pct
         )
       }
     }
-    .advance <- function(detail_txt, add = 2L) {
-      .open_prog()
-      prog_val <<- min(99L, prog_val + as.integer(add))
-      .inte_overlay(sprintf("Integrating (%s)… %s", input$inte_method, detail_txt), pct = prog_val)
-      prog$set(message = sprintf("Integrating (%s)…", input$inte_method),
-               detail  = detail_txt,
-               value   = prog_val)
+
+    .inte_counter_progress <- function(detail_txt) {
+      hit <- regmatches(
+        detail_txt,
+        regexec(
+          "([0-9][0-9,]*)\\s*\\**\\s*(?:of|/)\\s*\\**\\s*([0-9][0-9,]*)",
+          detail_txt,
+          ignore.case = TRUE,
+          perl = TRUE
+        )
+      )[[1]]
+      if (length(hit) != 3L) return(FALSE)
+      done <- suppressWarnings(as.numeric(gsub(",", "", hit[[2]], fixed = TRUE)))
+      total <- suppressWarnings(as.numeric(gsub(",", "", hit[[3]], fixed = TRUE)))
+      if (!is.finite(done) || !is.finite(total) || total <= 0 || done < 0 || done > total) {
+        return(FALSE)
+      }
+
+      detail_lower <- tolower(detail_txt)
+      stage <- progress_state$stage
+      if (grepl("anchor|compar", detail_lower, perl = TRUE)) {
+        stage <- "anchor_search"
+      } else if (grepl("merge|integrat|dataset", detail_lower, perl = TRUE)) {
+        stage <- "integration_data"
+      } else if (grepl("harmony|iteration", detail_lower, perl = TRUE) &&
+                 "harmony_run" %in% names(inte_progress_plan)) {
+        stage <- "harmony_run"
+      }
+
+      if (!stage %in% names(inte_progress_plan)) return(FALSE)
+      if (!grepl(
+        "completed|complete|progress|processed|processing|integrat|merge|anchor|compar|dataset|iteration|sample|feature|batch",
+        detail_lower,
+        perl = TRUE
+      ) && !stage %in% c("anchor_search", "integration_data", "harmony_run")) {
+        return(FALSE)
+      }
+
+      progress_state$stage <- stage
+      progress_state$counter_done <- done
+      progress_state$counter_total <- total
+      .inte_progress_push(
+        detail_txt = detail_txt,
+        stage = stage,
+        completed = done,
+        total = total
+      )
+      TRUE
     }
+
+    prog <- shiny::Progress$new(session, min = 0, max = 100)
+    .inte_progress_push(
+      detail_txt = "Starting…",
+      stage = "starting",
+      completed = 0L,
+      total = 1L
+    )
     
     tryCatch({
       env_name <- tolower(as.character(shared_data$active_environment$name %||% ""))
@@ -6277,15 +7287,44 @@ function(el, x, data) {
       integrated_obj <- withCallingHandlers(
         core_analysis_tab_a_run_integration(
           seurat_obj   = seurat_obj,
-          method       = input$inte_method,
-          integrate_by = input$integrate_by_var,
-          barcode_suffix = list(enabled = FALSE, delimiter = "_")
+          method       = method_now,
+          integrate_by = integrate_by_now,
+          # Suffixes are applied to each selected object before merge above;
+          # keep the backend pass disabled so they are not appended twice.
+          barcode_suffix = list(enabled = FALSE, delimiter = "_"),
+          reference_datasets = reference_datasets,
+          progress_cb = function(stage, completed, total, detail) {
+            .inte_progress_push(
+              detail_txt = detail,
+              stage = stage,
+              completed = completed,
+              total = total
+            )
+          }
         ),
         message = function(m) {
-          .advance(conditionMessage(m), add = 2L)
+          detail_txt <- conditionMessage(m)
+          if (!.inte_counter_progress(detail_txt)) {
+            .inte_progress_push(detail_txt = detail_txt)
+          }
           invokeRestart("muffleMessage")
         }
       )
+
+      reference_mode <- if (length(reference_datasets)) "selected_references" else "all_pairwise"
+      # Agent note: Keep the reference mode with the object because the anchor
+      # topology is not recoverable from the integrated assay alone; this keeps
+      # later exports and re-analysis auditable.
+      reference_provenance <- list(
+        mode = reference_mode,
+        datasets = reference_datasets,
+        integrate_by = integrate_by_now,
+        recorded_at = Sys.time()
+      )
+      misc <- tryCatch(integrated_obj$object@misc, error = function(e) list())
+      if (!is.list(misc)) misc <- list()
+      misc$wanlab_integration_reference <- reference_provenance
+      integrated_obj$object@misc <- misc
       
       if (length(sel) > 1) {
         out_base <- paste0("integrated_", format(Sys.time(), "%Y%m%d_%H%M%S"))
@@ -6295,16 +7334,26 @@ function(el, x, data) {
           out_name <- paste0(out_base, "_", idx)
           idx <- idx + 1L
         }
+        integrated_obj$object <- wanlab_set_reduction_provenance(
+          integrated_obj$object, "pca", out_name, "pca",
+          tryCatch(ncol(Seurat::Embeddings(integrated_obj$object, "pca")), error = function(e) NA_integer_)
+        )
+        integrated_obj$object <- wanlab_set_reduction_provenance(
+          integrated_obj$object, "harmony", out_name, "pca",
+          tryCatch(ncol(Seurat::Embeddings(integrated_obj$object, "harmony")), error = function(e) NA_integer_)
+        )
         shared_data$all_seurat_objects[[out_name]] <- list(
           obj = integrated_obj$object,
           prefs = list(),
-          plots = list(elbow = integrated_obj$elbow_plot, elbow_source = "analysis"),
+          plots = list(),
           analysis_cache = list(),
           meta = list(
             stage = "integrated",
             analysis_preprocessing = list(
               operation = "integration",
-              method = .scalar_chr(input$inte_method, default = ""),
+              method = method_now,
+              reference_mode = reference_mode,
+              reference_datasets = reference_datasets,
               completed_at = Sys.time()
             ),
             parents = sel,
@@ -6318,6 +7367,14 @@ function(el, x, data) {
         .sync_active_elbow_preview(out_name, shared_data$all_seurat_objects[[out_name]])
       } else {
         nm <- sel[[1]]
+        integrated_obj$object <- wanlab_set_reduction_provenance(
+          integrated_obj$object, "pca", nm, "pca",
+          tryCatch(ncol(Seurat::Embeddings(integrated_obj$object, "pca")), error = function(e) NA_integer_)
+        )
+        integrated_obj$object <- wanlab_set_reduction_provenance(
+          integrated_obj$object, "harmony", nm, "pca",
+          tryCatch(ncol(Seurat::Embeddings(integrated_obj$object, "harmony")), error = function(e) NA_integer_)
+        )
         if (is.null(shared_data$all_seurat_objects[[nm]]$plots) || !is.list(shared_data$all_seurat_objects[[nm]]$plots)) {
           shared_data$all_seurat_objects[[nm]]$plots <- list()
         }
@@ -6328,8 +7385,11 @@ function(el, x, data) {
           shared_data$all_seurat_objects[[nm]]$analysis_cache <- list()
         }
         shared_data$all_seurat_objects[[nm]]$obj         <- integrated_obj$object
-        shared_data$all_seurat_objects[[nm]]$plots$elbow <- integrated_obj$elbow_plot
-        shared_data$all_seurat_objects[[nm]]$plots$elbow_source <- "analysis"
+        # A new integration invalidates any prior elbow plot. The successful
+        # integration path regenerates it below; manual generation remains
+        # available for imported objects without elbow data.
+        shared_data$all_seurat_objects[[nm]]$plots$elbow <- NULL
+        shared_data$all_seurat_objects[[nm]]$plots$elbow_source <- NULL
         if (is.null(shared_data$all_seurat_objects[[nm]]$meta) ||
             !is.list(shared_data$all_seurat_objects[[nm]]$meta)) {
           shared_data$all_seurat_objects[[nm]]$meta <- list()
@@ -6337,17 +7397,24 @@ function(el, x, data) {
         shared_data$all_seurat_objects[[nm]]$meta$stage <- "integrated"
         shared_data$all_seurat_objects[[nm]]$meta$analysis_preprocessing <- list(
           operation = "integration",
-          method = .scalar_chr(input$inte_method, default = ""),
+          method = method_now,
+          reference_mode = reference_mode,
+          reference_datasets = reference_datasets,
           completed_at = Sys.time()
         )
         .sync_active_elbow_preview(nm, shared_data$all_seurat_objects[[nm]])
         shared_data$active_object_name <- nm
       }
       analysis_reintegration_enabled(FALSE)
-      
-      if (!is.null(prog)) prog$set(detail = "Integration complete. Updating elbow…", value = 100)
-      .inte_overlay("Integration complete. Updating elbow…", pct = 100)
-      elbow_overlay_handoff <- TRUE
+
+      elbow_generated <- isTRUE(.generate_elbow_for_active())
+      if (isTRUE(elbow_generated)) {
+        .inte_progress_push("Integration complete. Elbow plot generated.", pct = 100)
+        showNotification("Integration complete. Elbow plot generated.", type = "message")
+      } else {
+        .inte_progress_push("Integration complete. Elbow plot generation failed.", pct = 100)
+        showNotification("Integration complete, but elbow plot generation failed. See the error above.", type = "warning", duration = NULL)
+      }
       end_ts <- Sys.time()
       integration_timing(list(
         start = start_ts,
@@ -6355,10 +7422,11 @@ function(el, x, data) {
         duration_sec = as.numeric(difftime(end_ts, start_ts, units = "secs")),
         status = "success"
       ))
-      showNotification("Integration complete. Elbow plot updated.", type = "message")
     }, error = function(e) {
-      if (!is.null(prog)) prog$set(detail = paste("Integration error:", e$message), value = 100)
-      .inte_overlay("Integration failed.", pct = 100)
+      .inte_progress_push(
+        detail_txt = paste("Integration error:", e$message),
+        pct = progress_state$pct
+      )
       end_ts <- Sys.time()
       integration_timing(list(
         start = start_ts,
@@ -6384,14 +7452,14 @@ function(el, x, data) {
     sum(as.integer(vals), na.rm = TRUE)
   }
 
-  .integration_begin_suffix_or_run <- function(sel, reg) {
+  .integration_begin_suffix_or_run <- function(sel, reg, reference_datasets = character(0)) {
     sel <- intersect(as.character(sel %||% character(0)), names(reg %||% list()))
     if (!length(sel)) {
       showNotification(ANALYSIS_UI_TEXT$t_text_integration_no_selected, type = "error")
       return(invisible(NULL))
     }
     if (length(sel) == 1L) {
-      .inte_run(sel = sel, alias_map = NULL)
+      .inte_run(sel = sel, alias_map = NULL, reference_datasets = reference_datasets)
       return(invisible(NULL))
     }
 
@@ -6403,6 +7471,7 @@ function(el, x, data) {
       x
     }, character(1))
     integration_pending_sel(sel)
+    integration_pending_reference_datasets(reference_datasets)
 
     showModal(modalDialog(
       title = ANALYSIS_UI_TEXT$t_title_integration_suffix_confirm,
@@ -6456,17 +7525,15 @@ function(el, x, data) {
   # ================== ACTIONS (overlay + toasts) ==================
   
   observeEvent(input$run_norm_btn, {
-    norm_overlay_handoff <- FALSE
-    overlay_show(SPINNER_OVERLAY_MESSAGE_RUN_NORM_BTN)
-    elbow_render_overlay_owned(TRUE)
+    overlay_show(SPINNER_OVERLAY_MESSAGE_RUN_NORM_BTN, loader = "metrics")
     on.exit({
-      if (!isTRUE(norm_overlay_handoff)) {
-        elbow_render_overlay_owned(FALSE)
-        overlay_hide()
-      }
+      # Agent note: Normalization closes its own overlay; elbow rendering is
+      # intentionally deferred to the explicit missing-plot card.
+      elbow_render_overlay_owned(FALSE)
+      overlay_hide()
     }, add = TRUE)
     
-    updateTabsetPanel(session, inputId = "plot_tabs", selected = "normalize / integrate")
+    .go_plot_tab("normalize / integrate")
     seurat_obj <- active_seurat_object()$obj
     if (is.null(seurat_obj)) showNotification("Data invalid for normalization.", type = "error")
     req(seurat_obj)
@@ -6476,6 +7543,10 @@ function(el, x, data) {
     tryCatch({
       norm_results <- core_analysis_tab_a_run_normalization(seurat_obj = seurat_obj, method = input$norm_method)
       nm <- shared_data$active_object_name
+      norm_results$object <- wanlab_set_reduction_provenance(
+        norm_results$object, "pca", nm, "pca",
+        tryCatch(ncol(Seurat::Embeddings(norm_results$object, "pca")), error = function(e) NA_integer_)
+      )
       shared_data$all_seurat_objects[[nm]]$obj <- norm_results$object
       if (is.null(shared_data$all_seurat_objects[[nm]]$meta) ||
           !is.list(shared_data$all_seurat_objects[[nm]]$meta)) {
@@ -6491,17 +7562,20 @@ function(el, x, data) {
         method = .scalar_chr(input$norm_method, default = ""),
         completed_at = Sys.time()
       )
-      shared_data$all_seurat_objects[[nm]]$plots$elbow <- norm_results$elbow_plot
-      shared_data$all_seurat_objects[[nm]]$plots$elbow_source <- "analysis"
+      shared_data$all_seurat_objects[[nm]]$plots$elbow <- NULL
+      shared_data$all_seurat_objects[[nm]]$plots$elbow_source <- NULL
       .sync_active_elbow_preview(nm, shared_data$all_seurat_objects[[nm]])
-      norm_overlay_handoff <- TRUE
-      showNotification("Normalization complete. Check the Elbow above.", type = "message")
+      showNotification("Normalization complete. Click Generate elbow plot when needed.", type = "message")
     }, error = function(e) {
       showNotification(paste("Normalization error:", e$message), type = "error", duration = NULL)
     }, finally = { .libPaths(original_lib_paths) })
   })
   
   observeEvent(input$run_inte_btn, {
+    if (isTRUE(.analysis_should_lock_integration())) {
+      showNotification(ANALYSIS_UI_TEXT$t_text_enable_reintegration, type = "warning", duration = NULL)
+      return()
+    }
     reg <- shared_data$all_seurat_objects %||% list()
     prof <- .analysis_selection_profile()
     inobject_active <- isTRUE(.analysis_inobject_reintegrate_active())
@@ -6532,13 +7606,24 @@ function(el, x, data) {
       return()
     }
     method_now <- .scalar_chr(input$inte_method, default = "CCA")
+    reference_datasets <- character(0)
+    if (identical(method_now, "RPCA") && isTRUE(input$integration_use_selected_references)) {
+      reference_datasets <- intersect(
+        integration_reference_selection(),
+        unname(.integration_reference_choices())
+      )
+      if (length(reference_datasets) < 2L) {
+        showNotification(ANALYSIS_UI_TEXT$t_text_integration_reference_minimum, type = "error", duration = NULL)
+        return()
+      }
+    }
     total_cells <- .integration_total_cells(sel, reg)
     n_objs <- length(sel)
     .perf_log("integration_preflight", details = c(
       sprintf("method=%s", method_now),
       sprintf("objects=%d", n_objs),
       sprintf("cells=%d", total_cells),
-      sprintf("selected=%s", paste(sel, collapse = ","))
+      sprintf("selected_head=%s", paste(head(sel, 5L), collapse = ","))
     ))
 
     if (identical(method_now, "SCT") && total_cells >= 220000L) {
@@ -6572,7 +7657,11 @@ function(el, x, data) {
       return()
     }
 
-    .integration_begin_suffix_or_run(sel = sel, reg = reg)
+    .integration_begin_suffix_or_run(
+      sel = sel,
+      reg = reg,
+      reference_datasets = reference_datasets
+    )
   }, ignoreInit = TRUE)
 
   observeEvent(input$confirm_integration_preflight_btn, {
@@ -6614,8 +7703,10 @@ function(el, x, data) {
     
     alias_map <- setNames(aliases, sel)
     removeModal()
+    reference_datasets <- integration_pending_reference_datasets()
     integration_pending_sel(character(0))
-    .inte_run(sel = sel, alias_map = alias_map)
+    integration_pending_reference_datasets(character(0))
+    .inte_run(sel = sel, alias_map = alias_map, reference_datasets = reference_datasets)
   }, ignoreInit = TRUE)
 
   output$clustertree_plot <- renderPlot({
@@ -6623,7 +7714,9 @@ function(el, x, data) {
     req(nzchar(nm))
     sobj <- .get_active_sobj(shared_data)
     req(!is.null(sobj))
-    .ensure_cluster_sweep_cache_for_object(nm, sobj = sobj)
+    # Agent note: Plot outputs only read the sweep cache. Cache construction
+    # belongs to active-object hydration or the explicit sweep action; writing
+    # it here can invalidate this output while it is rendering.
     cache <- tryCatch(shared_data$all_seurat_objects[[nm]]$analysis_cache$cluster_sweep, error = function(e) NULL)
 
     if (!is.list(cache) || is.null(cache$resolutions) || !length(cache$resolutions)) {
@@ -6667,13 +7760,13 @@ function(el, x, data) {
   }, height = function() {
     nm <- .scalar_chr(shared_data$active_object_name, default = "")
     cache <- tryCatch(shared_data$all_seurat_objects[[nm]]$analysis_cache$cluster_sweep, error = function(e) NULL)
-    .ct_plot_height_from_cache(cache)
+    .clustertree_umap_shared_plot_height_px(cache)
   })
 
   output$clustertree_plot_ui <- renderUI({
     nm <- .scalar_chr(shared_data$active_object_name, default = "")
     cache <- tryCatch(shared_data$all_seurat_objects[[nm]]$analysis_cache$cluster_sweep, error = function(e) NULL)
-    h <- .ct_plot_height_from_cache(cache)
+    h <- .clustertree_umap_shared_plot_height_px(cache)
     plotOutput("clustertree_plot", height = paste0(h, "px"), width = "100%")
   })
 
@@ -6684,9 +7777,8 @@ function(el, x, data) {
     }
     sobj <- .get_active_sobj(shared_data)
     req(!is.null(sobj))
-    .ensure_cluster_sweep_cache_for_object(nm, sobj = sobj)
     cache <- tryCatch(shared_data$all_seurat_objects[[nm]]$analysis_cache$cluster_sweep, error = function(e) NULL)
-    sm <- if (is.list(cache) && is.data.frame(cache$summary) && nrow(cache$summary)) cache$summary else .build_cluster_sweep_summary(sobj, cache$resolutions %||% numeric())
+    sm <- if (is.list(cache) && is.data.frame(cache$summary) && nrow(cache$summary)) cache$summary else NULL
     if (is.null(sm) || !is.data.frame(sm) || !nrow(sm)) {
       return(DT::datatable(data.frame(note = "No sweep summary available yet."), rownames = FALSE, options = list(dom = "t")))
     }
@@ -6704,18 +7796,141 @@ function(el, x, data) {
     if (!selected %in% as.character(choices)) selected <- as.character(tail(choices, 1))
     selectInput("final_res_select", ANALYSIS_UI_TEXT$t_label_pick_final_resolution, choices = choices, selected = selected)
   })
+
+  .sweep_task <- new.env(parent = emptyenv())
+  .sweep_task$run_seq <- 0L
+  .sweep_task$task_id <- ""
+  .sweep_task$pause_requested <- FALSE
+  .sweep_task$paused <- FALSE
+  .sweep_task$skip_requested <- FALSE
+  .sweep_task$cancel_requested <- FALSE
+  .sweep_controls <- function(state = "running", note = NULL) {
+    actions <- if (identical(state, "paused")) {
+      list(
+        overlay_control_action("resume", label = "Resume"),
+        overlay_control_action(
+          "cancel",
+          label = "Cancel",
+          confirm_title = "Cancel resolution sweep?",
+          confirm_detail = "Completed results will be discarded. The last valid state stays unchanged.",
+          confirm_label = "Confirm cancel"
+        )
+      )
+    } else if (identical(state, "running") && isTRUE(.sweep_task$controls_available)) {
+      list(
+        overlay_control_action("pause", label = "Pause"),
+        overlay_control_action(
+          "skip",
+          label = "Skip remaining resolutions",
+          confirm_title = "Skip remaining resolutions?",
+          confirm_detail = "Finish current resolution, keep completed results, then build ClusterTree.",
+          confirm_label = "Skip remaining"
+        ),
+        overlay_control_action(
+          "cancel",
+          label = "Cancel",
+          confirm_title = "Cancel resolution sweep?",
+          confirm_detail = "Completed results will be discarded. The last valid state stays unchanged.",
+          confirm_label = "Confirm cancel"
+        )
+      )
+    } else {
+      list()
+    }
+    overlay_controls(
+      task_id = .sweep_task$task_id,
+      actions = actions,
+      state = state,
+      note = note %||% if (identical(state, "paused")) {
+        "Paused after current resolution. Resume to continue or cancel."
+      } else if (identical(state, "running") && isTRUE(.sweep_task$controls_available)) {
+        "Pause, skip, and cancel take effect at resolution checkpoints."
+      } else if (identical(state, "running")) {
+        "Controls unavailable because safe event checkpoints are not available."
+      } else {
+        "Controls unavailable during this step. The current R call cannot be paused safely."
+      }
+    )
+  }
+  observeEvent(input$global_overlay_action, {
+    payload <- input$global_overlay_action
+    if (!is.list(payload)) return()
+    if (!identical(.scalar_chr(payload$taskId, default = ""), .sweep_task$task_id)) return()
+    action <- .scalar_chr(payload$action, default = "")
+    if (identical(action, "pause")) .sweep_task$pause_requested <- TRUE
+    if (identical(action, "resume")) .sweep_task$pause_requested <- FALSE
+    if (identical(action, "skip")) .sweep_task$skip_requested <- TRUE
+    if (identical(action, "cancel")) .sweep_task$cancel_requested <- TRUE
+  }, ignoreInit = TRUE)
+  session$onSessionEnded(function() {
+    .sweep_task$cancel_requested <- TRUE
+  })
   
   observeEvent(input$run_sweep_btn, {
-    .sweep_overlay <- function(msg = SPINNER_OVERLAY_MESSAGE_RUN_SWEEP_BTN, pct = NULL) {
-      overlay_show(text = msg, pct = pct)
+    .sweep_task$run_seq <- as.integer(.sweep_task$run_seq) + 1L
+    .sweep_task$task_id <- paste0("analysis-resolution-sweep-", .sweep_task$run_seq)
+    .sweep_task$pause_requested <- FALSE
+    .sweep_task$paused <- FALSE
+    .sweep_task$skip_requested <- FALSE
+    .sweep_task$cancel_requested <- FALSE
+    .sweep_task$controls_available <- requireNamespace("later", quietly = TRUE)
+    .sweep_overlay <- function(msg = SPINNER_OVERLAY_MESSAGE_RUN_SWEEP_BTN,
+                               pct = NULL,
+                               state = "running",
+                               note = NULL) {
+      overlay_show(
+        text = msg,
+        pct = pct,
+        loader = "cluster",
+        controls = .sweep_controls(state = state, note = note)
+      )
     }
     .sweep_overlay(SPINNER_OVERLAY_MESSAGE_RUN_SWEEP_BTN, pct = 1)
+    on.exit({
+      .sweep_task$cancel_requested <- TRUE
+      .sweep_task$task_id <- ""
+    }, add = TRUE)
     on.exit(overlay_hide(), add = TRUE)
+
+    sweep_raw <- list(
+      min = input$sweep_res_min,
+      max = input$sweep_res_max,
+      step = input$sweep_res_step
+    )
+    sweep_is_scalar <- vapply(sweep_raw, function(value) {
+      if (length(value) != 1L) return(FALSE)
+      value <- suppressWarnings(as.numeric(value))
+      !is.na(value) && is.finite(value)
+    }, logical(1))
+    sweep_input_summary <- paste(vapply(names(sweep_raw), function(name) {
+      value <- sweep_raw[[name]]
+      rendered <- if (length(value)) paste(as.character(value), collapse = ",") else "<missing>"
+      sprintf("%s=%s", name, rendered)
+    }, character(1)), collapse = " | ")
+    if (!all(sweep_is_scalar)) {
+      message("[Analysis][Resolution sweep] Invalid slider inputs: ", sweep_input_summary)
+      showNotification(
+        "Resolution sweep could not start because one or more slider values are missing or invalid.",
+        type = "error",
+        duration = NULL
+      )
+      return(invisible(NULL))
+    }
+    sweep_values <- vapply(sweep_raw, function(value) as.numeric(value), numeric(1))
+    if (sweep_values[["min"]] > sweep_values[["max"]] || sweep_values[["step"]] <= 0) {
+      message("[Analysis][Resolution sweep] Invalid slider range: ", sweep_input_summary)
+      showNotification(
+        "Resolution sweep could not start. Minimum must not exceed maximum, and step must be greater than zero.",
+        type = "error",
+        duration = NULL
+      )
+      return(invisible(NULL))
+    }
     
     sobj <- .get_active_sobj(shared_data); req(sobj)
     # Recompute UMAP config only when user explicitly runs sweep.
     sobj <- .sync_umap_for_current_cfg(sobj)
-    ran <- seq(from = input$sweep_res_min, to = input$sweep_res_max, by = input$sweep_res_step)
+    ran <- seq(from = sweep_values[["min"]], to = sweep_values[["max"]], by = sweep_values[["step"]])
     ran <- unique(round(ran, 2))
     
     have_cols <- .find_resolution_columns(sobj)
@@ -6735,18 +7950,46 @@ function(el, x, data) {
     # --- progress (top-right) ------------------------------------------
     p <- shiny::Progress$new(session, min = 0, max = 100)
     on.exit(p$close(), add = TRUE)
+    sweep_yield <- function() {
+      if (isTRUE(.sweep_task$controls_available)) later::run_now(0)
+      invisible(NULL)
+    }
+    sweep_checkpoint <- function(pct_now) {
+      .sweep_task$checkpoint_pct <- pct_now
+      if (!isTRUE(.sweep_task$controls_available)) return("continue")
+      if (isTRUE(.sweep_task$cancel_requested)) return("cancel")
+      if (isTRUE(.sweep_task$skip_requested)) return("skip")
+      if (!isTRUE(.sweep_task$pause_requested)) return("continue")
+      .sweep_task$paused <- TRUE
+      .sweep_overlay(
+        "Resolution sweep paused.",
+        pct = pct_now,
+        state = "paused",
+        note = "Paused after current resolution. Resume to continue or cancel."
+      )
+      repeat {
+        sweep_yield()
+        if (isTRUE(.sweep_task$cancel_requested)) return("cancel")
+        if (isTRUE(.sweep_task$skip_requested)) return("skip")
+        if (isTRUE(.sweep_task$pause_requested)) next
+        .sweep_task$paused <- FALSE
+        .sweep_overlay("Resolution sweep resumed.", pct = pct_now, state = "running")
+        return("continue")
+      }
+    }
     bump <- function(i, of, txt) {
       # keep some headroom for the clustertree build
       val <- min(95, round((i / of) * 85))
       .sweep_overlay(sprintf("Resolution sweep… %s", txt), pct = val)
       p$set(value = val, message = "Resolution sweep…", detail = txt)
-      session$sendCustomMessage("dummy", list())  # lightweight yield hack
+      sweep_yield()
     }
     .sweep_overlay("Resolution sweep… Starting…", pct = 1)
     p$set(message = "Resolution sweep…", detail = "Starting…", value = 0)
     
     # --- run sweep (FOR loop so we can message each step) --------------
     info <- vector("list", length(ran))
+    completed_ran <- numeric(0)
     for (i in seq_along(ran)) {
       r <- ran[i]
       bump(i, length(ran), sprintf("res = %.2f → neighbors + clusters", r))
@@ -6757,12 +8000,28 @@ function(el, x, data) {
       
       nclu <- tryCatch(length(levels(Seurat::Idents(sobj))), error = function(e) NA_integer_)
       info[[i]] <- data.frame(resolution = r, colname = res$colname, n_clusters = nclu, created = res$created)
+      completed_ran <- c(completed_ran, r)
+      checkpoint <- sweep_checkpoint(min(95, round((i / length(ran)) * 85)))
+      if (identical(checkpoint, "cancel")) {
+        showNotification("Resolution sweep cancelled. Last valid state remains unchanged.", type = "message")
+        return(invisible(NULL))
+      }
+      if (identical(checkpoint, "skip")) {
+        showNotification("Remaining resolutions skipped. Building ClusterTree from completed results.", type = "message")
+        break
+      }
     }
-    
-    summary_df <- do.call(rbind, info)
+
+    ran <- completed_ran
+    summary_df <- do.call(rbind, info[seq_along(ran)])
     
     p$set(message = "Resolution sweep…", detail = "Building ClusterTree…", value = 95)
-    .sweep_overlay("Resolution sweep… Building ClusterTree…", pct = 95)
+    .sweep_overlay(
+      "Resolution sweep… Building ClusterTree…",
+      pct = 95,
+      state = "unavailable",
+      note = "Controls unavailable during this step. The current ClusterTree call cannot be paused safely."
+    )
     # build plot (using your single-source clustertree file)
     
     ct_plot <- tryCatch(
@@ -6791,7 +8050,7 @@ function(el, x, data) {
   })
   
   observeEvent(input$apply_final_res_btn, {
-    overlay_show(); on.exit(overlay_hide(), add = TRUE)
+    overlay_show(loader = "cluster"); on.exit(overlay_hide(), add = TRUE)
     
     sobj <- .get_active_sobj(shared_data); req(sobj, input$final_res_select)
     gname <- input$sweep_graph %||% NULL
@@ -6799,21 +8058,25 @@ function(el, x, data) {
     res   <- as.numeric(input$final_res_select)
     ensured <- .ensure_clusters_at_resolution(sobj, res, graph_name = gname, dims = dims)
     sobj <- ensured$sobj
-    if (!"umap" %in% tolower(names(sobj@reductions))) {
+    umap_name <- wanlab_resolve_embedding_reduction(sobj, "umap", preferred_dims = dims)
+    if (!nzchar(umap_name)) {
       sobj <- tryCatch(Seurat::RunUMAP(sobj, reduction = "pca", dims = 1:dims, verbose = FALSE), error = function(e) sobj)
+      umap_name <- wanlab_resolve_embedding_reduction(sobj, "umap", preferred_dims = dims)
+    }
+    if (!nzchar(umap_name)) {
+      showNotification("Final resolution applied, but no valid UMAP embedding is available.", type = "error", duration = NULL)
+      return(invisible(NULL))
     }
     nm <- shared_data$active_object_name
-    if ("umap" %in% names(sobj@reductions)) {
-      sobj <- wanlab_set_reduction_provenance(sobj, "umap", nm, "pca", dims)
-    }
+    sobj <- wanlab_set_reduction_provenance(sobj, umap_name, nm, "pca", dims)
     shared_data$all_seurat_objects[[nm]]$obj <- sobj
     shared_data$all_seurat_objects[[nm]]$prefs$final_resolution <- res
-    shared_data$all_seurat_objects[[nm]]$plots$default_reduction <- "umap"
+    shared_data$all_seurat_objects[[nm]]$plots$default_reduction <- umap_name
     showNotification(sprintf("Applied final resolution: %.2f", res), type = "message")
   })
   
   observeEvent(input$run_main_analysis_btn, {
-    overlay_show(); on.exit(overlay_hide(), add = TRUE)
+    overlay_show(loader = "cluster"); on.exit(overlay_hide(), add = TRUE)
     
     seurat_obj <- active_seurat_object()$obj
     if (is.null(seurat_obj)) showNotification("Data invalid for clustering.", type = "error")
@@ -6823,7 +8086,7 @@ function(el, x, data) {
     if (is.na(seed_value) || seed_value <= 0 || floor(seed_value) != seed_value) {
       showNotification("UMAP seed must be a positive whole number.", type = "error"); return()
     }
-    updateTabsetPanel(session, inputId = "plot_tabs", selected = "clustering resolution")
+    .go_plot_tab("clustering resolution")
     
     analysis_params <- list(
       num_pcs   = input$cluster_num_pcs,
@@ -6835,10 +8098,23 @@ function(el, x, data) {
     tryCatch({
       final_results <- core_analysis_tab_c_run_main_analysis(seurat_obj = seurat_obj, analysis_params = analysis_params)
       nm <- shared_data$active_object_name
+      final_results$final_object <- wanlab_set_reduction_provenance(
+        final_results$final_object, "pca", nm, "pca",
+        tryCatch(ncol(Seurat::Embeddings(final_results$final_object, "pca")), error = function(e) NA_integer_)
+      )
+      umap_name <- wanlab_resolve_embedding_reduction(
+        final_results$final_object,
+        "umap",
+        preferred_dims = analysis_params$num_pcs
+      )
+      if (!nzchar(umap_name)) stop("Analysis completed without a valid UMAP embedding.")
+      final_results$final_object <- wanlab_set_reduction_provenance(
+        final_results$final_object, umap_name, nm, "pca", analysis_params$num_pcs
+      )
       shared_data$all_seurat_objects[[nm]]$obj <- final_results$final_object
       shared_data$all_seurat_objects[[nm]]$plots$clusters   <- final_results$clusters
       shared_data$all_seurat_objects[[nm]]$plots$conditions <- final_results$conditions
-      shared_data$all_seurat_objects[[nm]]$plots$default_reduction <- "umap"
+      shared_data$all_seurat_objects[[nm]]$plots$default_reduction <- umap_name
       showNotification("UMAP analysis complete.", type = "message")
     }, error = function(e) {
       showNotification(paste("Clustering/UMAP error:", e$message), type="error", duration = NULL)
@@ -6937,9 +8213,9 @@ function(el, x, data) {
     p <- snapshot$plot
     if (is.null(p)) {
       .perf_log("prep_elbow_plot:unavailable", details = sprintf("object=%s", .scalar_chr(nm, default = "<empty>")))
-      plot.new()
-      title("PCA elbow preview unavailable.")
-      return(invisible(NULL))
+      # Agent note: Missing elbow state is represented by the generator card;
+      # never render a fallback plot while the card is waiting for a click.
+      shiny::req(FALSE)
     }
     p_final <- tryCatch({
       p +
@@ -6959,9 +8235,7 @@ function(el, x, data) {
       NULL
     })
     if (is.null(p_final)) {
-      plot.new()
-      title("PCA elbow preview unavailable.")
-      return(invisible(NULL))
+      shiny::req(FALSE)
     }
     suppressWarnings(print(p_final))
   }, height = function() {
@@ -6987,7 +8261,7 @@ function(el, x, data) {
     sobj <- .get_obj_from_entry(entry)
     req(sobj)
     elbow_overlay_handoff <- FALSE
-    overlay_show(SPINNER_OVERLAY_MESSAGE_GENERATE_ELBOW)
+    overlay_show(SPINNER_OVERLAY_MESSAGE_GENERATE_ELBOW, loader = "metrics")
     elbow_render_overlay_owned(TRUE)
     on.exit({
       if (!isTRUE(elbow_overlay_handoff)) {
@@ -6996,6 +8270,7 @@ function(el, x, data) {
       }
     }, add = TRUE)
     
+    generated <- FALSE
     tryCatch({
       reds <- tolower(tryCatch(names(sobj@reductions), error = function(e) character()))
       have_pca <- "pca" %in% reds
@@ -7020,7 +8295,7 @@ function(el, x, data) {
         pca_dims = pca_dims
       )
       
-      elbow_plot <- .analysis_build_elbow_plot(sobj)
+      elbow_plot <- wanlab_build_standard_elbow_plot(sobj)
       if (is.null(elbow_plot)) stop("Unable to generate elbow plot from PCA standard deviations.")
       
       if (is.list(entry) && !is.null(entry$obj)) {
@@ -7042,10 +8317,12 @@ function(el, x, data) {
       }
 
       elbow_overlay_handoff <- TRUE
+      generated <- TRUE
       showNotification("Elbow plot generated. You can adjust dims again.", type = "message")
     }, error = function(e) {
-      showNotification(paste("Failed to generate elbow plot:", e$message), type = "error", duration = NULL)
+        showNotification(paste("Failed to generate elbow plot:", e$message), type = "error", duration = NULL)
     })
+    isTRUE(generated)
   }
   
   observeEvent(input$prep_generate_elbow_btn, {
@@ -7058,38 +8335,6 @@ function(el, x, data) {
   })
   
   # -------- ClusterTree/UMAP helpers and outputs
-  observeEvent(input$sweep_preset, {
-    freezeReactiveValue(input, "sweep_res_min")
-    freezeReactiveValue(input, "sweep_res_max")
-    freezeReactiveValue(input, "sweep_res_step")
-    switch(input$sweep_preset,
-           typ   = { updateSliderInput(session, "sweep_res_min", value = 0.4);
-             updateSliderInput(session, "sweep_res_max", value = 1.2);
-             updateSliderInput(session, "sweep_res_step", value = 0.2) },
-           broad = { updateSliderInput(session, "sweep_res_min", value = 0.2);
-             updateSliderInput(session, "sweep_res_max", value = 3.0);
-             updateSliderInput(session, "sweep_res_step", value = 0.2) },
-           fine  = { updateSliderInput(session, "sweep_res_min", value = 0.2);
-             updateSliderInput(session, "sweep_res_max", value = 1.2);
-             updateSliderInput(session, "sweep_res_step", value = 0.1) },
-           custom = {})
-  })
-  observeEvent(list(input$sweep_res_min, input$sweep_res_max, input$sweep_res_step), {
-    preset <- .scalar_chr(input$sweep_preset, default = "custom")
-    if (identical(preset, "custom")) return(invisible(NULL))
-    expected <- switch(
-      preset,
-      typ = c(0.4, 1.2, 0.2),
-      broad = c(0.2, 3.0, 0.2),
-      fine = c(0.2, 1.2, 0.1),
-      NULL
-    )
-    actual <- c(input$sweep_res_min, input$sweep_res_max, input$sweep_res_step)
-    if (!is.null(expected) && !isTRUE(all.equal(as.numeric(actual), expected, tolerance = 1e-12))) {
-      updateRadioButtons(session, "sweep_preset", selected = "custom")
-    }
-  }, ignoreInit = TRUE)
-  
   output$sweep_graph_ui <- renderUI({
     sobj <- .get_active_sobj(shared_data); if (is.null(sobj)) return(NULL)
     g <- tryCatch(names(sobj@graphs), error = function(e) character())
@@ -7098,15 +8343,84 @@ function(el, x, data) {
   })
   output$cfg_plot_format_ui <- renderUI({
     sobj <- .get_active_sobj(shared_data)
+    nm <- .scalar_chr(shared_data$active_object_name, default = "")
+    entry <- .get_active_entry(shared_data)
+    dims_pref <- wanlab_get_active_embedding_dims(entry)
+    if (!length(dims_pref) || !is.finite(dims_pref[[1]]) || is.na(dims_pref[[1]])) {
+      dims_pref <- suppressWarnings(as.integer(input$prep_dims_slider %||% 30L))
+    }
+    # Agent note: The preview object is an unsaved computation snapshot. Using
+    # it here rebinds this select after Render preview, which emits a server
+    # input event and clears the freshly rendered preview. Keep choices tied
+    # to the active object; pending PCA-paired names are added by the helper.
+    choices_sobj <- sobj
     sel_now <- .scalar_chr(input$cfg_plot_format, default = "")
-    reds <- if (!is.null(sobj) && inherits(sobj, "Seurat")) .cfg_plot_reduction_choices(sobj) else character(0)
+    reds <- if (!is.null(choices_sobj) && inherits(choices_sobj, "Seurat")) {
+      .cfg_plot_reduction_choices(choices_sobj, preferred_dims = dims_pref)
+    } else {
+      character(0)
+    }
     if (!length(reds)) reds <- c("umap", "tsne")
-    labels <- if (!is.null(sobj) && inherits(sobj, "Seurat")) {
-      vapply(reds, function(red) .reduction_pca_dims_label(sobj, red, include_provenance = TRUE), character(1))
+    labels <- if (!is.null(choices_sobj) && inherits(choices_sobj, "Seurat")) {
+      vapply(
+        reds,
+        function(red) .cfg_plot_reduction_label(choices_sobj, red, object_name = nm),
+        character(1)
+      )
     } else {
       vapply(reds, function(red) if (grepl("tsne", tolower(red), fixed = TRUE)) "TSNE_PCA" else "UMAP_PCA", character(1))
     }
-    if (!nzchar(sel_now) || !(sel_now %in% reds)) sel_now <- reds[[1]]
+    preview_saved <- isolate(.cfg_preview_by_object())[[nm]]
+    preview_result <- tryCatch(preview_saved$result, error = function(e) NULL)
+    preview_red <- .scalar_chr(
+      tryCatch(preview_result$reduction %||% preview_result$params$reduction_name, error = function(e) ""),
+      default = ""
+    )
+    preview_red <- if (nzchar(preview_red) && tolower(preview_red) %in% tolower(reds)) {
+      reds[[match(tolower(preview_red), tolower(reds))]]
+    } else {
+      ""
+    }
+    sel_lc <- tolower(sel_now)
+    sel_family <- if (grepl("^tsne($|_)", sel_lc)) "tsne" else "umap"
+    preferred_red <- if (!is.null(choices_sobj) && inherits(choices_sobj, "Seurat")) {
+      wanlab_resolve_embedding_reduction(
+        choices_sobj,
+        sel_family,
+        preferred_dims = dims_pref
+      )
+    } else {
+      ""
+    }
+    if (!nzchar(preferred_red) && length(dims_pref)) {
+      pending_red <- sprintf("%s_pca_%d", sel_family, dims_pref[[1L]])
+      if (pending_red %in% reds) preferred_red <- pending_red
+    }
+    saved_red <- tolower(.scalar_chr(
+      tryCatch(
+        entry$prefs$embedding_confirmation$reduction %||% entry$prefs$embedding_params$reduction_name,
+        error = function(e) ""
+      ),
+      default = ""
+    ))
+    saved_red <- if (isTRUE(.cfg_is_confirmed_for_current_dims(entry)) && saved_red %in% tolower(reds)) {
+      reds[[match(saved_red, tolower(reds))]]
+    } else {
+      ""
+    }
+    if (isTRUE(preview_result$render_valid) && nzchar(preview_red)) {
+      # Rebind the selector to the unsaved rendered reduction. This prevents a
+      # browser or Shiny restoration event from replacing it with an older PCA.
+      sel_now <- preview_red
+    } else if (nzchar(saved_red)) {
+      sel_now <- saved_red
+    } else if (nzchar(preferred_red) && preferred_red %in% reds) {
+      sel_now <- preferred_red
+    } else if (!nzchar(sel_now) || !(sel_lc %in% tolower(reds))) {
+      sel_now <- .cfg_default_plot_reduction(choices_sobj, preferred_dims = dims_pref)
+    } else {
+      sel_now <- reds[[match(sel_lc, tolower(reds))]]
+    }
     control <- selectInput(
       "cfg_plot_format",
       ANALYSIS_UI_TEXT$t_label_plot_format,
@@ -7114,8 +8428,11 @@ function(el, x, data) {
       selected = sel_now,
       selectize = FALSE
     )
-    if (isTRUE(.cfg_locked())) shinyjs::disabled(control) else control
+    control
   })
+  # Keep the lightweight selector mounted before the tab is shown; this avoids a
+  # blank first frame without starting UMAP/tSNE computation.
+  outputOptions(output, "cfg_plot_format_ui", suspendWhenHidden = FALSE)
 
   output$cfg_color_by_ui <- renderUI({
     sobj <- .get_active_sobj(shared_data); if (is.null(sobj)) return(NULL)
@@ -7197,13 +8514,39 @@ function(el, x, data) {
     }
     cache <- tryCatch(isolate(.cfg_preview_cache()), error = function(e) list(key = NULL, result = NULL))
     if (is.list(cache) && identical(cache$key, cache_key) && !is.null(cache$result)) {
-      .perf_log("cfg_preview:cache_hit_skip_compute", t0 = t0)
-      return(TRUE)
+      cached_result <- cache$result
+      if (isTRUE(cached_result$render_valid)) {
+        .perf_log("cfg_preview:cache_hit_reuse_rendered", t0 = t0, details = c(
+          sprintf("reduction=%s", .scalar_chr(cached_result$reduction, default = "<empty>")),
+          "compute=FALSE"
+        ))
+        return(TRUE)
+      }
+      if (isTRUE(cached_result$stored_reduction_valid)) {
+        # Agent note: A matching stored reduction is drawable without a new
+        # UMAP calculation, but Render must promote it into an explicit
+        # reviewed preview so the static plot observer receives a new state.
+        cached_result$object_name <- nm
+        cached_result$render_valid <- TRUE
+        cache$result <- cached_result
+        .cfg_store_session_preview(nm, cache)
+        .cfg_set_unsaved_preview(nm, TRUE)
+        .cfg_keeper_dirty(FALSE)
+        .perf_log("cfg_preview:cache_hit_promote_stored_reduction", t0 = t0, details = c(
+          sprintf("reduction=%s", .scalar_chr(cached_result$reduction, default = "<empty>")),
+          "compute=FALSE"
+        ))
+        return(TRUE)
+      }
+      .perf_log("cfg_preview:cache_entry_requires_compute", t0 = t0, details = c(
+        sprintf("reduction=%s", .scalar_chr(cached_result$reduction, default = "<empty>")),
+        "stored_reduction_valid=FALSE"
+      ))
     }
     .cfg_preview_pending_key(cache_key)
     on.exit(try(.cfg_preview_pending_key(NULL), silent = TRUE), add = TRUE)
     if (isTRUE(manage_overlay)) {
-      overlay_show("Computing embedding preview...")
+      overlay_show("Computing embedding preview...", pct = 0, loader = "embedding")
       on.exit(overlay_hide(), add = TRUE)
     }
     t_compute <- .perf_now()
@@ -7214,7 +8557,7 @@ function(el, x, data) {
         persist = TRUE,
         progress_cb = function(text = NULL, pct = NULL) {
           if (nzchar(.scalar_chr(text, default = ""))) {
-            try(overlay_show(text = text, pct = pct), silent = TRUE)
+            try(overlay_show(text = text, pct = pct, lock = TRUE, loader = "embedding"), silent = TRUE)
           }
         }
       ),
@@ -7229,11 +8572,19 @@ function(el, x, data) {
       out$object_name <- nm
       out$params <- params
       out$render_valid <- TRUE
+      .perf_log("cfg_preview:computed_reductions", t0 = t_compute, details = c(
+        sprintf("selected=%s", .scalar_chr(out$reduction, default = "<empty>")),
+        sprintf("reductions=%s", paste(tryCatch(names(out$object@reductions), error = function(e) character()), collapse = ","))
+      ))
     }
     if (!is.null(out) && nzchar(nm)) {
       .cfg_store_session_preview(nm, list(key = cache_key, result = out))
+      .cfg_set_unsaved_preview(nm, TRUE)
       .cfg_keeper_dirty(FALSE)
-      .perf_log("cfg_preview:stored_session_preview", t0 = t0, details = sprintf("object=%s", nm))
+      .perf_log("cfg_preview:stored_session_preview", t0 = t0, details = c(
+        sprintf("object=%s", nm),
+        "unsaved=TRUE"
+      ))
     }
     isTRUE(!is.null(out))
   }
@@ -7245,9 +8596,11 @@ function(el, x, data) {
 
   .queue_cfg_preview_run <- function(tab_now, nm, sobj, params, t0, source_tag = "cfg_render_preview_btn", pre_shown = FALSE) {
     preview_ok <- FALSE
+    .cfg_preview_in_progress(TRUE)
+    on.exit(.cfg_preview_in_progress(FALSE), add = TRUE)
     shinyjs::disable("cfg_render_preview_btn")
     shinyjs::disable("cfg_apply_btn")
-    if (!isTRUE(pre_shown)) overlay_show("Computing embedding preview...")
+    if (!isTRUE(pre_shown)) overlay_show("Computing embedding preview...", pct = 0, loader = "embedding")
     .perf_log(paste0(source_tag, ":preview_start"), t0 = t0)
     tryCatch(
       preview_ok <- isTRUE(.run_cfg_preview_now(
@@ -7264,19 +8617,122 @@ function(el, x, data) {
         showNotification(paste("Embedding preview error:", conditionMessage(e)), type = "error", duration = 8)
       },
       finally = {
-        if (!isTRUE(preview_ok)) overlay_hide()
+        # Agent note: This callback can itself run after a flush. Registering
+        # another onFlushed hide here can wait forever when no output is dirty.
+        # Send terminal hide in the same server event instead.
+        try(overlay_hide(), silent = TRUE)
         shinyjs::enable("cfg_render_preview_btn")
-        .perf_log(paste0(source_tag, ":preview_done"), t0 = t0)
+        .perf_log(paste0(source_tag, ":preview_done"), t0 = t0, details = sprintf("success=%s", as.character(preview_ok)))
       }
     )
     invisible(NULL)
   }
 
+  .auto_render_default_umap <- function() {
+    main_tab <- .scalar_chr(isolate(input$main_navbar), default = "")
+    plot_tab <- .scalar_chr(isolate(input$plot_tabs), default = "")
+    if (!identical(main_tab, "analysis_tab") || !identical(plot_tab, "umap configuration")) {
+      return(invisible(FALSE))
+    }
+
+    nm <- .cfg_active_name()
+    if (!nzchar(nm)) return(invisible(FALSE))
+    entry <- tryCatch(isolate(shared_data$all_seurat_objects[[nm]]), error = function(e) NULL)
+    dims <- tryCatch(wanlab_get_active_embedding_dims(entry), error = function(e) integer(0))
+    dims <- suppressWarnings(as.integer(dims))
+    dims <- dims[is.finite(dims) & !is.na(dims) & dims >= 2L]
+    if (!length(dims)) return(invisible(FALSE))
+    dims <- dims[[1L]]
+
+    sobj <- tryCatch(.get_obj_from_entry(entry), error = function(e) NULL)
+    if (is.null(sobj) || !inherits(sobj, "Seurat")) return(invisible(FALSE))
+    exact_umap <- tryCatch(.cfg_exact_reduction_for_dims(sobj, "umap", dims), error = function(e) "")
+    if (nzchar(exact_umap)) return(invisible(FALSE))
+
+    cached_result <- tryCatch(isolate(.cfg_preview_cache())$result, error = function(e) NULL)
+    if (is.list(cached_result) && isTRUE(cached_result$render_valid) &&
+        isTRUE(.analysis_preview_result_matches_active(cached_result, nm))) {
+      return(invisible(FALSE))
+    }
+    if (isTRUE(isolate(.cfg_preview_in_progress()))) return(invisible(FALSE))
+
+    params <- tryCatch(isolate(.cfg_compute_params_raw()), error = function(e) NULL)
+    if (!is.list(params)) return(invisible(FALSE))
+    # Agent note: Landing auto-render is deliberately UMAP-only. It uses the
+    # confirmed PCA dimensions and default controls; later control edits stay
+    # manual so they cannot start another hidden computation.
+    selected_red <- .scalar_chr(isolate(input$cfg_plot_format), default = "")
+    default_red <- tryCatch(
+      .cfg_default_plot_reduction(sobj, preferred_dims = dims),
+      error = function(e) "umap"
+    )
+    params$object_name <- nm
+    params$pca_reduction <- "pca"
+    params$reduction_name <- if (grepl("^umap($|_)", tolower(selected_red))) {
+      selected_red
+    } else {
+      default_red
+    }
+    params$plot_format <- "UMAP"
+    params$dims <- as.integer(dims)
+    auto_key <- paste(nm, .cfg_params_signature(params), sep = "||")
+    if (identical(auto_key, isolate(.cfg_auto_preview_attempt()))) return(invisible(FALSE))
+
+    .cfg_auto_preview_attempt(auto_key)
+    .cfg_preview_in_progress(TRUE)
+    t_auto <- .perf_now()
+    .perf_log("analysis_auto_umap_preview:scheduled", t0 = t_auto, details = c(
+      sprintf("object=%s", nm),
+      sprintf("dims=%s", as.character(dims))
+    ))
+    try(overlay_show("Computing default UMAP preview...", pct = 0, lock = TRUE, loader = "embedding"), silent = TRUE)
+    session$onFlushed(function() {
+      current_main_tab <- .scalar_chr(isolate(input$main_navbar), default = "")
+      current_plot_tab <- .scalar_chr(isolate(input$plot_tabs), default = "")
+      current_nm <- .scalar_chr(isolate(shared_data$active_object_name), default = "")
+      current_entry <- tryCatch(isolate(shared_data$all_seurat_objects[[nm]]), error = function(e) NULL)
+      current_dims <- tryCatch(wanlab_get_active_embedding_dims(current_entry), error = function(e) integer(0))
+      current_dims <- suppressWarnings(as.integer(current_dims))
+      current_dims <- current_dims[is.finite(current_dims) & !is.na(current_dims) & current_dims >= 2L]
+      if (!identical(current_main_tab, "analysis_tab") ||
+          !identical(current_plot_tab, "umap configuration") ||
+          !identical(current_nm, nm) ||
+          !length(current_dims) ||
+          !identical(current_dims[[1L]], dims)) {
+        .cfg_preview_in_progress(FALSE)
+        try(overlay_hide(), silent = TRUE)
+        .perf_log("analysis_auto_umap_preview:stale", t0 = t_auto, details = sprintf("object=%s", nm))
+        return(invisible(NULL))
+      }
+      .queue_cfg_preview_run(
+        tab_now = "umap configuration",
+        nm = nm,
+        sobj = sobj,
+        params = params,
+        t0 = t_auto,
+        source_tag = "analysis_auto_umap_preview",
+        pre_shown = TRUE
+      )
+    }, once = TRUE)
+    session$requestFlush()
+    invisible(TRUE)
+  }
+
+  observeEvent(list(input$main_navbar, input$plot_tabs, shared_data$active_object_name), {
+    .auto_render_default_umap()
+  }, ignoreInit = FALSE)
+
   observeEvent(input$cfg_render_preview_btn, {
     t_apply <- .perf_now()
     queued <- FALSE
-    overlay_show("Preparing embedding preview...")
-    on.exit(if (!isTRUE(queued)) overlay_hide(), add = TRUE)
+    .cfg_preview_in_progress(TRUE)
+    overlay_show("Preparing embedding preview...", pct = 0, lock = TRUE, loader = "embedding")
+    on.exit({
+      if (!isTRUE(queued)) {
+        .cfg_preview_in_progress(FALSE)
+        overlay_hide()
+      }
+    }, add = TRUE)
     tab_now <- input$plot_tabs %||% "umap configuration"
     nm_now <- .scalar_chr(isolate(shared_data$active_object_name), default = "")
     sobj_now <- tryCatch(isolate(.get_active_sobj(shared_data)), error = function(e) NULL)
@@ -7305,7 +8761,15 @@ function(el, x, data) {
     queued <- TRUE
     # Agent note: Heavy preview work starts only after Shiny flushes the overlay message; keep this event ordering deterministic.
     session$onFlushed(function() {
-      if (!identical(.cfg_active_name(), nm_now)) {
+      .perf_log("cfg_render_preview_btn:flushed_callback_start", t0 = t_apply, details = c(
+        sprintf("object=%s", nm_now),
+        sprintf("tab=%s", tab_now)
+      ))
+      # Agent note: This callback runs outside the reactive event; isolate the
+      # active-object read or Shiny aborts with "outside of reactive consumer".
+      if (!identical(isolate(.cfg_active_name()), nm_now)) {
+        .perf_log("cfg_render_preview_btn:flushed_callback_stale_object", t0 = t_apply)
+        .cfg_preview_in_progress(FALSE)
         overlay_hide()
         shinyjs::enable("cfg_render_preview_btn")
         return(invisible(NULL))
@@ -7319,12 +8783,17 @@ function(el, x, data) {
         source_tag = "cfg_render_preview_btn",
         pre_shown = TRUE
       )
+      .perf_log("cfg_render_preview_btn:flushed_callback_done", t0 = t_apply)
     }, once = TRUE)
+    # Agent note: Request the follow-up flush explicitly. The button observer
+    # can register this callback after the current input flush was scheduled;
+    # without a new flush, preview work may never start and the overlay stays at 0%.
+    session$requestFlush()
   }, ignoreInit = TRUE)
 
   .cfg_preview_matches_controls <- reactive({
-    cache <- .cfg_preview_cache()
     nm <- .cfg_active_name()
+    cache <- .cfg_session_preview(nm, cache = .cfg_preview_cache())
     params <- .cfg_compute_params_raw()
     is.list(cache) && !is.null(cache$result) &&
       isTRUE(cache$result$render_valid) &&
@@ -7333,17 +8802,51 @@ function(el, x, data) {
   })
 
   observeEvent(input$cfg_apply_btn, {
-    req(isTRUE(.cfg_preview_matches_controls()))
     nm <- .cfg_active_name()
-    cache <- isolate(.cfg_preview_cache())
+    if (!isTRUE(.cfg_preview_matches_controls())) {
+      cache_bad <- .cfg_session_preview(nm, cache = isolate(.cfg_preview_cache()))
+      .perf_log("cfg_apply_btn:blocked_preview_mismatch", details = c(
+        sprintf("object=%s", nm),
+        sprintf("cache_result=%s", as.character(is.list(cache_bad) && !is.null(cache_bad$result))),
+        sprintf("render_valid=%s", as.character(isTRUE(tryCatch(cache_bad$result$render_valid, error = function(e) FALSE))))
+      ))
+      showNotification(
+        "Render preview again. Save is available only for the current controls.",
+        type = "warning",
+        duration = 8
+      )
+      return(invisible(NULL))
+    }
+    cache <- .cfg_session_preview(nm, cache = isolate(.cfg_preview_cache()))
+    if (!is.list(cache) || !is.list(cache$result)) {
+      .perf_log("cfg_apply_btn:abort_missing_preview", details = sprintf("object=%s", nm))
+      showNotification("No rendered embedding preview is available to save.", type = "error", duration = 8)
+      return(invisible(NULL))
+    }
     out <- cache$result
     params <- out$params
     committed <- tryCatch({
       reg_now <- isolate(shared_data$all_seurat_objects)
       entry_now <- reg_now[[nm]]
       if (!is.list(entry_now) || !inherits(out$object, "Seurat")) stop("Preview is no longer valid for the active object.")
+      computed_reduction <- .scalar_chr(out$reduction, default = "")
+      computed_reductions <- tryCatch(names(out$object@reductions), error = function(e) character())
+      if (!nzchar(computed_reduction) || !computed_reduction %in% computed_reductions) {
+        stop("Rendered embedding is missing from the preview object.")
+      }
+      .perf_log("cfg_apply_btn:commit_start", details = c(
+        sprintf("object=%s", nm),
+        sprintf("reduction=%s", computed_reduction),
+        sprintf("dims=%s", as.character(params$dims %||% NA)),
+        sprintf("preview_reductions=%s", paste(computed_reductions, collapse = ","))
+      ))
       if (is.null(entry_now$prefs) || !is.list(entry_now$prefs)) entry_now$prefs <- list()
       if (is.null(entry_now$plots) || !is.list(entry_now$plots)) entry_now$plots <- list()
+      entry_now <- wanlab_set_active_embedding_dims(
+        entry_now,
+        params$dims,
+        source = "umap_configuration_save"
+      )
       entry_now$obj <- out$object
       entry_now$prefs$embedding_params <- params
       entry_now$prefs$embedding_confirmation <- list(
@@ -7352,9 +8855,25 @@ function(el, x, data) {
         reduction = .scalar_chr(out$reduction, default = tolower(params$plot_format %||% "umap")),
         updated_at = Sys.time()
       )
-      entry_now$plots$default_reduction <- tolower(params$plot_format %||% "umap")
+      entry_now$plots$default_reduction <- .scalar_chr(
+        out$reduction,
+        default = tolower(params$plot_format %||% "umap")
+      )
       reg_now[[nm]] <- entry_now
       shared_data$all_seurat_objects <- reg_now
+      committed_reductions <- tryCatch(
+        names(shared_data$all_seurat_objects[[nm]]$obj@reductions),
+        error = function(e) character()
+      )
+      if (!computed_reduction %in% committed_reductions) {
+        stop("Embedding commit finished without the rendered reduction in the active object.")
+      }
+      .perf_log("cfg_apply_btn:commit_done", details = c(
+        sprintf("object=%s", nm),
+        sprintf("reduction=%s", computed_reduction),
+        sprintf("active_dims=%s", as.character(wanlab_get_active_embedding_dims(reg_now[[nm]]))),
+        sprintf("active_reductions=%s", paste(committed_reductions, collapse = ","))
+      ))
       TRUE
     }, error = function(e) {
       showNotification(paste("Unable to save embedding configuration:", conditionMessage(e)), type = "error", duration = 8)
@@ -7362,30 +8881,63 @@ function(el, x, data) {
     })
     if (!isTRUE(committed)) return(invisible(NULL))
     .cfg_unlocked_by_object(setdiff(.cfg_unlocked_by_object(), nm))
+    .cfg_set_unsaved_preview(nm, FALSE)
     .cfg_keeper_dirty(FALSE)
     showNotification("Embedding parameters saved.", type = "message", duration = 2)
-    .go_plot_tab("clustering resolution")
+    updateActionButton(session, "cfg_apply_btn", label = ANALYSIS_UI_TEXT$t_btn_saved)
   }, ignoreInit = TRUE)
 
   .cfg_locked <- reactive({
     nm <- .cfg_active_name()
     entry <- tryCatch(shared_data$all_seurat_objects[[nm]], error = function(e) NULL)
-    isTRUE(.cfg_is_confirmed(entry)) && !isTRUE(.cfg_is_unlocked())
+    isTRUE(.cfg_is_confirmed_for_current_dims(entry)) && !isTRUE(.cfg_is_unlocked())
   })
   output$cfg_locked <- reactive(isTRUE(.cfg_locked()))
   outputOptions(output, "cfg_locked", suspendWhenHidden = FALSE)
 
   .cfg_control_ids <- c(
-    "cfg_plot_format", "cfg_seed_input", "cfg_umap_neighbors", "cfg_umap_min_dist",
+    "cfg_seed_input", "cfg_umap_neighbors", "cfg_umap_min_dist",
     "cfg_umap_spread", "cfg_tsne_speed_preset", "cfg_tsne_perplexity", "cfg_tsne_theta",
     "cfg_tsne_eta", "cfg_tsne_iter", "cfg_render_preview_btn"
   )
   observe({
     locked <- isTRUE(.cfg_locked())
+    active_now <- .cfg_active_name()
+    unsaved_objects <- as.character(.cfg_unsaved_preview_objects() %||% character())
+    has_unsaved <- isTRUE(.cfg_keeper_dirty()) ||
+      (nzchar(active_now) && active_now %in% unsaved_objects)
+    entry_now <- tryCatch(shared_data$all_seurat_objects[[active_now]], error = function(e) NULL)
+    preview_matches <- isTRUE(tryCatch(.cfg_preview_matches_controls(), error = function(e) FALSE))
+    saved_config <- nzchar(active_now) && isTRUE(.cfg_is_confirmed_for_current_dims(entry_now))
+    preview_in_progress <- isTRUE(.cfg_preview_in_progress())
+    render_required <- nzchar(active_now) && !preview_in_progress && !preview_matches &&
+      (!saved_config || has_unsaved)
+    save_complete <- saved_config && !has_unsaved
     lapply(.cfg_control_ids, function(id) {
-      if (locked) shinyjs::disable(id) else shinyjs::enable(id)
+      if (locked || (preview_in_progress && identical(id, "cfg_render_preview_btn"))) {
+        shinyjs::disable(id)
+      } else {
+        shinyjs::enable(id)
+      }
     })
-    if (locked || !isTRUE(.cfg_preview_matches_controls())) shinyjs::disable("cfg_apply_btn") else shinyjs::enable("cfg_apply_btn")
+    if (locked || preview_in_progress || !preview_matches) shinyjs::disable("cfg_apply_btn") else shinyjs::enable("cfg_apply_btn")
+    shinyjs::removeClass("cfg_apply_btn", "btn-primary")
+    shinyjs::removeClass("cfg_apply_btn", "btn-warning")
+    shinyjs::removeClass("cfg_apply_btn", "analysis-embedding-save-needed")
+    shinyjs::removeClass("cfg_apply_btn", "analysis-embedding-saved")
+    shinyjs::addClass("cfg_apply_btn", if (has_unsaved) "btn-warning" else "btn-primary")
+    if (save_complete) {
+      shinyjs::addClass("cfg_apply_btn", "analysis-embedding-saved")
+    } else if (has_unsaved) {
+      shinyjs::addClass("cfg_apply_btn", "analysis-embedding-save-needed")
+    }
+    updateActionButton(
+      session,
+      "cfg_apply_btn",
+      label = if (save_complete) ANALYSIS_UI_TEXT$t_btn_saved else ANALYSIS_UI_TEXT$t_btn_save_parameters_continue
+    )
+    shinyjs::removeClass("cfg_render_preview_btn", "analysis-embedding-render-needed")
+    if (render_required) shinyjs::addClass("cfg_render_preview_btn", "analysis-embedding-render-needed")
     if (isTRUE(.cfg_is_unlocked())) shinyjs::show("cfg_cancel_changes_btn") else shinyjs::hide("cfg_cancel_changes_btn")
   })
 
@@ -7411,7 +8963,6 @@ function(el, x, data) {
     entry <- shared_data$all_seurat_objects[[nm]]
     params <- tryCatch(entry$prefs$embedding_params, error = function(e) NULL)
     if (!is.list(params)) return(invisible(FALSE))
-    updateSelectInput(session, "cfg_plot_format", selected = params$reduction_name %||% "umap")
     updateNumericInput(session, "cfg_seed_input", value = params$seed %||% 42L)
     updateSliderInput(session, "cfg_umap_neighbors", value = params$umap_neighbors %||% 30L)
     updateSliderInput(session, "cfg_umap_min_dist", value = params$umap_min_dist %||% 0.3)
@@ -7422,82 +8973,357 @@ function(el, x, data) {
     updateSliderInput(session, "cfg_tsne_iter", value = params$tsne_iter %||% 500L)
     invisible(TRUE)
   }
+  .cfg_discard_unsaved_embedding_changes <- function(nm = .cfg_active_name()) {
+    nm <- .scalar_chr(nm, default = "")
+    if (nzchar(nm)) {
+      .cfg_restore_confirmed_controls(nm)
+      previews <- isolate(.cfg_preview_by_object())
+      previews[[nm]] <- NULL
+      .cfg_preview_by_object(previews)
+      .cfg_reset_static_plot()
+      .cfg_preview_cache(list(key = NULL, result = NULL))
+      .seed_cfg_preview_cache(nm)
+      .cfg_unlocked_by_object(setdiff(.cfg_unlocked_by_object(), nm))
+      .cfg_set_unsaved_preview(nm, FALSE)
+    }
+    .cfg_keeper_dirty(FALSE)
+    invisible(NULL)
+  }
   observeEvent(input$cfg_cancel_changes_btn, {
     nm <- .cfg_active_name()
     req(nzchar(nm))
-    .cfg_restore_confirmed_controls(nm)
-    previews <- isolate(.cfg_preview_by_object())
-    previews[[nm]] <- NULL
-    .cfg_preview_by_object(previews)
-    .cfg_preview_cache(list(key = NULL, result = NULL))
-    .seed_cfg_preview_cache(nm)
-    .cfg_unlocked_by_object(setdiff(.cfg_unlocked_by_object(), nm))
+    .cfg_discard_unsaved_embedding_changes(nm)
+  }, ignoreInit = TRUE)
+  observeEvent(input$cfg_unsaved_stay_btn, {
+    navigation <- isolate(.cfg_unsaved_navigation_target())
+    removeModal()
+    .cfg_unsaved_warning_open(FALSE)
+    .cfg_unsaved_warning_context("")
+    session$sendCustomMessage("analysis-unsaved-navigation-result", list(
+      proceed = FALSE,
+      kind = .scalar_chr(navigation$kind, default = ""),
+      target = .scalar_chr(navigation$target, default = "")
+    ))
+    .cfg_unsaved_navigation_target(list(kind = "", target = ""))
+  }, ignoreInit = TRUE)
+  observeEvent(input$cfg_unsaved_continue_btn, {
+    nm <- .cfg_active_name()
+    navigation <- isolate(.cfg_unsaved_navigation_target())
+    removeModal()
+    .cfg_unsaved_warning_open(FALSE)
+    .cfg_unsaved_warning_context("")
+    .cfg_discard_unsaved_embedding_changes(nm)
+    session$sendCustomMessage("analysis-unsaved-navigation-result", list(
+      proceed = TRUE,
+      kind = .scalar_chr(navigation$kind, default = ""),
+      target = .scalar_chr(navigation$target, default = "")
+    ))
+    .cfg_unsaved_navigation_target(list(kind = "", target = ""))
   }, ignoreInit = TRUE)
 
   output$cfg_preview_status_ui <- renderUI({
-    if (!is.null(.cfg_preview_or_saved()) && !isTRUE(.cfg_preview_matches_controls())) {
+    preview <- .cfg_preview_or_saved()
+    if (isTRUE(preview$stored_reduction_valid) && !isTRUE(preview$render_valid)) {
+      return(p(class = "embedding-preview-stale", ANALYSIS_UI_TEXT$t_text_embedding_preview_stored))
+    }
+    if (!is.null(preview) && !isTRUE(.cfg_preview_matches_controls())) {
       p(class = "embedding-preview-stale", ANALYSIS_UI_TEXT$t_text_embedding_preview_stale)
     }
   })
   output$umap_config_preview_ui <- renderUI({
-    if (is.null(.cfg_preview_or_saved())) {
-      return(div(class = "embedding-preview-note", ANALYSIS_UI_TEXT$t_text_embedding_preview_blank))
-    }
     div(
       class = "embedding-preview-square",
       plotOutput("umap_config_static_plot", height = "100%", width = "100%")
     )
   })
+  # Agent note: Keep this lightweight mount live while hidden so tab navigation
+  # never recreates the nested plot output during cache or route changes.
+  outputOptions(output, "umap_config_preview_ui", suspendWhenHidden = FALSE)
+
+  .cfg_current_stored_preview <- function() {
+    nm <- .cfg_active_name()
+    if (!nzchar(nm)) return(NULL)
+    entry <- tryCatch(shared_data$all_seurat_objects[[nm]], error = function(e) NULL)
+    sobj <- tryCatch(.get_obj_from_entry(entry), error = function(e) NULL)
+    if (is.null(sobj) || !inherits(sobj, "Seurat")) return(NULL)
+    params <- tryCatch(.cfg_compute_params_raw(), error = function(e) NULL)
+    if (!is.list(params)) return(NULL)
+
+    selected_raw <- tolower(.scalar_chr(params$reduction_name, default = "umap"))
+    family <- if (grepl("^tsne($|_)", selected_raw)) "tsne" else "umap"
+    dims <- .wanlab_valid_dims(params$dims)
+    exact_red <- .cfg_exact_reduction_for_dims(sobj, family, dims)
+    if (!nzchar(exact_red)) return(NULL)
+
+    # A named reduction is an explicit user choice. Do not replace it with
+    # another PCA pairing. Bare UMAP/tSNE means use current active dimensions.
+    if (!selected_raw %in% c("umap", "tsne")) {
+      selected_actual <- .resolve_reduction_name_ci(sobj, selected_raw)
+      if (!nzchar(selected_actual) ||
+          !identical(tolower(selected_actual), tolower(exact_red))) {
+        return(NULL)
+      }
+    }
+    params$object_name <- nm
+    params$reduction_name <- exact_red
+    params$plot_format <- if (identical(family, "tsne")) "tSNE" else "UMAP"
+    list(
+      object_name = nm,
+      object = sobj,
+      plot = NULL,
+      reduction = exact_red,
+      params = params,
+      render_valid = FALSE,
+      stored_reduction_valid = TRUE
+    )
+  }
 
   .cfg_preview_or_saved <- reactive({
     cache <- .cfg_preview_cache()
     active_nm <- .scalar_chr(shared_data$active_object_name, default = "")
-    if (is.list(cache) && !is.null(cache$result) &&
-        isTRUE(.analysis_preview_result_matches_active(cache$result, active_nm))) {
-      return(cache$result)
+    current_params <- tryCatch(.cfg_compute_params_raw(), error = function(e) NULL)
+    result <- if (is.list(cache)) cache$result else NULL
+    if (is.list(current_params) && is.list(result) &&
+        isTRUE(.analysis_preview_result_matches_active(result, active_nm))) {
+      params_match <- if (isTRUE(result$stored_reduction_valid) && !isTRUE(result$render_valid)) {
+        stored_dims <- suppressWarnings(as.integer(result$params$dims %||% NA_integer_))
+        current_dims <- suppressWarnings(as.integer(current_params$dims %||% NA_integer_))
+        stored_family <- .cfg_plot_format_method(result$reduction %||% result$params$plot_format)
+        current_family <- .cfg_plot_format_method(current_params$reduction_name)
+        length(stored_dims) == 1L && is.finite(stored_dims) && !is.na(stored_dims) &&
+          length(current_dims) == 1L && is.finite(current_dims) && !is.na(current_dims) &&
+          identical(stored_dims, current_dims) && identical(stored_family, current_family)
+      } else if (isTRUE(result$render_valid)) {
+        identical(
+          .cfg_params_signature(result$params),
+          .cfg_params_signature(current_params)
+        )
+      } else {
+        FALSE
+      }
+      if (isTRUE(params_match)) return(result)
+      # A rendered preview becomes invalid when controls change. Require a new
+      # render instead of replacing it with an older stored plot.
+      if (isTRUE(result$render_valid)) return(NULL)
     }
-    NULL
+
+    .cfg_current_stored_preview()
   })
 
-  output$umap_config_static_plot <- renderPlot({
-    on.exit(try(overlay_hide(), silent = TRUE), add = TRUE)
-    tab_now <- .scalar_chr(.current_plot_tab(), default = "")
-    if (!identical(tab_now, "umap configuration")) return(invisible(NULL))
-    out <- .cfg_preview_or_saved()
-    if (is.null(out)) {
+  .cfg_static_plot_key <- function(cache, out, color_by = NULL) {
+    params <- tryCatch(out$params, error = function(e) NULL)
+    cache_key <- .scalar_chr(cache$key, default = "")
+    if (!nzchar(cache_key)) {
+      cache_key <- paste(
+        .cfg_object_signature(out$object, object_name = out$object_name %||% .cfg_active_name()),
+        .cfg_params_signature(params),
+        sep = "||"
+      )
+    }
+    paste(
+      cache_key,
+      .scalar_chr(out$object_name %||% .cfg_active_name(), default = ""),
+      .scalar_chr(out$reduction %||% params$reduction_name, default = ""),
+      .scalar_chr(params$plot_format, default = ""),
+      .scalar_chr(color_by, default = ""),
+      sep = "||"
+    )
+  }
+
+  .request_cfg_static_plot <- function() {
+    main_tab_now <- .scalar_chr(input$main_navbar, default = "")
+    effective_plot_tab <- .scalar_chr(.current_plot_tab(), default = "")
+    # Agent note: Bootstrap can publish a stale plot-tab value while the UMAP
+    # configuration pane is already visible. Main Analysis owns this output;
+    # do not cancel its build because of that transient tab value.
+    if (!identical(main_tab_now, "analysis_tab")) {
+      cache_probe <- tryCatch(.cfg_preview_cache(), error = function(e) NULL)
+      if (identical(main_tab_now, "analysis_tab") &&
+          is.list(cache_probe) && !is.null(cache_probe$result)) {
+        .perf_log("umap_config_static_plot:skip_route", details = c(
+          sprintf("raw_plot_tabs=%s", .scalar_chr(input$plot_tabs, default = "<empty>")),
+          sprintf("effective_plot_tab=%s", if (nzchar(effective_plot_tab)) effective_plot_tab else "<empty>"),
+        ))
+      }
+      .cfg_static_plot_pending_key("")
+      .umap_cfg_hide_overlay()
       return(invisible(NULL))
     }
-    ref_sobj <- .get_active_sobj(shared_data)
-    color_by_static <- .cfg_clustering_reference_color(ref_sobj)
-    if (is.null(color_by_static) || !nzchar(as.character(color_by_static %||% ""))) {
-      color_by_static <- .cfg_preview_default_color_by(ref_sobj)
+
+    cache_now <- tryCatch(.cfg_preview_cache(), error = function(e) NULL)
+    out_now <- tryCatch(.cfg_preview_or_saved(), error = function(e) NULL)
+    if ((!is.list(cache_now) || is.null(cache_now$result)) && nzchar(.cfg_active_name())) {
+      # Dynamic controls can mount after the object-change observer. Seed once
+      # from current object state so an existing exact reduction is drawable.
+      .seed_cfg_preview_cache(.cfg_active_name())
+      cache_now <- tryCatch(.cfg_preview_cache(), error = function(e) NULL)
+      out_now <- tryCatch(.cfg_preview_or_saved(), error = function(e) NULL)
     }
-    sobj_plot <- .sync_preview_metadata(
-      preview_sobj = out$object,
-      ref_sobj = ref_sobj,
-      cols = color_by_static %||% character()
-    )
-    out_params <- tryCatch(out$params, error = function(e) NULL)
-    if (!is.list(out_params)) out_params <- list(plot_format = "UMAP")
-    red_use <- .cfg_reduction_for_display(sobj_plot, params = out_params, fallback = out$reduction)
-    if (!nzchar(red_use)) {
-      .perf_log("umap_config_static_plot:missing_reduction", details = c(
-        sprintf("object=%s", .scalar_chr(shared_data$active_object_name, default = "<empty>")),
-        sprintf("requested=%s", .scalar_chr(out$reduction, default = "<empty>")),
-        sprintf("format=%s", .scalar_chr(out_params$plot_format, default = "<empty>"))
+    if (is.null(out_now)) {
+      .perf_log("umap_config_static_plot:skip_missing_state", details = c(
+        sprintf("raw_plot_tabs=%s", .scalar_chr(input$plot_tabs, default = "<empty>")),
+        sprintf("effective_plot_tab=%s", if (nzchar(effective_plot_tab)) effective_plot_tab else "<empty>"),
+        sprintf("active=%s", .scalar_chr(shared_data$active_object_name, default = "<empty>")),
+        sprintf("cache_result=%s", as.character(is.list(cache_now) && !is.null(cache_now$result))),
+        sprintf("preview_result=%s", as.character(!is.null(out_now)))
       ))
-      plot.new()
-      title("Embedding preview unavailable for this object (no UMAP/tSNE reduction).")
+      .cfg_reset_static_plot()
+      .umap_cfg_hide_overlay()
       return(invisible(NULL))
     }
-    p_static <- .build_embedding_preview_static_plot(
-      sobj = sobj_plot,
-      reduction_name = red_use,
-      plot_format = (out_params$plot_format %||% "UMAP"),
-      color_by = color_by_static
-    )
-    print(p_static)
-    invisible(p_static)
+    if (!is.list(cache_now)) cache_now <- list(key = "")
+
+    ref_sobj <- tryCatch(.get_active_sobj(shared_data), error = function(e) NULL)
+    if (is.null(ref_sobj) || !inherits(ref_sobj, "Seurat")) {
+      .cfg_reset_static_plot()
+      .umap_cfg_hide_overlay()
+      return(invisible(NULL))
+    }
+    color_by <- .cfg_clustering_reference_color(ref_sobj)
+    if (is.null(color_by) || !nzchar(as.character(color_by %||% ""))) {
+      color_by <- .cfg_preview_default_color_by(ref_sobj)
+    }
+    key <- .cfg_static_plot_key(cache_now, out_now, color_by)
+    state_now <- isolate(.cfg_static_plot_state())
+    pending_key <- isolate(.cfg_static_plot_pending_key())
+    if (is.list(state_now) && identical(state_now$key, key) && !is.null(state_now$plot)) {
+      return(invisible(NULL))
+    }
+    if (identical(pending_key, key)) return(invisible(NULL))
+
+    .cfg_static_plot_pending_key(key)
+    umap_cfg_global_overlay_active(TRUE)
+    umap_cfg_overlay_shown_at(.perf_now())
+    .perf_log("umap_config_static_plot:request", details = c(
+      sprintf("key=%s", key),
+      "phase=scheduled"
+    ))
+    try(overlay_show(ANALYSIS_UI_TEXT$t_text_embedding_preview_rendering, pct = 0, lock = TRUE, loader = "embedding"), silent = TRUE)
+
+    # Agent note: Heavy plot construction starts only after the overlay message
+    # has flushed. This keeps RDS landing responsive and prevents duplicate
+    # renderPlot work from blocking all other Shiny events.
+    session$onFlushed(function() {
+      .perf_log("umap_config_static_plot:flushed_callback_start", details = sprintf("key=%s", key))
+      if (!identical(isolate(.cfg_static_plot_pending_key()), key)) return(invisible(NULL))
+      current_main_tab <- .scalar_chr(isolate(input$main_navbar), default = "")
+      current_cache <- isolate(.cfg_preview_cache())
+      current_out <- isolate(.cfg_preview_or_saved())
+      if (!identical(current_main_tab, "analysis_tab") ||
+          is.null(current_out) ||
+          !identical(.cfg_static_plot_key(current_cache, current_out, color_by), key)) {
+        .perf_log("umap_config_static_plot:flushed_callback_stale_state", details = c(
+          sprintf("key=%s", key),
+          sprintf("main_tab=%s", current_main_tab),
+          sprintf("has_output=%s", as.character(!is.null(current_out)))
+        ))
+        .cfg_static_plot_pending_key("")
+        .umap_cfg_hide_overlay()
+        return(invisible(NULL))
+      }
+
+      t_build <- .perf_now()
+      .perf_log("umap_config_static_plot:build_start", t0 = t_build, details = sprintf("key=%s", key))
+      built <- tryCatch({
+        sobj_plot <- .sync_preview_metadata(
+          preview_sobj = out_now$object,
+          ref_sobj = ref_sobj,
+          cols = color_by %||% character()
+        )
+        out_params <- tryCatch(out_now$params, error = function(e) NULL)
+        if (!is.list(out_params)) out_params <- list(plot_format = "UMAP")
+        red_use <- .cfg_reduction_for_display(
+          sobj_plot,
+          params = out_params,
+          fallback = out_now$reduction
+        )
+        if (!nzchar(red_use)) stop("No UMAP or tSNE reduction is available for this object.")
+        list(
+          plot = .build_embedding_preview_static_plot(
+            sobj = sobj_plot,
+            reduction_name = red_use,
+            plot_format = out_params$plot_format %||% "UMAP",
+            color_by = color_by
+          ),
+          error = NULL
+        )
+      }, error = function(e) {
+        msg <- paste("Embedding preview unavailable:", conditionMessage(e))
+        .perf_log("umap_config_static_plot:build_error", details = msg)
+        showNotification(msg, type = "error", duration = 8)
+        list(plot = NULL, error = msg)
+      })
+      .perf_log("umap_config_static_plot:build_done", t0 = t_build, details = c(
+        sprintf("key=%s", key),
+        sprintf("success=%s", as.character(!is.null(built$plot)))
+      ))
+
+      .cfg_static_plot_state(list(key = key, plot = built$plot, error = built$error))
+      .cfg_static_plot_pending_key("")
+      session$requestFlush()
+      .perf_log("umap_config_static_plot:flushed_callback_done", details = c(
+        sprintf("key=%s", key),
+        sprintf("success=%s", as.character(!is.null(built$plot)))
+      ))
+      invisible(NULL)
+    }, once = TRUE)
+    # Agent note: Request the flush that runs the registered build callback.
+    # Without this, the placeholder can remain after the preview overlay hides.
+    session$requestFlush()
+    invisible(NULL)
+  }
+
+  observe({
+    input$main_navbar
+    input$plot_tabs
+    .cfg_preview_cache()
+    .cfg_active_name()
+    .request_cfg_static_plot()
+  })
+
+  observeEvent(.cfg_static_plot_state(), {
+    state <- .cfg_static_plot_state()
+    state_key <- .scalar_chr(state$key, default = "")
+    if (!nzchar(state_key)) return(invisible(NULL))
+    state_now <- isolate(.cfg_static_plot_state())
+    if (is.list(state_now) && identical(.scalar_chr(state_now$key, default = ""), state_key)) {
+      .umap_cfg_hide_overlay()
+    }
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$main_navbar, {
+    if (!identical(.scalar_chr(input$main_navbar, default = ""), "analysis_tab")) {
+      .cfg_static_plot_pending_key("")
+      .umap_cfg_hide_overlay()
+    }
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$plot_tabs, {
+    tab_now <- .scalar_chr(input$plot_tabs, default = "")
+    if (nzchar(tab_now) && !identical(tab_now, "umap configuration")) {
+      # Leaving UMAP configuration transfers overlay ownership to the next
+      # tab. Keep pending plot state intact, but release stale global lock.
+      .umap_cfg_hide_overlay()
+    }
+  }, ignoreInit = TRUE)
+
+  output$umap_config_static_plot <- renderPlot({
+    # Agent note: This output must depend only on stored plot state. Reading
+    # tab or DOM inputs here redraws the same full-cell image on every tab
+    # restoration event.
+    state <- .cfg_static_plot_state()
+    .perf_log("umap_config_static_plot:render", details = c(
+      sprintf("key=%s", .scalar_chr(state$key, default = "")),
+      sprintf("cached=%s", as.character(is.list(state) && !is.null(state$plot)))
+    ))
+    if (!is.list(state) || is.null(state$plot)) {
+      plot.new()
+      msg <- .scalar_chr(state$error, default = ANALYSIS_UI_TEXT$t_text_embedding_preview_blank)
+      text(0.5, 0.5, labels = msg, cex = 1.0)
+      return(invisible(NULL))
+    }
+    print(state$plot)
+    invisible(state$plot)
   })
 
   output$umap_viz_plot_ui <- renderUI({
@@ -7583,8 +9409,6 @@ function(el, x, data) {
   })
 
   .umap_viz_context <- reactive({
-    tab_now <- .scalar_chr(input$plot_tabs, default = "")
-    req(identical(tab_now, "umap visualization"))
     t_ctx <- .perf_now()
     out <- .cfg_preview_or_saved()
     req(!is.null(out))
@@ -7636,29 +9460,45 @@ function(el, x, data) {
     .analysis_pdf_modal$open("jjvolcano", title_txt = "PDF export settings: jjvolcano")
   }, ignoreInit = TRUE)
 
-.umap_cfg_request_overlay <- function(msg = "Loading embedding preview...") {
-  # Agent note: Overlay is global. Gate Analysis-only waits by main_navbar; hidden plots cannot emit readiness and otherwise leave Re-cluster/Data Browser blocked.
-  if (!identical(.scalar_chr(input$main_navbar, default = ""), "analysis_tab")) return(invisible(NULL))
-  if (!isTRUE(.analysis_plot_tab_active("umap configuration"))) return(invisible(NULL))
-  try(overlay_show(msg), silent = TRUE)
-  try(overlay_hide_when_output_ready("umap_config_static_plot", timeout_ms = 120000L), silent = TRUE)
+.umap_viz_hide_overlay <- function(reason = "") {
+  if (!isTRUE(isolate(umap_viz_global_overlay_active()))) return(invisible(NULL))
+  umap_viz_global_overlay_active(FALSE)
+  umap_viz_overlay_shown_at(as.numeric(NA))
+  .perf_log("umap_viz_overlay:finish", details = .scalar_chr(reason, default = ""))
+  if (!isTRUE(isolate(umap_cfg_global_overlay_active()))) {
+    try(overlay_hide(), silent = TRUE)
+  }
   invisible(NULL)
 }
+
 .umap_viz_request_overlay <- function(msg = "Loading UMAP visualization...") {
   if (!identical(.scalar_chr(input$main_navbar, default = ""), "analysis_tab")) return(invisible(NULL))
   if (!isTRUE(.analysis_plot_tab_active("umap visualization"))) return(invisible(NULL))
-  try(overlay_show(msg), silent = TRUE)
-    try(overlay_hide_when_output_ready("umap_viz_plot", timeout_ms = 120000L), silent = TRUE)
-    invisible(NULL)
+  active_now <- isolate(.scalar_chr(shared_data$active_object_name, default = ""))
+  request_sig <- paste("umap visualization", active_now, sep = "||")
+  umap_viz_overlay_signature(request_sig)
+  umap_viz_global_overlay_active(TRUE)
+  umap_viz_overlay_shown_at(.wall_now())
+  try(overlay_show(msg, loader = "embedding"), silent = TRUE)
+  # Release after server flush, not after a browser DOM polling timeout. The
+  # signature prevents an old callback from hiding a newer request.
+  try(session$onFlushed(function() {
+    tab_after <- isolate(.scalar_chr(input$plot_tabs, default = ""))
+    active_after <- isolate(.scalar_chr(shared_data$active_object_name, default = ""))
+    signature_after <- isolate(.scalar_chr(umap_viz_overlay_signature(), default = ""))
+    if (identical(signature_after, request_sig) &&
+        identical(tab_after, "umap visualization") &&
+        identical(active_after, active_now)) {
+      .umap_viz_hide_overlay("flush")
+    }
+  }, once = TRUE), silent = TRUE)
+  invisible(NULL)
+}
+observeEvent(input$plot_tabs, {
+  if (!isTRUE(.analysis_plot_tab_active("umap visualization"))) {
+    .umap_viz_hide_overlay("tab_changed")
   }
-  observeEvent(input$plot_tabs, {
-    if (!isTRUE(.analysis_plot_tab_active("umap configuration"))) return(invisible(NULL))
-    .umap_cfg_request_overlay("Loading embedding preview...")
-  }, ignoreInit = TRUE)
-  observeEvent(shared_data$active_object_name, {
-    if (!isTRUE(.analysis_plot_tab_active("umap configuration"))) return(invisible(NULL))
-    .umap_cfg_request_overlay("Switching embedding preview object...")
-  }, ignoreInit = TRUE)
+}, ignoreInit = TRUE)
   observeEvent(input$plot_tabs, {
     if (!isTRUE(.analysis_plot_tab_active("umap visualization"))) return(invisible(NULL))
     .umap_viz_request_overlay("Loading UMAP visualization...")
@@ -7681,8 +9521,11 @@ function(el, x, data) {
   }, ignoreInit = TRUE)
 
   output$umap_viz_plot <- renderPlot({
-    tab_now <- .scalar_chr(.current_plot_tab(), default = "")
-    if (!identical(tab_now, "umap visualization")) return(invisible(NULL))
+    on.exit({
+      if (isTRUE(.analysis_plot_tab_active("umap visualization"))) {
+        .umap_viz_hide_overlay("render")
+      }
+    }, add = TRUE)
     ctx <- .umap_viz_context()
     if (is.null(ctx) || is.null(ctx$out)) {
       plot.new()
@@ -7703,8 +9546,6 @@ function(el, x, data) {
   }, res = 110)
 
   output$umap_cluster_freq_plot <- renderPlot({
-    tab_now <- .scalar_chr(.current_plot_tab(), default = "")
-    if (!identical(tab_now, "umap visualization")) return(invisible(NULL))
     ctx <- .umap_viz_context()
     if (is.null(ctx) || is.null(ctx$out)) {
       plot.new()
@@ -7728,12 +9569,41 @@ function(el, x, data) {
   output$umap_reduction_ui <- renderUI({
     sobj <- .get_active_sobj(shared_data); if (is.null(sobj)) return(NULL)
     entry <- .get_active_entry(shared_data)
+    dims_pref <- wanlab_get_active_embedding_dims(entry)
     reds <- .reduction_choices(sobj)
-    if (!"umap" %in% reds) reds <- unique(c("umap", reds))
-    reds <- unique(reds)
+    if (!length(reds)) return(NULL)
+    selected_raw <- .scalar_chr(input$umap_reduction, default = "")
+    selected_lc <- tolower(selected_raw)
+    selected_family <- if (!nzchar(selected_lc) || grepl("^umap($|_)", selected_lc)) {
+      "umap"
+    } else if (grepl("^tsne($|_)", selected_lc)) {
+      "tsne"
+    } else {
+      ""
+    }
+    selected <- if (nzchar(selected_family) && length(dims_pref)) {
+      wanlab_resolve_embedding_reduction(
+        sobj,
+        selected_family,
+        preferred_dims = dims_pref
+      )
+    } else {
+      ""
+    }
+    if (!nzchar(selected)) selected <- .resolve_reduction_name_ci(sobj, selected_raw)
+    if (!nzchar(selected) && tolower(selected_raw) %in% c("umap", "tsne")) {
+      selected <- .cfg_reduction_for_display(
+        sobj,
+        params = list(
+          plot_format = if (identical(tolower(selected_raw), "tsne")) "TSNE" else "UMAP",
+          dims = if (length(dims_pref)) dims_pref[[1L]] else NULL
+        ),
+        fallback = selected_raw
+      )
+    }
+    if (!nzchar(selected) || !(selected %in% reds)) selected <- reds[[1]]
+    reds <- unique(c(selected, setdiff(reds, selected)))
     labels <- vapply(reds, function(red) .reduction_pca_dims_label(sobj, red, include_provenance = TRUE), character(1))
-    selected <- .preferred_cfg_plot_format(entry)
-    if (!(selected %in% reds)) selected <- reds[[1]]
     selectInput("umap_reduction", ANALYSIS_UI_TEXT$t_label_reduction, choices = stats::setNames(reds, labels), selected = selected)
   })
   output$umap_pca_status_ui <- renderUI({
@@ -7752,13 +9622,21 @@ function(el, x, data) {
   })
   output$umap_colorby_ui <- renderUI({
     sobj <- .get_active_sobj(shared_data); if (is.null(sobj)) return(NULL)
-    cols <- .meta_columns_for_color(sobj)
-    selectInput("umap_colorby", ANALYSIS_UI_TEXT$t_label_color, choices = cols, selected = cols[1])
+    nm <- .scalar_chr(shared_data$active_object_name, default = "")
+    cache <- tryCatch(shared_data$all_seurat_objects[[nm]]$analysis_cache$cluster_sweep, error = function(e) NULL)
+    choices <- .clustertree_umap_cluster_choices(sobj, cache)
+    if (!length(choices)) return(helpText(ANALYSIS_UI_TEXT$t_text_umap_cluster_resolution_unavailable))
+    selectInput(
+      "umap_colorby",
+      ANALYSIS_UI_TEXT$t_label_umap_cluster_resolution,
+      choices = choices,
+      selected = unname(choices[[1]])
+    )
   })
   output$umap_res_selector_ui <- renderUI({
     sobj <- .get_active_sobj(shared_data); if (is.null(sobj)) return(NULL)
     chosen <- input$umap_colorby; if (is.null(chosen)) return(NULL)
-    cand <- .find_resolution_columns(sobj)
+    cand <- setdiff(.umap_cluster_id_columns(sobj), chosen)
     if (!length(cand)) return(NULL)
     if (grepl("(snn_res\\.|leiden_res\\.)", tolower(chosen))) return(NULL)
     choices <- c("Use Color by selection" = "__none__", stats::setNames(cand, cand))
@@ -7769,43 +9647,10 @@ function(el, x, data) {
     if (!identical(tab_now, "clustering resolution")) return(480L)
     sobj <- tryCatch(.get_active_sobj(shared_data), error = function(e) NULL)
     if (is.null(sobj)) return(560L)
-    sweep_ready_now <- isTRUE(.sweep_ready())
 
-    entry <- tryCatch(.get_active_entry(shared_data), error = function(e) NULL)
-    sample_col <- tryCatch(entry$prefs$sample_col %||% NULL, error = function(e) NULL)
-    split_by <- NULL
-    if (isTRUE(input$umap_split_by_sample) && !is.null(sample_col) && sample_col %in% colnames(sobj@meta.data)) {
-      split_by <- sample_col
-    }
-
-    plot_w <- suppressWarnings(as.numeric(
-      session$clientData$output_umap_plot_width %||%
-      session$clientData$output_umap_plot_pre_sweep_width %||%
-      session$clientData$output_umap_plot_ui_width %||%
-      session$clientData$output_umap_plot_ui_pre_sweep_width %||%
-      1000
-    ))
-    if (!is.finite(plot_w) || is.na(plot_w) || plot_w <= 0) plot_w <- 1000
-
-    if (is.null(split_by)) {
-      # Keep pre-sweep adaptive (not fixed), but capped to avoid oversized empty frames.
-      if (!isTRUE(sweep_ready_now)) {
-        h0 <- plot_w * 0.42 + 78
-        return(as.integer(max(400, min(520, h0))))
-      }
-      h <- plot_w * 0.55 + 96
-      return(as.integer(max(460, min(640, h))))
-    }
-
-    split_vals <- as.character(sobj@meta.data[[split_by]])
-    split_vals[is.na(split_vals) | !nzchar(split_vals)] <- "NA"
-    split_levels <- .sort_levels_natural(split_vals)
-    n_facets <- max(1L, length(split_levels))
-    n_cols <- max(1L, min(n_facets, floor(plot_w / 320)))
-    n_rows <- max(1L, ceiling(n_facets / n_cols))
-    h <- (plot_w / n_cols) * n_rows * 0.82 + 160
-    h_cap <- if (isTRUE(sweep_ready_now)) 860 else 640
-    as.integer(max(460, min(h_cap, h)))
+    nm <- .scalar_chr(shared_data$active_object_name, default = "")
+    cache <- tryCatch(shared_data$all_seurat_objects[[nm]]$analysis_cache$cluster_sweep, error = function(e) NULL)
+    .clustertree_umap_shared_plot_height_px(cache)
   }
 
   .umap_cfg_signature <- function(cfg) {
@@ -7837,36 +9682,25 @@ function(el, x, data) {
     plotOutput("umap_plot", width = "100%", height = paste0(h, "px"))
   })
   output$clustertree_umap_layout_ui <- renderUI({
-    nm <- .scalar_chr(shared_data$active_object_name, default = "")
-    cache <- tryCatch(shared_data$all_seurat_objects[[nm]]$analysis_cache$cluster_sweep, error = function(e) NULL)
-    layout_mode <- .clustertree_umap_layout_mode(cache, threshold = 10L)
-
     clustertree_card <- div(
-      class = "wl-side",
+      class = "wl-side clustertree-umap-card",
       h4(ANALYSIS_UI_TEXT$t_title_clustertree),
       analysis_with_busy_spinner(uiOutput("clustertree_plot_ui"), spinner = "clustertree")
     )
     umap_card <- div(
-      class = "wl-side clustering-umap-side",
+      class = "wl-side clustering-umap-side clustertree-umap-card",
       h4(ANALYSIS_UI_TEXT$t_title_umap),
       uiOutput("umap_plot_ui")
     )
 
-    if (identical(layout_mode, "stacked")) {
-      return(tagList(
-        fluidRow(column(12, clustertree_card)),
-        fluidRow(column(12, umap_card))
-      ))
-    }
-
     fluidRow(
+      class = "clustertree-umap-layout-row",
       column(6, clustertree_card),
       column(6, umap_card)
     )
   })
   output$umap_plot_ui_pre_sweep <- renderUI({
-    h <- .umap_plot_height_px()
-    plotOutput("umap_plot_pre_sweep", width = "100%", height = paste0(h, "px"))
+    plotOutput("umap_plot_pre_sweep", width = "100%", height = "100%")
   })
 
   .sync_umap_for_current_cfg <- function(sobj) {
@@ -8008,7 +9842,10 @@ function(el, x, data) {
   }
 
   observe({
-    tab_now <- input$plot_tabs %||% "clustering resolution"
+    # Agent note: The tab input is briefly NULL while the tabset binds. Never
+    # treat that transient state as clustering resolution and start UMAP work.
+    tab_now <- .scalar_chr(input$plot_tabs, default = "")
+    if (!nzchar(tab_now)) return(invisible(NULL))
     if (!identical(tab_now, "clustering resolution")) return()
     sobj <- .get_active_sobj(shared_data)
     if (is.null(sobj) || !inherits(sobj, "Seurat")) return()
@@ -8030,27 +9867,59 @@ function(el, x, data) {
 
   .render_clustering_umap <- function() {
     sobj <- .get_active_sobj(shared_data); req(sobj)
-    red <- input$umap_reduction %||% "umap"
-    if (identical(tolower(red), "umap3d")) red <- "umap"
+    # Agent note: Plot formatting must operate on a local object copy. This
+    # render path must not alter the active Seurat object or reactive registry.
+    sobj_plot <- sobj
+    # Agent note: ClusterTree UMAP color and legend use only the selected
+    # resolution column. Dropdown choices are ordered from lowest resolution;
+    # stale sample metadata or the old alternate-column input must not win.
+    nm <- .scalar_chr(shared_data$active_object_name, default = "")
+    cache <- tryCatch(shared_data$all_seurat_objects[[nm]]$analysis_cache$cluster_sweep, error = function(e) NULL)
+    cluster_choices <- .clustertree_umap_cluster_choices(sobj_plot, cache)
+    cluster_cols <- unname(cluster_choices)
+    requested_red <- .scalar_chr(input$umap_reduction, default = "umap")
+    if (identical(tolower(requested_red), "umap3d")) requested_red <- "umap"
     col_by <- .scalar_chr(input$umap_colorby, default = "")
-    col_by_res <- .scalar_chr(input$umap_colorby_rescol, default = "")
-    if (nzchar(col_by_res) && !identical(col_by_res, "__none__")) col_by <- col_by_res
-    if (!nzchar(col_by)) col_by <- NULL
-    
-    available_reductions <- tolower(tryCatch(names(sobj@reductions), error = function(e) character(0)))
-    red <- tolower(.scalar_chr(red, default = ""))
-    if (nzchar(red) && !(red %in% available_reductions) && red %in% c("umap", "tsne")) {
-      sobj2 <- .sync_umap_for_current_cfg(sobj)
-      if (!identical(sobj2, sobj)) {
-        .set_active_sobj(shared_data, sobj2)
-        sobj <- sobj2
-        available_reductions <- tolower(tryCatch(names(sobj@reductions), error = function(e) character(0)))
-      }
+    if (length(cluster_cols)) {
+      if (!col_by %in% cluster_cols) col_by <- cluster_cols[[1]]
+    } else {
+      col_by <- NULL
     }
-    if (!nzchar(red) || !red %in% available_reductions) {
+
+    # Agent note: Resolve legacy canonical input to the designated stored UMAP
+    # without mutating shared state from renderPlot. Embedding creation belongs
+    # to the pre-render synchronization observer above.
+    requested_lc <- tolower(requested_red)
+    requested_family <- if (grepl("^tsne($|_)", requested_lc)) {
+      "tsne"
+    } else if (grepl("^umap($|_)", requested_lc)) {
+      "umap"
+    } else {
+      ""
+    }
+    red <- if (nzchar(requested_family)) {
+      wanlab_resolve_embedding_reduction(
+        sobj_plot,
+        requested_family,
+        preferred_dims = .effective_dims()
+      )
+    } else {
+      .resolve_reduction_name_ci(sobj_plot, requested_red)
+    }
+    if (!nzchar(red) && nzchar(requested_family)) {
+      red <- .cfg_reduction_for_display(
+        sobj_plot,
+        params = list(plot_format = if (identical(tolower(requested_red), "tsne")) "TSNE" else "UMAP", dims = .effective_dims()),
+        fallback = requested_red
+      )
+    }
+    available_reductions <- tolower(tryCatch(names(sobj@reductions), error = function(e) character(0)))
+    red <- .scalar_chr(red, default = "")
+    if (!nzchar(red) || !tolower(red) %in% available_reductions) {
       .perf_log("clustering_umap:missing_reduction", details = c(
         sprintf("object=%s", .scalar_chr(shared_data$active_object_name, default = "<empty>")),
-        sprintf("requested=%s", if (nzchar(red)) red else "<empty>"),
+        sprintf("requested=%s", if (nzchar(requested_red)) requested_red else "<empty>"),
+        sprintf("resolved=%s", if (nzchar(red)) red else "<empty>"),
         sprintf("available=%s", if (length(available_reductions)) paste(available_reductions, collapse = ",") else "<none>")
       ))
       return(ggplot2::ggplot() + ggplot2::ggtitle("Embedding not available for this object."))
@@ -8059,7 +9928,7 @@ function(el, x, data) {
     entry <- .get_active_entry(shared_data)
     split_by <- NULL
     sample_col <- .scalar_chr(entry$prefs$sample_col %||% "", default = "")
-    if (isTRUE(input$umap_split_by_sample) && nzchar(sample_col) && sample_col %in% colnames(sobj@meta.data))
+    if (isTRUE(input$umap_split_by_sample) && nzchar(sample_col) && sample_col %in% colnames(sobj_plot@meta.data))
       split_by <- sample_col
     
     split_levels <- "All cells"
@@ -8068,12 +9937,13 @@ function(el, x, data) {
     strip_size <- 11
     legend_position <- .scalar_chr(input$umap_legend_position, default = "top")
     if (!(legend_position %in% c("top", "bottom", "right", "none"))) legend_position <- "top"
+    if (!length(cluster_cols)) legend_position <- "none"
     legend_cols <- suppressWarnings(as.integer(input$umap_legend_cols %||% 4L))
     if (!is.finite(legend_cols) || legend_cols < 1L) legend_cols <- 4L
     legend_cols <- max(1L, min(8L, legend_cols))
     legend_is_horizontal <- legend_position %in% c("top", "bottom")
     if (!is.null(split_by)) {
-      split_vals <- as.character(sobj@meta.data[[split_by]])
+      split_vals <- as.character(sobj_plot@meta.data[[split_by]])
       split_vals[is.na(split_vals) | !nzchar(split_vals)] <- "NA"
       split_levels <- .sort_levels_natural(split_vals)
       plot_w <- suppressWarnings(as.numeric(
@@ -8088,21 +9958,21 @@ function(el, x, data) {
     }
     
     # ensure cluster factors are numerically ordered for legend
-    if (nzchar(.scalar_chr(col_by, default = "")) && col_by %in% colnames(sobj@meta.data)) {
-      sobj@meta.data[[col_by]] <- .factor_numeric_first(sobj@meta.data[[col_by]])
+    if (nzchar(.scalar_chr(col_by, default = "")) && col_by %in% colnames(sobj_plot@meta.data)) {
+      sobj_plot@meta.data[[col_by]] <- .factor_numeric_first(sobj_plot@meta.data[[col_by]])
     } else {
-      Seurat::Idents(sobj) <- .factor_numeric_first(Seurat::Idents(sobj))
+      Seurat::Idents(sobj_plot) <- .factor_numeric_first(Seurat::Idents(sobj_plot))
     }
     
     p <- tryCatch({
-      if (nzchar(.scalar_chr(col_by, default = "")) && col_by %in% colnames(sobj@meta.data))
-        Seurat::DimPlot(sobj, reduction = red, group.by = col_by, split.by = split_by, ncol = facet_ncol)
+      if (nzchar(.scalar_chr(col_by, default = "")) && col_by %in% colnames(sobj_plot@meta.data))
+        Seurat::DimPlot(sobj_plot, reduction = red, group.by = col_by, split.by = split_by, ncol = facet_ncol)
       else
-        Seurat::DimPlot(sobj, reduction = red, split.by = split_by, ncol = facet_ncol)
+        Seurat::DimPlot(sobj_plot, reduction = red, split.by = split_by, ncol = facet_ncol)
     }, error = function(e) ggplot2::ggplot() + ggplot2::ggtitle("UMAP not available yet"))
     
     emb_limits <- tryCatch({
-      emb <- Seurat::Embeddings(sobj, reduction = red)
+      emb <- Seurat::Embeddings(sobj_plot, reduction = red)
       analysis_umap_axis_limits(x = emb[, 1], y = emb[, 2])
     }, error = function(e) NULL)
 
@@ -8127,10 +9997,10 @@ function(el, x, data) {
       )
     p <- if (inherits(p, "patchwork")) p & legend_theme else p + legend_theme
     lg_dot <- .umap_legend_dot_size(.umap_point_size_from_plot(p, 0.85), 10)
-    legend_vals <- if (!is.null(col_by) && col_by %in% colnames(sobj@meta.data)) {
-      as.character(sobj@meta.data[[col_by]])
+    legend_vals <- if (!is.null(col_by) && col_by %in% colnames(sobj_plot@meta.data)) {
+      as.character(sobj_plot@meta.data[[col_by]])
     } else {
-      as.character(Seurat::Idents(sobj))
+      as.character(Seurat::Idents(sobj_plot))
     }
     legend_vals[is.na(legend_vals) | !nzchar(legend_vals)] <- "NA"
     legend_n_levels <- length(unique(legend_vals))
@@ -8166,22 +10036,21 @@ function(el, x, data) {
   }
   
   output$umap_plot <- renderPlot({
-    tab_now <- input$plot_tabs %||% "clustering resolution"
-    if (!identical(tab_now, "clustering resolution")) return(invisible(NULL))
     .render_clustering_umap()
   }, height = function() .umap_plot_height_px())
   output$umap_plot_pre_sweep <- renderPlot({
-    tab_now <- input$plot_tabs %||% "clustering resolution"
-    if (!identical(tab_now, "clustering resolution")) return(invisible(NULL))
     .render_clustering_umap()
-  }, height = function() .umap_plot_height_px())
+  }, height = "auto")
 
-  .umap3d_prepared <- reactive({
+  # Agent note: 3D preparation is an explicit user action. Keep its result in
+  # state; UI builders and Plotly renderers must not start embedding work while
+  # they only inspect control choices.
+  .build_umap3d_prepared <- function() {
     .umap3d_error(NULL)
     embedding_type <- toupper(.scalar_chr(input$umap3d_embedding_type %||% "UMAP", default = "UMAP"))
     if (!embedding_type %in% c("UMAP", "TSNE")) embedding_type <- "UMAP"
     red3d_name <- if (identical(embedding_type, "TSNE")) "tsne3d" else "umap3d"
-    red2d_name <- if (identical(embedding_type, "TSNE")) "tsne" else "umap"
+    red2d_family <- if (identical(embedding_type, "TSNE")) "tsne" else "umap"
     axis_prefix <- if (identical(embedding_type, "TSNE")) "tSNE" else "UMAP"
     mode_label <- if (identical(embedding_type, "TSNE")) "3D tSNE" else "3D UMAP"
 
@@ -8214,21 +10083,25 @@ function(el, x, data) {
     entry <- tryCatch(shared_data$all_seurat_objects[[nm]], error = function(e) NULL)
     saved_raw <- tryCatch(entry$prefs$embedding_params, error = function(e) NULL)
     saved_cfg <- if (is.list(saved_raw)) .as_cfg(saved_raw) else NULL
-    reds_now <- tolower(tryCatch(names(sobj@reductions), error = function(e) character()))
-    has_umap_now <- "umap" %in% reds_now
-    umap_sig <- tryCatch(sobj@reductions[["umap"]]@misc$cfg_signature, error = function(e) NULL)
-    inferred_cfg <- if (is.list(umap_sig)) {
+    red2d_name <- wanlab_resolve_embedding_reduction(
+      sobj,
+      requested = red2d_family,
+      preferred_dims = if (is.list(saved_cfg)) saved_cfg$dims else NULL
+    )
+    has_2d_now <- nzchar(red2d_name)
+    red2d_sig <- tryCatch(sobj@reductions[[red2d_name]]@misc$cfg_signature, error = function(e) NULL)
+    inferred_cfg <- if (is.list(red2d_sig)) {
       list(
-        plot_format = "UMAP",
-        dims = suppressWarnings(as.integer(umap_sig$dims %||% .effective_dims())),
-        seed = suppressWarnings(as.integer(umap_sig$seed %||% 42L)),
-        umap_neighbors = suppressWarnings(as.integer(umap_sig$umap_neighbors %||% 30L)),
-        umap_min_dist = suppressWarnings(as.numeric(umap_sig$umap_min_dist %||% 0.30)),
-        umap_spread = suppressWarnings(as.numeric(umap_sig$umap_spread %||% 1.0)),
-        tsne_perplexity = suppressWarnings(as.numeric(umap_sig$tsne_perplexity %||% 30)),
-        tsne_theta = suppressWarnings(as.numeric(umap_sig$tsne_theta %||% 0.5)),
-        tsne_eta = suppressWarnings(as.numeric(umap_sig$tsne_eta %||% 200)),
-        tsne_iter = suppressWarnings(as.integer(umap_sig$tsne_iter %||% 1000L))
+        plot_format = embedding_type,
+        dims = suppressWarnings(as.integer(red2d_sig$dims %||% .effective_dims())),
+        seed = suppressWarnings(as.integer(red2d_sig$seed %||% 42L)),
+        umap_neighbors = suppressWarnings(as.integer(red2d_sig$umap_neighbors %||% 30L)),
+        umap_min_dist = suppressWarnings(as.numeric(red2d_sig$umap_min_dist %||% 0.30)),
+        umap_spread = suppressWarnings(as.numeric(red2d_sig$umap_spread %||% 1.0)),
+        tsne_perplexity = suppressWarnings(as.numeric(red2d_sig$tsne_perplexity %||% 30)),
+        tsne_theta = suppressWarnings(as.numeric(red2d_sig$tsne_theta %||% 0.5)),
+        tsne_eta = suppressWarnings(as.numeric(red2d_sig$tsne_eta %||% 200)),
+        tsne_iter = suppressWarnings(as.integer(red2d_sig$tsne_iter %||% 1000L))
       )
     } else {
       list(
@@ -8244,8 +10117,8 @@ function(el, x, data) {
         tsne_iter = suppressWarnings(as.integer(input$cfg_tsne_iter %||% 500L))
       )
     }
-    cfg_from_keeper <- is.list(saved_cfg) && identical(saved_cfg$plot_format, "UMAP")
-    cfg_use <- if (isTRUE(cfg_from_keeper)) saved_cfg else if (isTRUE(has_umap_now)) inferred_cfg else NULL
+    cfg_from_keeper <- is.list(saved_cfg) && identical(saved_cfg$plot_format, embedding_type)
+    cfg_use <- if (isTRUE(cfg_from_keeper)) saved_cfg else if (isTRUE(has_2d_now)) inferred_cfg else NULL
 
     if (is.null(cfg_use)) {
       msg <- "3D UMAP keeper: no saved UMAP configuration found and no UMAP reduction exists in this object. Please generate embedding preview in 'umap configuration' first."
@@ -8257,9 +10130,6 @@ function(el, x, data) {
       .umap3d_error(msg)
       return(NULL)
     }
-
-    overlay_show("Computing embedding preview...")
-    on.exit(overlay_hide(), add = TRUE)
 
     message(sprintf("[%s] keeper pass object=%s dims=%s seed=%s", mode_label, nm, cfg_use$dims, cfg_use$seed))
     reds_before <- tolower(tryCatch(names(sobj@reductions), error = function(e) character()))
@@ -8289,9 +10159,7 @@ function(el, x, data) {
       return(NULL)
     }
     sobj2 <- prep3d$object %||% sobj
-    reds_after <- tolower(tryCatch(names(sobj2@reductions), error = function(e) character()))
     if (!(red3d_name %in% reds_before) || prep3d$created) {
-      shared_data$all_seurat_objects[[nm]]$obj <- sobj2
       sobj <- sobj2
     }
 
@@ -8363,7 +10231,7 @@ function(el, x, data) {
       red3d_name = red3d_name,
       red2d_name = red2d_name
     )
-  })
+  }
 
   output$umap3d_error_ui <- renderUI({
     if (!isTRUE(.umap3d_requested())) {
@@ -8443,6 +10311,19 @@ function(el, x, data) {
     )
     invisible(NULL)
   }
+  observeEvent(input$umap3d_splitby, {
+    if (!isTRUE(.umap3d_requested())) return(invisible(NULL))
+    prep <- .umap3d_prepared()
+    if (is.null(prep)) return(invisible(NULL))
+    split_by_raw <- .scalar_chr(input$umap3d_splitby, default = "__none__")
+    split_by <- .normalize_umap3d_split_by(prep$df, split_by_raw)
+    if (!identical(split_by_raw, "__none__") && !identical(split_by, split_by_raw)) {
+      updateSelectizeInput(session, "umap3d_splitby", selected = "__none__")
+      updateSelectizeInput(session, "umap3d_split_value", selected = character(0))
+      .notify_umap3d_split_guard(split_by_raw)
+    }
+    invisible(NULL)
+  }, ignoreInit = TRUE)
 
   output$umap3d_plot_ui <- renderUI({
     tab_now <- input$plot_tabs %||% "clustering resolution"
@@ -8465,9 +10346,6 @@ function(el, x, data) {
   })
 
   output$umap3d_plot <- renderPlotly({
-    tab_now <- input$plot_tabs %||% "clustering resolution"
-    hidden_now <- tryCatch(isTRUE(session$clientData$output_umap3d_plot_hidden), error = function(e) NA)
-    message(sprintf("[3D UMAP] renderPlotly entered, active tab='%s', hidden=%s", as.character(tab_now), as.character(hidden_now)))
     .empty_3d <- function() {
       plotly::plot_ly(
         x = numeric(0),
@@ -8486,27 +10364,15 @@ function(el, x, data) {
         ) |>
         plotly::config(displayModeBar = FALSE, displaylogo = FALSE)
     }
-    if (isTRUE(hidden_now)) return(.empty_3d())
     if (!isTRUE(.umap3d_requested())) return(.empty_3d())
     tryCatch({
       prep <- .umap3d_prepared()
-      if (is.null(prep)) {
-        if (is.null(.umap3d_error()) || !nzchar(.umap3d_error())) {
-          .umap3d_error("3D UMAP preview is not ready. Please confirm active dataset and generate preview again.")
-        }
-        return(.empty_3d())
-      }
-      .umap3d_error(NULL)
+      if (is.null(prep)) return(.empty_3d())
       df <- prep$df
       color_by <- input$umap3d_colorby %||% prep$color_cols[1]
       if (!color_by %in% prep$color_cols) color_by <- prep$color_cols[1]
       split_by_raw <- input$umap3d_splitby %||% "__none__"
       split_by <- .normalize_umap3d_split_by(df, split_by_raw)
-      if (!identical(split_by_raw, "__none__") && !identical(split_by, split_by_raw)) {
-        updateSelectizeInput(session, "umap3d_splitby", selected = "__none__")
-        updateSelectizeInput(session, "umap3d_split_value", selected = character(0))
-        .notify_umap3d_split_guard(split_by_raw)
-      }
       split_value <- input$umap3d_split_value %||% character()
       if (!identical(split_by, "__none__") && split_by %in% colnames(df) && length(split_value)) {
         df <- df[df[[split_by]] %in% split_value, , drop = FALSE]
@@ -8631,7 +10497,7 @@ function(el, x, data) {
   }, ignoreInit = TRUE)
 
   observeEvent(input$download_umap3d_bundle, {
-    overlay_show("Building 3D embedding bundle...")
+    overlay_show("Building 3D embedding bundle...", loader = "export")
   }, ignoreInit = TRUE)
 
   output$download_umap3d_bundle <- downloadHandler(
@@ -8932,10 +10798,8 @@ function(el, x, data) {
   .jj_colors_from_dimplot <- function(sobj, resolution_col, cluster_levels) {
     if (is.null(sobj) || !nzchar(as.character(resolution_col))) return(NULL)
     if (!resolution_col %in% colnames(sobj@meta.data)) return(NULL)
-    reds <- tryCatch(tolower(names(sobj@reductions)), error = function(e) character())
-    red_use <- if ("umap" %in% reds) names(sobj@reductions)[match("umap", reds)] else NULL
-    if (is.null(red_use) && length(names(sobj@reductions))) red_use <- names(sobj@reductions)[1]
-    if (is.null(red_use) || !nzchar(red_use)) return(NULL)
+    red_use <- wanlab_resolve_embedding_reduction(sobj, "umap", preferred_dims = .effective_dims())
+    if (!nzchar(red_use)) return(NULL)
 
     p_tmp <- tryCatch(
       Seurat::DimPlot(sobj, reduction = red_use, group.by = resolution_col),
@@ -9154,7 +11018,8 @@ function(el, x, data) {
       return(payload$result)
     }
     sobj2 <- sobj
-    if (!"umap" %in% tolower(names(sobj2@reductions))) {
+    umap_name <- wanlab_resolve_embedding_reduction(sobj2, "umap", preferred_dims = .effective_dims())
+    if (!nzchar(umap_name)) {
       sobj2 <- Seurat::RunUMAP(
         sobj2,
         reduction = "pca",
@@ -9162,11 +11027,11 @@ function(el, x, data) {
         seed.use = as.integer(input$cfg_seed_input %||% 42),
         verbose = FALSE
       )
+      umap_name <- wanlab_resolve_embedding_reduction(sobj2, "umap", preferred_dims = .effective_dims())
     }
+    if (!nzchar(umap_name)) stop("Pseudobulk UMAP overview requires a valid UMAP embedding.")
     nm <- shared_data$active_object_name
-    if ("umap" %in% names(sobj2@reductions)) {
-      sobj2 <- wanlab_set_reduction_provenance(sobj2, "umap", nm, "pca", .effective_dims())
-    }
+    sobj2 <- wanlab_set_reduction_provenance(sobj2, umap_name, nm, "pca", .effective_dims())
     shared_data$all_seurat_objects[[nm]]$obj <- sobj2
     
     pb <- core_analysis_tab_d_compute_pseudobulk(
@@ -9319,8 +11184,10 @@ function(el, x, data) {
       return(plot_card_not_ready_ui(note = ANALYSIS_UI_TEXT$t_text_pseudobulk_idle, height_px = 360L))
     }
     sobj <- .get_active_sobj(shared_data)
-    has_umap <- !is.null(sobj) && any(tolower(names(sobj@reductions)) %in% "umap")
-    if (!isTRUE(has_umap)) {
+    umap_name <- if (!is.null(sobj)) {
+      wanlab_resolve_embedding_reduction(sobj, "umap", preferred_dims = .effective_dims())
+    } else ""
+    if (!nzchar(umap_name)) {
       return(plot_card_not_ready_ui(note = ANALYSIS_UI_TEXT$t_text_pseudobulk_umap_not_ready, height_px = 360L))
     }
     plotOutput("pb_umap_plot", width = "100%")
@@ -9355,8 +11222,9 @@ function(el, x, data) {
     cluster_col <- as.character(input$de_res_select %||% "")
     req(nzchar(cluster_col), cluster_col %in% colnames(sobj@meta.data))
     sobj2 <- sobj
-    req("umap" %in% tolower(names(sobj2@reductions)))
-    p <- Seurat::DimPlot(sobj2, reduction = "umap", group.by = cluster_col) +
+    umap_name <- wanlab_resolve_embedding_reduction(sobj2, "umap", preferred_dims = .effective_dims())
+    validate(need(nzchar(umap_name), ANALYSIS_UI_TEXT$t_text_pseudobulk_umap_not_ready))
+    p <- Seurat::DimPlot(sobj2, reduction = umap_name, group.by = cluster_col) +
       ggplot2::theme_minimal(base_size = 12) +
       ggplot2::theme(legend.position = "top", legend.direction = "horizontal", legend.box = "horizontal") +
       ggplot2::labs(title = sprintf("UMAP grouped by %s", cluster_col)) +
@@ -11523,8 +13391,8 @@ function(el, x, data) {
       .analysis_table_has_required_cols(tbl, c("cell", "final_label")),
       "Selected annotation layer is missing required columns for label preview."
     ))
-    red <- if ("umap" %in% names(sobj@reductions)) "umap" else names(sobj@reductions)[1]
-    req(!is.null(red), nzchar(red))
+    red <- wanlab_resolve_embedding_reduction(sobj, "umap", preferred_dims = .effective_dims())
+    validate(need(nzchar(red), "Annotation preview requires a valid UMAP embedding."))
     emb <- as.data.frame(Seurat::Embeddings(sobj, reduction = red))
     colnames(emb)[1:2] <- c("dim1", "dim2")
     emb$cell <- rownames(emb)
@@ -11580,8 +13448,8 @@ function(el, x, data) {
     if (!identical(tab_now, "annotation tools")) return(invisible(NULL))
     sobj <- .get_active_sobj(shared_data); req(sobj)
     tbl <- .get_active_layer_table(); req(!is.null(tbl), nrow(tbl))
-    red <- if ("umap" %in% names(sobj@reductions)) "umap" else names(sobj@reductions)[1]
-    req(!is.null(red), nzchar(red))
+    red <- wanlab_resolve_embedding_reduction(sobj, "umap", preferred_dims = .effective_dims())
+    validate(need(nzchar(red), "Annotation confidence preview requires a valid UMAP embedding."))
     emb <- as.data.frame(Seurat::Embeddings(sobj, reduction = red))
     colnames(emb)[1:2] <- c("dim1", "dim2")
     emb$cell <- rownames(emb)
@@ -11798,7 +13666,7 @@ function(el, x, data) {
     shared_data$all_seurat_objects[[nm]]$obj <- seurat_obj
     if (is.null(seurat_obj$seurat_clusters)) showNotification("Heatmap requires finished clustering.", type = "message")
     req(seurat_obj$seurat_clusters)
-    updateTabsetPanel(session, inputId = "plot_tabs", selected = "differential expression analysis")
+    .go_plot_tab("differential expression analysis")
     
     showNotification("Running heatmap…", type = "message", duration = 5)
     original_lib_paths <- .libPaths(); .libPaths(c(shared_data$active_environment$path, original_lib_paths))
@@ -12174,8 +14042,8 @@ cellwhisperer_server <- function(input, output, session, shared_data) {
     md <- obj@meta.data
     validate(need("cw_active_score" %in% colnames(md), "Run a query to create cw_active_score."))
 
-    red_name <- if ("umap" %in% names(obj@reductions)) "umap" else names(obj@reductions)[1]
-    validate(need(!is.null(red_name) && nzchar(red_name), "No embedding reduction available."))
+    red_name <- wanlab_resolve_embedding_reduction(obj, "umap", preferred_dims = .effective_dims())
+    validate(need(nzchar(red_name), "CellWhisperer overlay requires a valid UMAP embedding."))
     emb <- Seurat::Embeddings(obj, reduction = red_name)
     validate(need(!is.null(emb) && ncol(emb) >= 2, "Embedding preview unavailable."))
 

@@ -21,3 +21,19 @@
       body.wl-emergency-lock #global_overlay {
         z-index: 10001 !important;
       }
+
+      /* Normal busy work: freeze app interaction while the active overlay owns the task. */
+      body.wl-overlay-lock,
+      body.wl-overlay-lock * {
+        cursor: wait !important;
+      }
+      body.wl-overlay-lock * {
+        pointer-events: none !important;
+      }
+      body.wl-overlay-lock .so-backdrop[data-overlay-lock="true"],
+      body.wl-overlay-lock .so-backdrop[data-overlay-lock="true"] * {
+        pointer-events: auto !important;
+      }
+      body.wl-overlay-lock .so-backdrop[data-overlay-lock="true"] {
+        z-index: 10001 !important;
+      }

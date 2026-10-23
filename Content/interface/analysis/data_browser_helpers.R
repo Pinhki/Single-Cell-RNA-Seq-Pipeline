@@ -1,3 +1,5 @@
+# State-sync contract: read docs/agents/interface/ANALYSIS_STATE_SYNC_CONTRACT.md
+# before changing shared Data Browser state helpers or their callers.
 `%||%` <- function(a, b) if (!is.null(a)) a else b
 
 db_is_effectively_numeric <- function(x) {
@@ -83,9 +85,12 @@ db_colors_from_dimplot <- function(sobj, reduction_name, color_col, cluster_leve
   if (!length(reds)) return(NULL)
   red_use <- as.character(reduction_name %||% "")
   if (!nzchar(red_use) || !(red_use %in% reds)) {
-    reds_lc <- tolower(reds)
-    red_use <- if ("umap" %in% reds_lc) reds[[match("umap", reds_lc)]] else reds[[1]]
+    red_use <- wanlab_resolve_embedding_reduction(
+      sobj,
+      requested = if (nzchar(red_use)) red_use else "umap"
+    )
   }
+  if (!nzchar(red_use)) return(NULL)
   p_tmp <- tryCatch(
     Seurat::DimPlot(sobj, reduction = red_use, group.by = color_col),
     error = function(e) NULL
@@ -232,22 +237,19 @@ db_reduction_shape_signature <- function(obj) {
 db_preferred_embedding_reduction <- function(obj, entry = NULL) {
   reds <- db_embedding_reduction_choices(obj)
   if (!length(reds)) return("")
-  reds_lc <- tolower(reds)
-  dims_raw <- tryCatch(entry$prefs$confirmed_dims$value, error = function(e) NULL)
-  dims_val <- suppressWarnings(as.integer(dims_raw))
-  dims_val <- dims_val[is.finite(dims_val) & !is.na(dims_val)]
-  if (length(dims_val)) {
-    dims_tag <- as.character(dims_val[[1]])
-    umap_dim <- which(grepl("umap", reds_lc, fixed = TRUE) & grepl(dims_tag, reds_lc, fixed = TRUE))
-    if (length(umap_dim)) return(reds[[umap_dim[[1]]]])
-    tsne_dim <- which(grepl("tsne", reds_lc, fixed = TRUE) & grepl(dims_tag, reds_lc, fixed = TRUE))
-    if (length(tsne_dim)) return(reds[[tsne_dim[[1]]]])
-  }
-  if ("umap" %in% reds_lc) return(reds[[match("umap", reds_lc)]])
-  umap_prefix <- which(grepl("^umap", reds_lc))
-  if (length(umap_prefix)) return(reds[[umap_prefix[[1]]]])
-  umap_any <- which(grepl("umap", reds_lc, fixed = TRUE))
-  if (length(umap_any)) return(reds[[umap_any[[1]]]])
+  dims_val <- wanlab_get_active_embedding_dims(entry)
+  umap_name <- wanlab_resolve_embedding_reduction(
+    obj,
+    "umap",
+    preferred_dims = if (length(dims_val)) dims_val[[1L]] else NULL
+  )
+  if (nzchar(umap_name)) return(umap_name)
+  tsne_name <- wanlab_resolve_embedding_reduction(
+    obj,
+    "tsne",
+    preferred_dims = if (length(dims_val)) dims_val[[1L]] else NULL
+  )
+  if (nzchar(tsne_name)) return(tsne_name)
   reds[[1]]
 }
 
@@ -470,7 +472,38 @@ db_sort_numeric_first <- function(v) {
   uniq <- unique(v)
   num <- suppressWarnings(as.numeric(uniq))
   ok <- is.finite(num)
-  c(uniq[ok][order(num[ok], uniq[ok])], sort(uniq[!ok], na.last = TRUE))
+  numeric_levels <- uniq[ok][order(num[ok], uniq[ok], method = "radix")]
+  non_numeric_levels <- uniq[!ok]
+  if (!length(non_numeric_levels)) return(numeric_levels)
+
+  # Agent note: Metadata levels may be identifiers with embedded numbers.
+  # Keep natural numeric chunks so sample_4 precedes sample_12, while pure
+  # numeric levels retain their existing numeric-first behavior.
+  natural_key <- function(value) {
+    chunks <- strsplit(
+      value,
+      "(?<=[^0-9])(?=[0-9])|(?<=[0-9])(?=[^0-9])",
+      perl = TRUE
+    )[[1L]]
+    paste(
+      vapply(chunks, function(chunk) {
+        if (grepl("^[0-9]+$", chunk)) {
+          digits <- sub("^0+", "", chunk)
+          if (!nzchar(digits)) digits <- "0"
+          paste0("0", sprintf("%012d", nchar(digits)), ":", digits)
+        } else {
+          paste0("1", tolower(chunk))
+        }
+      }, character(1)),
+      collapse = "\001"
+    )
+  }
+
+  natural_keys <- vapply(non_numeric_levels, natural_key, character(1))
+  c(
+    numeric_levels,
+    non_numeric_levels[order(natural_keys, non_numeric_levels, method = "radix")]
+  )
 }
 
 db_is_cluster_like_name <- function(col_name) {

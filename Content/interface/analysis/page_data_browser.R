@@ -1,3 +1,5 @@
+# State-sync contract: read docs/agents/interface/ANALYSIS_STATE_SYNC_CONTRACT.md
+# before changing object, tab, selection, plot, or gene-catalog observers.
 library(shiny)
 library(DT)
 library(ggplot2)
@@ -185,9 +187,12 @@ if (!exists("db_colors_from_dimplot", mode = "function")) {
     if (!length(reds)) return(NULL)
     red_use <- as.character(reduction_name %||% "")
     if (!nzchar(red_use) || !(red_use %in% reds)) {
-      reds_lc <- tolower(reds)
-      red_use <- if ("umap" %in% reds_lc) reds[[match("umap", reds_lc)]] else reds[[1]]
+      red_use <- wanlab_resolve_embedding_reduction(
+        sobj,
+        requested = if (nzchar(red_use)) red_use else "umap"
+      )
     }
+    if (!nzchar(red_use)) return(NULL)
     p_tmp <- tryCatch(
       Seurat::DimPlot(sobj, reduction = red_use, group.by = color_col),
       error = function(e) NULL
@@ -603,11 +608,7 @@ data_browser_server <- function(input, output, session, shared_data) {
   }
   .db_tab_is_active <- function() {
     tab_now <- tolower(trimws(.scalar_chr(input$plot_tabs, "")))
-    if (nzchar(tab_now)) return(tab_now %in% c("data browser", "databrowser"))
-    # During short bind gaps, only trust visible DOM active tab if provided.
-    dtab <- tolower(trimws(.scalar_chr(tryCatch(input$plot_tabs_dom_diag$active, error = function(e) ""), "")))
-    dvis <- isTRUE(tryCatch(input$plot_tabs_dom_diag$visible, error = function(e) FALSE))
-    isTRUE(dvis) && dtab %in% c("data browser", "databrowser")
+    tab_now %in% c("data browser", "databrowser")
   }
 
   .active_name <- reactive({
@@ -615,15 +616,14 @@ data_browser_server <- function(input, output, session, shared_data) {
     reg_names <- as.character(reg_names %||% character(0))
     reg_names <- reg_names[!is.na(reg_names) & nzchar(reg_names)]
     if (!length(reg_names)) return("")
-    candidates <- c(
-      .scalar_chr(shared_data$active_object_name, ""),
-      .scalar_chr(input$active_object_name_input, "")
-    )
+    # Agent note: Inner Data Browser follows canonical shared state only;
+    # header selector input is a view and must not become a second source.
+    candidates <- .scalar_chr(shared_data$active_object_name, "")
     candidates <- unique(as.character(candidates %||% character(0)))
     candidates <- candidates[!is.na(candidates) & nzchar(candidates)]
     candidates <- intersect(candidates, reg_names)
     if (length(candidates)) return(candidates[[1]])
-    reg_names[[1]]
+    reg_names[[length(reg_names)]]
   })
   .active_entry <- reactive({
     nm <- .active_name()
@@ -816,6 +816,8 @@ data_browser_server <- function(input, output, session, shared_data) {
   db_latest_import <- reactiveVal(data.frame())
   db_selector_state_sig <- reactiveVal(list(red_choices = "", col_choices = ""))
   db_global_overlay_active <- reactiveVal(FALSE)
+  db_overlay_signature <- reactiveVal("")
+  db_overlay_request_id <- reactiveVal(0L)
 
   .db_overlay_show <- function(msg = "Rendering Data Browser plot...") {
     if (!isTRUE(.db_tab_is_active())) return(invisible(NULL))
@@ -824,20 +826,62 @@ data_browser_server <- function(input, output, session, shared_data) {
     invisible(NULL)
   }
 
-  .db_overlay_hide <- function() {
-    if (!isTRUE(db_global_overlay_active())) return(invisible(NULL))
+  .db_overlay_hide <- function(tab_active = NULL, reason = "") {
+    request_id_now <- suppressWarnings(as.integer(isolate(db_overlay_request_id()) %||% 0L))
+    if (!is.finite(request_id_now) || is.na(request_id_now) || request_id_now < 0L) request_id_now <- 0L
+    db_overlay_request_id(request_id_now + 1L)
+    db_overlay_signature("")
+    if (!isTRUE(isolate(db_global_overlay_active()))) return(invisible(NULL))
     db_global_overlay_active(FALSE)
     # Do not force-hide global overlay when DB is not active; another page
     # route/render may currently own it.
-    if (isTRUE(.db_tab_is_active())) {
+    if (is.null(tab_active)) tab_active <- isTRUE(.db_tab_is_active())
+    if (isTRUE(tab_active)) {
       try(overlay_hide(), silent = TRUE)
     }
+    .db_log("overlay:finish", "reason=", .scalar_chr(reason, "explicit"))
     invisible(NULL)
   }
   .db_request_overlay <- function(msg = "Loading Data Browser...") {
     if (!isTRUE(.db_tab_is_active())) return(invisible(NULL))
+    active_now <- .scalar_chr(isolate(.active_name()), "")
+    tab_now <- tolower(trimws(.scalar_chr(input$plot_tabs, "")))
+    signature <- paste(
+      active_now,
+      tab_now,
+      .scalar_chr(input$db_reduction, ""),
+      .scalar_chr(input$db_color_col, ""),
+      .scalar_chr(input$db_split_mode, ""),
+      .scalar_chr(input$db_split_by_primary, ""),
+      .scalar_chr(input$db_split_by_secondary, ""),
+      .scalar_chr(input$db_dot_size, ""),
+      sep = "\u001f"
+    )
+    request_id_now <- suppressWarnings(as.integer(isolate(db_overlay_request_id()) %||% 0L))
+    if (!is.finite(request_id_now) || is.na(request_id_now) || request_id_now < 0L) request_id_now <- 0L
+    request_id <- request_id_now + 1L
+    db_overlay_request_id(request_id)
+    db_overlay_signature(signature)
     .db_overlay_show(msg)
-    try(overlay_hide_when_output_ready("db_plot_group", timeout_ms = 120000L), silent = TRUE)
+    .db_log("overlay:request", "id=", request_id, "signature=", signature)
+    # Server flush is the deterministic terminal boundary. Capture request
+    # identity before registering; every reactive read in this deferred
+    # callback is isolated. Never wait for a DOM output marker or timeout.
+    try(session$onFlushed(function() {
+      id_after <- suppressWarnings(as.integer(isolate(db_overlay_request_id()) %||% 0L))
+      signature_after <- .scalar_chr(isolate(db_overlay_signature()), "")
+      active_after <- .scalar_chr(isolate(.active_name()), "")
+      navbar_after <- tolower(trimws(.scalar_chr(isolate(input$main_navbar), "")))
+      plot_tab_after <- tolower(trimws(.scalar_chr(isolate(input$plot_tabs), "")))
+      page_active_after <- identical(navbar_after, "analysis_tab") &&
+        plot_tab_after %in% c("data browser", "databrowser")
+      if (identical(id_after, request_id) &&
+          identical(signature_after, signature) &&
+          identical(active_after, active_now) &&
+          isTRUE(page_active_after)) {
+        .db_overlay_hide(tab_active = TRUE, reason = "server_flush")
+      }
+    }, once = TRUE), silent = TRUE)
     invisible(NULL)
   }
 
@@ -852,7 +896,7 @@ data_browser_server <- function(input, output, session, shared_data) {
     reg_names <- reg_names[!is.na(reg_names) & nzchar(reg_names)]
     if (!length(reg_names)) return(invisible(NULL))
     target <- .active_name()
-    if (!nzchar(target) || !(target %in% reg_names)) target <- reg_names[[1]]
+    if (!nzchar(target) || !(target %in% reg_names)) target <- reg_names[[length(reg_names)]]
     current <- .scalar_chr(shared_data$active_object_name, "")
     if (!identical(current, target)) shared_data$active_object_name <- target
     invisible(NULL)
@@ -888,6 +932,8 @@ data_browser_server <- function(input, output, session, shared_data) {
 
     reds <- names(sobj@reductions %||% list())
     .db_log("render:db_reduction_ui", "reds_n=", length(reds), "reason=", reason)
+    entry <- .active_entry()
+    dims_pref <- wanlab_get_active_embedding_dims(entry)
     selected_red <- .scalar_chr(input$db_reduction, default = "")
     if (!length(reds)) {
       red_sig_next <- "EMPTY|"
@@ -897,12 +943,36 @@ data_browser_server <- function(input, output, session, shared_data) {
       red_choices_sig <- red_sig_next
       shinyjs::disable("db_reduction")
     } else {
-      red_choices_next <- paste(reds, collapse = "||")
+      red_choices_next <- paste(
+        c(reds, if (length(dims_pref)) paste0("active_dims=", dims_pref[[1L]]) else "active_dims="),
+        collapse = "||"
+      )
+      selected_lc <- tolower(selected_red)
+      selected_family <- if (grepl("^tsne($|_)", selected_lc)) {
+        "tsne"
+      } else if (!nzchar(selected_lc) || grepl("^umap($|_)", selected_lc)) {
+        "umap"
+      } else {
+        ""
+      }
+      if (nzchar(selected_family) && length(dims_pref)) {
+        preferred_red <- wanlab_resolve_embedding_reduction(
+          sobj,
+          selected_family,
+          preferred_dims = dims_pref
+        )
+        if (nzchar(preferred_red)) selected_red <- preferred_red
+      }
       if (!nzchar(selected_red) || !(selected_red %in% reds)) {
-        umap_hits <- reds[tolower(reds) == "umap"]
-        selected_red <- if (length(umap_hits)) umap_hits[[1]] else reds[[1]]
-        try(updateSelectInput(session, "db_reduction", choices = reds, selected = selected_red), silent = TRUE)
-      } else if (!identical(red_choices_sig, red_choices_next)) {
+        umap_name <- wanlab_resolve_embedding_reduction(
+          sobj,
+          "umap",
+          preferred_dims = if (length(dims_pref)) dims_pref else NULL
+        )
+        selected_red <- if (nzchar(umap_name)) umap_name else reds[[1]]
+      }
+      if (!identical(.scalar_chr(input$db_reduction, default = ""), selected_red) ||
+          !identical(red_choices_sig, red_choices_next)) {
         try(updateSelectInput(session, "db_reduction", choices = reds, selected = selected_red), silent = TRUE)
       }
       red_choices_sig <- red_choices_next
@@ -947,7 +1017,7 @@ data_browser_server <- function(input, output, session, shared_data) {
     active_nm <- .active_name()
     active_obj <- .active_obj()
     if (nzchar(active_nm) && !is.null(active_obj)) return(invisible(NULL))
-    fallback_nm <- objs[[1]]
+    fallback_nm <- objs[[length(objs)]]
     if (!identical(.scalar_chr(shared_data$active_object_name, ""), fallback_nm)) {
       shared_data$active_object_name <- fallback_nm
     }
@@ -1035,6 +1105,10 @@ data_browser_server <- function(input, output, session, shared_data) {
     if (!isTRUE(.db_tab_is_active())) return(invisible(NULL))
     .db_request_overlay("Updating Data Browser point size...")
   }, ignoreInit = TRUE)
+  observeEvent(shared_data$active_object_name, {
+    if (!isTRUE(.db_tab_is_active())) return(invisible(NULL))
+    .db_request_overlay("Loading Data Browser object...")
+  }, ignoreInit = TRUE)
   observeEvent(
     list(input$db_reduction, input$db_color_col, shared_data$active_object_name),
     {
@@ -1084,6 +1158,35 @@ data_browser_server <- function(input, output, session, shared_data) {
         if (!layer_2_selected %in% unname(layer_2_choices)) layer_2_selected <- "__none__"
         if (!layer_1_assay_selected %in% unname(assay_choices)) layer_1_assay_selected <- "__default__"
         if (!layer_2_assay_selected %in% unname(assay_choices)) layer_2_assay_selected <- "__default__"
+        feature_gene_choices <- character(0)
+        if (identical(layer_1_selected, "__feature_plot__") || identical(layer_2_selected, "__feature_plot__")) {
+          default_assay <- tryCatch(as.character(Seurat::DefaultAssay(sobj)), error = function(e) "")
+          resolve_feature_assay <- function(choice) {
+            choice <- as.character(choice %||% "__default__")
+            if (!nzchar(choice) || identical(choice, "__default__") || !(choice %in% assays)) {
+              choice <- if (nzchar(default_assay) && default_assay %in% assays) {
+                default_assay
+              } else if (length(assays)) {
+                assays[[1]]
+              } else {
+                ""
+              }
+            }
+            choice
+          }
+          feature_assays <- character(0)
+          if (identical(layer_1_selected, "__feature_plot__")) {
+            feature_assays <- c(feature_assays, resolve_feature_assay(layer_1_assay_selected))
+          }
+          if (identical(layer_2_selected, "__feature_plot__")) {
+            feature_assays <- c(feature_assays, resolve_feature_assay(layer_2_assay_selected))
+          }
+          feature_assays <- unique(feature_assays[nzchar(feature_assays)])
+          feature_gene_choices <- unique(unlist(lapply(feature_assays, function(assay_name) {
+            .db_get_assay_features(sobj, assay = assay_name)
+          }), use.names = FALSE))
+          feature_gene_choices <- feature_gene_choices[!is.na(feature_gene_choices) & nzchar(feature_gene_choices)]
+        }
         tagList(
           selectInput(
             "db_layer_layout",
@@ -1102,9 +1205,9 @@ data_browser_server <- function(input, output, session, shared_data) {
           condition = "input.db_layer_1 == '__feature_plot__' || input.db_layer_2 == '__feature_plot__'",
           h5("Feature plot genes (optional)"),
           fluidRow(
-            column(4, wl_gene_selectize_input("db_feature_gene_r", "R", placeholder = "Type to search gene")),
-            column(4, wl_gene_selectize_input("db_feature_gene_g", "G", placeholder = "Type to search gene")),
-            column(4, wl_gene_selectize_input("db_feature_gene_b", "B", placeholder = "Type to search gene"))
+            column(4, wl_gene_selectize_input("db_feature_gene_r", "R", placeholder = "Type to search gene", min_chars = 0L, open_on_focus = TRUE, preload = TRUE, choices = feature_gene_choices, defer_choices = TRUE)),
+            column(4, wl_gene_selectize_input("db_feature_gene_g", "G", placeholder = "Type to search gene", min_chars = 0L, open_on_focus = TRUE, preload = TRUE, choices = feature_gene_choices, defer_choices = TRUE)),
+            column(4, wl_gene_selectize_input("db_feature_gene_b", "B", placeholder = "Type to search gene", min_chars = 0L, open_on_focus = TRUE, preload = TRUE, choices = feature_gene_choices, defer_choices = TRUE))
           )
         )
       )
@@ -1759,9 +1862,9 @@ data_browser_server <- function(input, output, session, shared_data) {
       if (!keep_r %in% genes) keep_r <- ""
       if (!keep_g %in% genes) keep_g <- ""
       if (!keep_b %in% genes) keep_b <- ""
-      wl_update_gene_selectize(session, "db_feature_gene_r", genes, selected = keep_r)
-      wl_update_gene_selectize(session, "db_feature_gene_g", genes, selected = keep_g)
-      wl_update_gene_selectize(session, "db_feature_gene_b", genes, selected = keep_b)
+      wl_update_gene_selectize(session, "db_feature_gene_r", genes, selected = keep_r, server = TRUE)
+      wl_update_gene_selectize(session, "db_feature_gene_g", genes, selected = keep_g, server = TRUE)
+      wl_update_gene_selectize(session, "db_feature_gene_b", genes, selected = keep_b, server = TRUE)
     },
     ignoreInit = FALSE
   )

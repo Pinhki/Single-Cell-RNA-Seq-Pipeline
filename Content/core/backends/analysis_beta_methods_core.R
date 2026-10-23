@@ -13,7 +13,8 @@ beta_get_registry_object <- function(shared_data, object_name = NULL) {
   reg <- tryCatch(shared_data$all_seurat_objects, error = function(e) list()) %||% list()
   nm <- as.character(object_name %||% "")
   if (!nzchar(nm)) nm <- as.character(tryCatch(shared_data$active_object_name, error = function(e) "") %||% "")
-  if (!nzchar(nm)) nm <- names(reg)[1] %||% ""
+  registry_names <- names(reg) %||% character(0)
+  if (!nzchar(nm) && length(registry_names)) nm <- registry_names[[length(registry_names)]]
   if (!nzchar(nm) || !(nm %in% names(reg))) return(NULL)
   entry <- reg[[nm]]
   if (is.list(entry) && !is.null(entry$obj)) return(entry$obj)

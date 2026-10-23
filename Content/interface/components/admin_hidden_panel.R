@@ -80,7 +80,7 @@ admin_hidden_toggle_test_version <- function() {
   defs
 }
 
-admin_hidden_modal_ui <- function(ns, test_mode_state = NULL, presenter_mode_state = FALSE, locked_tabs = character(0)) {
+admin_hidden_modal_ui <- function(ns, test_mode_state = NULL, locked_tabs = character(0)) {
   state_txt <- "Unknown"
   state_cls <- "text-muted"
   if (is.list(test_mode_state) && isTRUE(test_mode_state$ok)) {
@@ -139,15 +139,6 @@ admin_hidden_modal_ui <- function(ns, test_mode_state = NULL, presenter_mode_sta
       div(
         style = "display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; margin-top:8px;",
         page_btns
-      ),
-      # Presenter Mode toggle:
-      # session-only, no routing side-effects, busy-overlay media swap only.
-      # Contract doc: docs/agents/interface/PRESENTER_MODE.md
-      actionButton(
-        ns("admin_toggle_presenter_mode_btn"),
-        sprintf("Presenter Mode: %s", if (isTRUE(presenter_mode_state)) "ON" else "OFF"),
-        icon = icon("chalkboard-teacher"),
-        class = if (isTRUE(presenter_mode_state)) "btn btn-success" else "btn btn-outline-success"
       ),
       tags$hr(),
       div(

@@ -139,16 +139,18 @@ flowgate_server <- function(input, output, session, shared_data) {
       return(tags$p(UI_TEXT$t_text_no_seurat_objects_available_yet))
     }
     flow_notice(NULL)
-    sel <- shared_data$active_object_name %||% objs[[1]]
-    if (!sel %in% objs) sel <- objs[[1]]
+    newest_object <- objs[[length(objs)]]
+    sel <- shared_data$active_object_name %||% newest_object
+    if (!length(sel) || !nzchar(as.character(sel[[1]])) || !(sel[[1]] %in% objs)) sel <- newest_object
     selectInput("flowgate_object_name", UI_TEXT$t_label_choose_object_gate, choices = objs, selected = sel)
   })
 
   current_obj <- reactive({
     objs <- .candidate_names()
     req(length(objs) > 0)
-    nm <- input$flowgate_object_name %||% shared_data$active_object_name %||% objs[[1]]
-    if (!nm %in% objs) nm <- objs[[1]]
+    newest_object <- objs[[length(objs)]]
+    nm <- input$flowgate_object_name %||% shared_data$active_object_name %||% newest_object
+    if (!length(nm) || !nzchar(as.character(nm[[1]])) || !(nm[[1]] %in% objs)) nm <- newest_object
     so <- core_flowgate_get_registry_object(.registry(), nm)
     validate(need(inherits(so, "Seurat"), "Selected object is not a valid Seurat object."))
     so
@@ -157,8 +159,9 @@ flowgate_server <- function(input, output, session, shared_data) {
   current_name <- reactive({
     objs <- .candidate_names()
     req(length(objs) > 0)
-    nm <- input$flowgate_object_name %||% shared_data$active_object_name %||% objs[[1]]
-    if (!nm %in% objs) nm <- objs[[1]]
+    newest_object <- objs[[length(objs)]]
+    nm <- input$flowgate_object_name %||% shared_data$active_object_name %||% newest_object
+    if (!length(nm) || !nzchar(as.character(nm[[1]])) || !(nm[[1]] %in% objs)) nm <- newest_object
     nm
   })
 
@@ -340,7 +343,7 @@ flowgate_server <- function(input, output, session, shared_data) {
       progress_bar <- shiny::Progress$new(session, min = 0, max = 100)
       on.exit(progress_bar$close(), add = TRUE)
       update_blocker <- function(msg, pct) {
-        overlay_show(text = msg, pct = pct, tip = tip_msg)
+        overlay_show(text = msg, pct = pct, tip = tip_msg, loader = "filter")
         progress_bar$set(value = max(0, min(100, as.numeric(pct %||% 0))), message = msg, detail = sprintf("%d%%", as.integer(round(pct %||% 0))))
       }
       yield <- function() { Sys.sleep(0.02); if (ok_later) later::run_now(0.001) }

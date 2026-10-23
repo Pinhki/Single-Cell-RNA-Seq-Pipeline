@@ -13,6 +13,9 @@
   --nav-active: #ffffff;
 }
 
+/* Keep pointer activation separate from keyboard focus. Chrome leaves clicked
+   links focused; :focus-within would therefore make rail expansion look stuck. */
+
 /* Desktop shell: the navbar is a fixed narrow rail. Hover expands over content. */
 @media (min-width: 992px) and (orientation: landscape) {
   body.bslib-page-navbar > .html-fill-item,
@@ -50,7 +53,6 @@
   }
 
   .navbar:hover,
-  .navbar:focus-within,
   .navbar.wl-nav-expanded {
     width: max-content !important;
     max-width: var(--nav-rail-open-max-w) !important;
@@ -88,7 +90,6 @@
   }
 
   .navbar:hover .navbar-brand,
-  .navbar:focus-within .navbar-brand,
   .navbar.wl-nav-expanded .navbar-brand {
     width: auto !important;
     min-width: 100% !important;
@@ -109,7 +110,6 @@
   }
 
   .navbar:hover .wl-navbar-brand-title,
-  .navbar:focus-within .wl-navbar-brand-title,
   .navbar.wl-nav-expanded .wl-navbar-brand-title {
     align-items: flex-start;
   }
@@ -128,7 +128,6 @@
   }
 
   .navbar:hover .wl-navbar-brand-main,
-  .navbar:focus-within .wl-navbar-brand-main,
   .navbar.wl-nav-expanded .wl-navbar-brand-main {
     max-width: none;
     font-size: 1rem;
@@ -218,16 +217,12 @@
   }
 
   .navbar:hover .navbar-nav .nav-link,
-  .navbar:focus-within .navbar-nav .nav-link,
   .navbar.wl-nav-expanded .navbar-nav .nav-link,
   .navbar:hover .navbar-nav .nav-item > .action-button,
-  .navbar:focus-within .navbar-nav .nav-item > .action-button,
   .navbar.wl-nav-expanded .navbar-nav .nav-item > .action-button,
   .navbar:hover .navbar-nav .bslib-nav-item.form-inline > .action-button,
-  .navbar:focus-within .navbar-nav .bslib-nav-item.form-inline > .action-button,
   .navbar.wl-nav-expanded .navbar-nav .bslib-nav-item.form-inline > .action-button,
   .navbar:hover .action-button,
-  .navbar:focus-within .action-button,
   .navbar.wl-nav-expanded .action-button {
     width: auto !important;
     min-width: 100% !important;
@@ -257,9 +252,9 @@
   }
 
   .navbar:hover .navbar-nav .nav-link.active,
-  .navbar:focus-within .navbar-nav .nav-link.active,
   .navbar:hover .navbar-nav .show > .nav-link,
-  .navbar:focus-within .navbar-nav .show > .nav-link {
+  .navbar.wl-nav-expanded .navbar-nav .nav-link.active,
+  .navbar.wl-nav-expanded .navbar-nav .show > .nav-link {
     background-color: rgba(255, 255, 255, 0.12) !important;
     box-shadow: 4px 0 0 0 #ffffff inset !important;
   }
@@ -295,7 +290,6 @@
   }
 
   .navbar:hover .wl-nav-label,
-  .navbar:focus-within .wl-nav-label,
   .navbar.wl-nav-expanded .wl-nav-label {
     max-width: none;
     font-size: 0.9rem;
@@ -304,17 +298,14 @@
   }
 
   .navbar:hover .navbar-nav .bslib-nav-item.form-inline,
-  .navbar:focus-within .navbar-nav .bslib-nav-item.form-inline,
   .navbar.wl-nav-expanded .navbar-nav .bslib-nav-item.form-inline {
     width: auto !important;
     min-width: 100% !important;
   }
 
   .navbar:hover #nav_help,
-  .navbar:focus-within #nav_help,
   .navbar.wl-nav-expanded #nav_help,
   .navbar:hover #nav_dark_mode_toggle,
-  .navbar:focus-within #nav_dark_mode_toggle,
   .navbar.wl-nav-expanded #nav_dark_mode_toggle {
     width: auto !important;
     min-width: 100% !important;
@@ -329,10 +320,8 @@
   }
 
   .navbar:hover #nav_help .action-label,
-  .navbar:focus-within #nav_help .action-label,
   .navbar.wl-nav-expanded #nav_help .action-label,
   .navbar:hover #nav_dark_mode_toggle .action-label,
-  .navbar:focus-within #nav_dark_mode_toggle .action-label,
   .navbar.wl-nav-expanded #nav_dark_mode_toggle .action-label {
     width: auto !important;
     min-width: max-content !important;
@@ -346,10 +335,8 @@
   }
 
   .navbar:hover #nav_help .wl-nav-label,
-  .navbar:focus-within #nav_help .wl-nav-label,
   .navbar.wl-nav-expanded #nav_help .wl-nav-label,
   .navbar:hover #nav_dark_mode_toggle .wl-nav-label,
-  .navbar:focus-within #nav_dark_mode_toggle .wl-nav-label,
   .navbar.wl-nav-expanded #nav_dark_mode_toggle .wl-nav-label {
     display: block !important;
     max-width: none;
@@ -360,10 +347,8 @@
   }
 
   .navbar:hover .bslib-nav-item.form-inline #nav_help,
-  .navbar:focus-within .bslib-nav-item.form-inline #nav_help,
   .navbar.wl-nav-expanded .bslib-nav-item.form-inline #nav_help,
   .navbar:hover .bslib-nav-item.form-inline #nav_dark_mode_toggle,
-  .navbar:focus-within .bslib-nav-item.form-inline #nav_dark_mode_toggle,
   .navbar.wl-nav-expanded .bslib-nav-item.form-inline #nav_dark_mode_toggle {
     display: grid !important;
     grid-template-columns: 22px max-content;
@@ -376,20 +361,16 @@
   }
 
   .navbar:hover .bslib-nav-item.form-inline #nav_help .wl-nav-icon,
-  .navbar:focus-within .bslib-nav-item.form-inline #nav_help .wl-nav-icon,
   .navbar.wl-nav-expanded .bslib-nav-item.form-inline #nav_help .wl-nav-icon,
   .navbar:hover .bslib-nav-item.form-inline #nav_dark_mode_toggle .wl-nav-icon,
-  .navbar:focus-within .bslib-nav-item.form-inline #nav_dark_mode_toggle .wl-nav-icon,
   .navbar.wl-nav-expanded .bslib-nav-item.form-inline #nav_dark_mode_toggle .wl-nav-icon {
     grid-column: 1;
     grid-row: 1;
   }
 
   .navbar:hover .bslib-nav-item.form-inline #nav_help .wl-nav-label,
-  .navbar:focus-within .bslib-nav-item.form-inline #nav_help .wl-nav-label,
   .navbar.wl-nav-expanded .bslib-nav-item.form-inline #nav_help .wl-nav-label,
   .navbar:hover .bslib-nav-item.form-inline #nav_dark_mode_toggle .wl-nav-label,
-  .navbar:focus-within .bslib-nav-item.form-inline #nav_dark_mode_toggle .wl-nav-label,
   .navbar.wl-nav-expanded .bslib-nav-item.form-inline #nav_dark_mode_toggle .wl-nav-label {
     grid-column: 2;
     grid-row: 1;
@@ -413,7 +394,7 @@
     opacity: 0.78;
   }
 
-  .navbar:not(:hover):not(:focus-within):not(.wl-nav-expanded) .dropdown-toggle::after {
+  .navbar:not(:hover):not(.wl-nav-expanded) .dropdown-toggle::after {
     display: none !important;
   }
 

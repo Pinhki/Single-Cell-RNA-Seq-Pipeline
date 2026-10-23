@@ -411,7 +411,7 @@ barcode_server <- function(input, output, session, shared_data) {
 
   overlay_on <- reactiveVal(FALSE)
   .show_overlay <- function(msg = "Working...") {
-    overlay_show(msg)
+    overlay_show(msg, loader = "filter")
     overlay_on(TRUE)
   }
   .hide_overlay <- function() {
@@ -1209,7 +1209,7 @@ barcode_server <- function(input, output, session, shared_data) {
       if (!length(cc)) next
 
       sobj_f <- subset(sobj, cells = cc)
-      sobj_f <- .reset_subset_analysis_state(sobj_f)
+      sobj_f <- wanlab_reset_subset_analysis_state(sobj_f)
 
       new_name <- .make_unique_filtered_name(nm, reg)
       reg[[new_name]] <- list(
@@ -1233,7 +1233,7 @@ barcode_server <- function(input, output, session, shared_data) {
     }
 
     shared_data$all_seurat_objects <- reg
-    shared_data$active_object_name <- created[[1]]
+    shared_data$active_object_name <- created[[length(created)]]
 
     preview <- paste(head(created, 4), collapse = ", ")
     extra <- if (length(created) > 4) sprintf(" (+%d more)", length(created) - 4L) else ""

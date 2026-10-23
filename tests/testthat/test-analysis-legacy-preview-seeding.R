@@ -189,7 +189,7 @@ testthat::test_that("data browser feature-plot gene picker avoids full-matrix cl
 
   testthat::expect_true(
     grepl(
-      "updateSelectizeInput\\(session,\\s*\"db_feature_gene_r\"[\\s\\S]*?server\\s*=\\s*TRUE\\)",
+      "wl_update_gene_selectize\\(session,\\s*\"db_feature_gene_r\"[\\s\\S]*?server\\s*=\\s*TRUE\\)",
       db_source,
       perl = TRUE
     )
@@ -236,16 +236,11 @@ testthat::test_that("deferred UMAP preview dispatch runs inside session reactive
   )
 })
 
-testthat::test_that("analysis tab empty-restore is gated by DOM active tab signal", {
+testthat::test_that("analysis tab state uses canonical Shiny tab input", {
   page_source <- paste(readLines(.page_source_path, warn = FALSE), collapse = "\n")
 
-  testthat::expect_true(
-    grepl(
-      "observeEvent\\(input\\$plot_tabs,[\\s\\S]*?if \\(!nzchar\\(tab_now\\)\\)[\\s\\S]*?d <- input\\$plot_tabs_dom_diag[\\s\\S]*?d_active <- \\.scalar_chr\\(d\\$active, default = \"\"\\)[\\s\\S]*?if \\(!is\\.null\\(d\\) && isTRUE\\(d\\$visible\\) && nzchar\\(d_active\\)\\)\\s*\\{[\\s\\S]*?return\\(invisible\\(NULL\\)\\)",
-      page_source,
-      perl = TRUE
-    )
-  )
+  testthat::expect_false(grepl("plot_tabs_dom_diag", page_source, fixed = TRUE))
+  testthat::expect_true(grepl("plot_tab_input_now <- \\.scalar_chr\\(input\\$plot_tabs", page_source, perl = TRUE))
 })
 
 testthat::test_that("UMAP preview rendering uses active object embeddings as canonical source", {

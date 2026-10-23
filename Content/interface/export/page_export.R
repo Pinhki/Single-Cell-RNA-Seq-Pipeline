@@ -2,6 +2,18 @@
 
 # ---------- helpers ----------
 
+if (!exists(".wanlab_prepare_disk_backed_selection", mode = "function", inherits = TRUE)) {
+  .wanlab_storage_helper_candidates <- c(
+    file.path(getwd(), "interface", "shared", "large_data_storage_helpers.R"),
+    file.path(getwd(), "Content", "interface", "shared", "large_data_storage_helpers.R"),
+    file.path(dirname(getwd()), "Content", "interface", "shared", "large_data_storage_helpers.R")
+  )
+  .wanlab_storage_helper_path <- .wanlab_storage_helper_candidates[file.exists(.wanlab_storage_helper_candidates)][1]
+  if (!is.na(.wanlab_storage_helper_path) && nzchar(.wanlab_storage_helper_path)) {
+    source(.wanlab_storage_helper_path, local = .GlobalEnv)
+  }
+}
+
 # Modal to show errors/logs (optional but handy)
 EXPORT_UI_TEXT <- list(
   # Page title and intro
@@ -21,7 +33,15 @@ EXPORT_UI_TEXT <- list(
   ui_text_default_export_filename_prefix = "seurat_analysis_",
   ui_text_generate_download_cloupe_file = "Generate and Download .cloupe File",
   ui_text_generate_download_h5ad_file = "Generate and Download .h5ad File",
-  ui_label_drop_invalid_cells = "If needed, remove cells without valid 10x barcodes before export",
+  ui_label_drop_invalid_cells = "If needed, remove Loupe-incompatible or duplicate barcode labels before export",
+  ui_text_barcode_check_passed = "Barcode check passed: all %d cell labels are accepted by LoupeR.",
+  ui_text_barcode_check_warning = "Warning: %d cell(s) have barcode labels that LoupeR will reject.",
+  ui_text_barcode_duplicate_warning = "Warning: %d cell(s) create %d duplicated barcode label(s).",
+  ui_text_barcode_check_retained = "Export will retain %d of %d cells.",
+  ui_text_barcode_check_examples = "Examples: %s",
+  ui_text_barcode_check_enable_option = "Enable the checkbox above to remove incompatible or duplicate cells before export.",
+  ui_text_barcode_check_ready_after_removal = "The checkbox is enabled. These cells will be removed before export.",
+  ui_text_barcode_check_error_prefix = "Barcode check could not run:",
   ui_text_enter_desired_filename_h5ad = "Enter desired filename (.h5ad):",
   ui_text_default_export_h5ad_filename_prefix = "seurat_cellxgene_",
   ui_title_h5ad_export = "h5ad Export for Cellxgene",
@@ -76,6 +96,24 @@ EXPORT_UI_TEXT <- list(
 
   # Notifications and modal text
   ui_notification_generating_cloupe = "Generating .cloupe file...",
+  ui_progress_starting_loupe = "Starting Loupe export...",
+  ui_progress_preparing_loupe = "Preparing Loupe export...",
+  ui_progress_preparing_disk_backed = "Preparing disk-backed count data...",
+  ui_progress_validating_barcodes = "Checking barcode labels...",
+  ui_progress_extracting_loupe = "Preparing matrix, clusters, and projections...",
+  ui_progress_validating_count_matrix = "Validating count matrix...",
+  ui_progress_validating_clusters = "Validating clusters...",
+  ui_progress_validating_projections = "Validating projections...",
+  ui_progress_writing_hdf5 = "Writing temporary export data...",
+  ui_progress_building_loupe = "Building .cloupe file...",
+  ui_progress_validating_loupe_input = "Validating Loupe input...",
+  ui_progress_initializing_loupe_file = "Initializing .cloupe file...",
+  ui_progress_converting_loupe_counts = "Writing count data...",
+  ui_progress_converting_loupe_projections = "Writing projections...",
+  ui_progress_converting_loupe_clusters = "Writing groupings...",
+  ui_progress_finishing_loupe = "Finishing .cloupe file...",
+  ui_progress_copying_loupe = "Copying .cloupe file...",
+  ui_progress_finalizing_loupe = "Finalizing Loupe export...",
   ui_notification_generating_h5ad = "Generating .h5ad file...",
   ui_notification_error_generating_file_prefix = "Error generating file:",
   ui_text_export_failed_title_details = "Export failed - details",
@@ -165,6 +203,22 @@ EXPORT_UI_TEXT <- list(
   ordered[keep]
 }
 
+.loupe_export_assay_cells <- function(obj, assay_name) {
+  assay_name <- trimws(as.character(assay_name %||% ""))
+  assays <- tryCatch(SeuratObject::Assays(obj), error = function(e) character(0))
+  if (!nzchar(assay_name) || !(assay_name %in% assays)) {
+    stop("Selected assay is unavailable for Loupe barcode checking: ", assay_name)
+  }
+  cells <- tryCatch(colnames(obj[[assay_name]]), error = function(e) NULL)
+  cells <- as.character(cells %||% character(0))
+  if (!length(cells)) {
+    counts <- tryCatch(Seurat::GetAssayData(obj, assay = assay_name, slot = "counts"), error = function(e) NULL)
+    cells <- as.character(colnames(counts) %||% character(0))
+  }
+  if (!length(cells)) stop("Selected assay has no cell names for Loupe barcode checking.")
+  cells
+}
+
 .pick_assay_with_counts <- function(obj) {
   picks <- .assays_with_counts(obj)
   if (!length(picks)) return(NULL)
@@ -225,8 +279,28 @@ EXPORT_UI_TEXT <- list(
   out
 }
 
-.valid_10x_barcode <- function(x) {
-  grepl("^[ACGT]{16}(?:-[0-9]+)?$", as.character(x %||% ""), perl = TRUE)
+
+# Agent note: These patterns mirror loupeR 1.1.5 validate_barcodes() in both
+# managed Seurat v4/v5 environments. Keep preflight and worker validation on
+# same final labels so valid non-10x modalities do not trigger false warnings.
+.LOUPE_R_BARCODE_PATTERNS <- c(
+  dna = "^(.*[:_])?([ACGT]{14,})([:_].*)?$",
+  dna_gem = "^(.*[:_])?([ACGT]{14,})-([0-9]+)([:_].*)?$",
+  visium_hd = "^(.*[:_])?(s_[0-9]{3}um_[0-9]{5}_[0-9]{5})([:_].*)?$",
+  visium_hd_gem = "^(.*[:_])?(s_[0-9]{3}um_[0-9]{5}_[0-9]{5})-([0-9]+)([:_].*)?$",
+  xenium = "^(.*[:_])?([a-p]{1,8})-([0-9]+)([:_].*)?$",
+  loupe_cell = "^(.*[:_])?(cellid_[0-9]{9})([:_].*)?$",
+  loupe_cell_gem = "^(.*[:_])?(cellid_[0-9]{9})-([0-9]+)([:_].*)?$"
+)
+
+.valid_louper_barcode <- function(x) {
+  vals <- as.character(x %||% character(0))
+  vapply(vals, function(value) {
+    if (is.na(value) || !nzchar(value)) return(FALSE)
+    any(vapply(.LOUPE_R_BARCODE_PATTERNS, function(pattern) {
+      isTRUE(grepl(pattern, value, perl = TRUE))
+    }, logical(1)))
+  }, logical(1))
 }
 
 .dedupe_tokens <- function(x) {
@@ -238,7 +312,7 @@ EXPORT_UI_TEXT <- list(
 
 .normalize_louper_barcode_label <- function(x) {
   x <- trimws(as.character(x %||% ""))
-  if (!nzchar(x)) return("")
+  if (is.na(x) || !nzchar(x)) return("")
   parts <- unlist(strsplit(x, "[_:]+", perl = TRUE), use.names = FALSE)
   parts <- trimws(as.character(parts))
   parts <- parts[nzchar(parts)]
@@ -259,8 +333,10 @@ EXPORT_UI_TEXT <- list(
     }
   }
   if (is.na(core_idx) || !nzchar(core)) {
+    if (isTRUE(.valid_louper_barcode(x))) return(x)
     core <- .extract_raw_10x_barcode(x)
-    if (!nzchar(core)) return("")
+    if (!length(core) || is.na(core[[1]]) || !nzchar(core[[1]])) return("")
+    core <- core[[1]]
     return(core)
   }
 
@@ -276,12 +352,7 @@ EXPORT_UI_TEXT <- list(
   paste0(core, "_", paste0(moved_suffix, collapse = "_"))
 }
 
-.valid_louper_barcode <- function(x) {
-  x <- as.character(x %||% "")
-  nzchar(trimws(x)) & !grepl("\\s", x, perl = TRUE)
-}
-
-.find_best_10x_barcode_column <- function(md, cells) {
+.find_best_louper_barcode_column <- function(md, cells) {
   if (is.null(md) || !is.data.frame(md) || !length(cells)) return(NULL)
   cn <- colnames(md)
   if (is.null(cn) || !length(cn)) return(NULL)
@@ -295,8 +366,8 @@ EXPORT_UI_TEXT <- list(
   for (i in seq_along(candidate)) {
     col <- candidate[[i]]
     vals <- tryCatch(as.character(md[cells, col]), error = function(e) rep("", length(cells)))
-    vals <- toupper(trimws(vals))
-    ok <- .valid_10x_barcode(vals)
+    vals <- vapply(vals, .normalize_louper_barcode_label, character(1))
+    ok <- .valid_louper_barcode(vals)
     n_valid <- sum(ok, na.rm = TRUE)
     n_unique_valid <- length(unique(vals[ok]))
     diag_rows[[i]] <- data.frame(col = col, n_valid = n_valid, n_unique_valid = n_unique_valid, stringsAsFactors = FALSE)
@@ -309,7 +380,7 @@ EXPORT_UI_TEXT <- list(
   list(best = best, diag = do.call(rbind, diag_rows))
 }
 
-.derive_export_barcodes <- function(obj, cells, drop_invalid_cells = FALSE) {
+.derive_export_barcodes <- function(obj, cells, drop_invalid_cells = FALSE, diagnose_only = FALSE) {
   cells <- as.character(cells %||% character(0))
   if (!length(cells)) stop("Export aborted: no cells found in selected assay count matrix.")
   md <- tryCatch(obj@meta.data, error = function(e) NULL)
@@ -328,7 +399,7 @@ EXPORT_UI_TEXT <- list(
   miss <- is.na(raw) | !nzchar(trimws(raw))
   barcode_col_diag <- NULL
   if (any(miss) && is.data.frame(md)) {
-    picked <- .find_best_10x_barcode_column(md, cells)
+    picked <- .find_best_louper_barcode_column(md, cells)
     if (!is.null(picked) && !is.null(picked$best) && isTRUE(picked$best$n_valid > 0L)) {
       raw[miss] <- picked$best$vals[miss]
       barcode_col_diag <- picked
@@ -340,58 +411,51 @@ EXPORT_UI_TEXT <- list(
   if (any(miss)) raw[miss] <- .extract_raw_10x_barcode(canon[miss])
   miss2 <- is.na(raw) | !nzchar(trimws(raw))
   if (any(miss2)) raw[miss2] <- .extract_raw_10x_barcode(cells[miss2])
-  raw <- toupper(trimws(as.character(raw)))
-  ok <- .valid_10x_barcode(raw)
-  if (any(!ok)) {
-    bad <- unique(cells[!ok])
-    diag_txt <- ""
-    if (!is.null(barcode_col_diag) && is.data.frame(barcode_col_diag$diag) && nrow(barcode_col_diag$diag)) {
-      top <- barcode_col_diag$diag[order(-barcode_col_diag$diag$n_valid, -barcode_col_diag$diag$n_unique_valid), , drop = FALSE]
-      top <- head(top, 5)
-      pieces <- sprintf("%s(valid=%d, unique_valid=%d)", top$col, top$n_valid, top$n_unique_valid)
-      diag_txt <- paste0(" Metadata barcode column probe: ", paste(pieces, collapse = "; "), ".")
-    } else if (is.data.frame(md)) {
-      md_cols <- colnames(md)
-      md_preview <- if (length(md_cols)) paste(head(md_cols, 12), collapse = ", ") else "<none>"
-      diag_txt <- paste0(" Metadata barcode column probe: no barcode/cell-like column with valid 10x values found. Meta columns preview: ", md_preview, ".")
-    } else {
-      diag_txt <- " Metadata barcode column probe: meta.data unavailable."
-    }
-    if (!isTRUE(drop_invalid_cells)) {
-      stop(
-        sprintf(
-          "Invalid 10x barcode candidates for %d cell(s). Example cell names: %s.%s Enable 'remove cells without valid 10x barcodes' to export the remaining valid cells.",
-          sum(!ok),
-          paste(head(bad, 5), collapse = ", "),
-          diag_txt
-        )
-      )
-    }
-  }
-  keep <- ok
-  if (!any(keep)) stop("No cells with valid 10x barcodes are available for export.")
+  raw <- vapply(raw, .normalize_louper_barcode_label, character(1))
   exp_bc <- canon
-  exp_bc[!nzchar(exp_bc)] <- raw[!nzchar(exp_bc)]
+  missing_canon <- is.na(exp_bc) | !nzchar(trimws(exp_bc))
+  exp_bc[missing_canon] <- raw[missing_canon]
   exp_bc <- trimws(as.character(exp_bc))
-  exp_bc <- exp_bc[keep]
-  kept_cells <- cells[keep]
-  exp_ok <- .valid_louper_barcode(exp_bc)
-  if (any(!exp_ok)) {
-    bad <- unique(exp_bc[!exp_ok])
+  ok <- .valid_louper_barcode(exp_bc)
+  duplicate_mask <- rep(FALSE, length(exp_bc))
+  valid_idx <- which(ok)
+  if (length(valid_idx)) {
+    valid_labels <- exp_bc[valid_idx]
+    duplicate_mask[valid_idx] <- duplicated(valid_labels) | duplicated(valid_labels, fromLast = TRUE)
+  }
+  duplicate_drop <- rep(FALSE, length(exp_bc))
+  if (length(valid_idx)) duplicate_drop[valid_idx] <- duplicated(exp_bc[valid_idx])
+  if (isTRUE(diagnose_only)) {
+    return(list(
+      cells = cells,
+      labels = exp_bc,
+      compatible = ok,
+      duplicate = duplicate_mask,
+      keep = ok & !duplicate_drop,
+      invalid_examples = unique(head(exp_bc[!ok], 5)),
+      duplicate_examples = unique(head(exp_bc[duplicate_mask], 5)),
+      barcode_col_diag = barcode_col_diag
+    ))
+  }
+  if (any(!ok) && !isTRUE(drop_invalid_cells)) {
     stop(
       sprintf(
-        "Invalid Loupe barcode label formatting for %d cell(s). Example values: %s",
-        sum(!exp_ok),
-        paste(head(bad, 5), collapse = ", ")
+        "Loupe-incompatible barcode labels for %d cell(s). Example values: %s. Enable 'remove cells with Loupe-incompatible barcode labels before export' to continue.",
+        sum(!ok),
+        paste(head(exp_bc[!ok], 5), collapse = ", ")
       )
     )
   }
+  keep <- ok
+  if (!any(keep)) stop("No cells with Loupe-compatible barcode labels are available for export.")
+  exp_bc <- exp_bc[keep]
+  kept_cells <- cells[keep]
   dup_mask <- duplicated(exp_bc) | duplicated(exp_bc, fromLast = TRUE)
   if (any(dup_mask) && !isTRUE(drop_invalid_cells)) {
     dup_vals <- unique(exp_bc[dup_mask])
     stop(
       sprintf(
-        "Export requires unique barcodes, but found %d duplicated barcode label(s). Example duplicates: %s. Enable 'remove cells without valid 10x barcodes' to drop conflicting cells and continue.",
+        "Export requires unique barcode labels, but found %d duplicated label(s). Example duplicates: %s. Enable 'remove cells with Loupe-incompatible barcode labels before export' to drop conflicting cells and continue.",
         length(dup_vals),
         paste(head(dup_vals, 5), collapse = ", ")
       )
@@ -406,6 +470,38 @@ EXPORT_UI_TEXT <- list(
     barcodes = exp_bc,
     kept_cells = kept_cells
   )
+}
+
+.loupe_export_barcode_issue_lines <- function(preview) {
+  lines <- character(0)
+  n_invalid <- sum(!preview$compatible)
+  if (n_invalid > 0L) {
+    lines <- c(
+      lines,
+      sprintf(EXPORT_UI_TEXT$ui_text_barcode_check_warning, n_invalid),
+      sprintf(
+        EXPORT_UI_TEXT$ui_text_barcode_check_examples,
+        paste(preview$invalid_examples, collapse = ", ")
+      )
+    )
+  }
+  duplicate_labels <- unique(preview$labels[preview$duplicate])
+  n_duplicate_cells <- sum(preview$duplicate)
+  if (n_duplicate_cells > 0L) {
+    lines <- c(
+      lines,
+      sprintf(EXPORT_UI_TEXT$ui_text_barcode_duplicate_warning, n_duplicate_cells, length(duplicate_labels)),
+      sprintf(
+        EXPORT_UI_TEXT$ui_text_barcode_check_examples,
+        paste(head(duplicate_labels, 5), collapse = ", ")
+      )
+    )
+  }
+  lines <- c(
+    lines,
+    sprintf(EXPORT_UI_TEXT$ui_text_barcode_check_retained, sum(preview$keep), length(preview$labels))
+  )
+  lines
 }
 
 # Candidate feature TSV paths near 10x imports.
@@ -443,7 +539,7 @@ EXPORT_UI_TEXT <- list(
   unique(out)
 }
 
-.extract_feature_ids <- function(obj, sel_name = NULL, sel_entry = NULL, shared_data = NULL, assay_name = NULL) {
+.extract_feature_ids <- function(obj, sel_name = NULL, sel_entry = NULL, shared_data = NULL, assay_name = NULL, target_feature_count = NULL) {
   if (!requireNamespace("loupeR", quietly = TRUE)) return(NULL)
   
   src_paths <- character(0)
@@ -500,7 +596,13 @@ EXPORT_UI_TEXT <- list(
     if (is.null(picked)) NULL else picked[[1]]
   }
   if (is.null(assay_obj)) return(NULL)
-  target_n <- nrow(loupeR::counts_matrix_from_assay(assay_obj))
+  # Agent note: Reuse the already extracted count-matrix row count when the
+  # caller has it. Re-extracting a large matrix here creates an avoidable peak.
+  target_n <- suppressWarnings(as.numeric(target_feature_count))
+  if (length(target_n) != 1L || is.na(target_n) || !is.finite(target_n) || target_n < 1) {
+    target_n <- nrow(loupeR::counts_matrix_from_assay(assay_obj))
+  }
+  target_n <- as.integer(target_n)
   for (f in cand_files) {
     ids <- tryCatch(loupeR::read_feature_ids_from_tsv(f), error = function(e) NULL)
     if (is.null(ids)) next
@@ -511,6 +613,136 @@ EXPORT_UI_TEXT <- list(
     return(ids)
   }
   NULL
+}
+
+.loupe_worker_entry <- function(sel) {
+  if (!is.list(sel) || !is.list(sel$meta)) return(NULL)
+  keep <- intersect(
+    names(sel$meta),
+    c("source_path", "path", "input_path", "parent", "parents")
+  )
+  list(meta = sel$meta[keep])
+}
+
+.loupe_worker_object <- function(sel, assay_name = NULL, progress_cb = NULL) {
+  emit_progress <- function(text, pct) {
+    if (!is.function(progress_cb)) return(invisible(NULL))
+    try(progress_cb(text = text, pct = pct), silent = TRUE)
+    invisible(NULL)
+  }
+  obj <- .as_seurat_or_fail(sel)
+  assay_choices <- .assays_with_counts(obj)
+  if (!length(assay_choices)) stop("No assay with usable count matrix found.")
+  assay_name <- trimws(as.character(assay_name %||% ""))
+  if (!nzchar(assay_name)) assay_name <- assay_choices[[1]]
+  if (!(assay_name %in% assay_choices)) {
+    stop("Selected assay is unavailable for Loupe export: ", assay_name)
+  }
+  emit_progress("Preparing lightweight Loupe worker payload...", 21)
+
+  assay_obj <- obj[[assay_name]]
+  is_v5_assay <- inherits(assay_obj, c("Assay5", "StdAssay"))
+  counts <- tryCatch(
+    if (isTRUE(is_v5_assay)) assay_obj$counts else assay_obj@counts,
+    error = function(e) NULL
+  )
+  if (is.null(counts) || nrow(counts) < 1L || ncol(counts) < 1L) {
+    stop("Selected assay has no usable count matrix.")
+  }
+  old_cells <- as.character(colnames(counts) %||% character(0))
+  if (!length(old_cells) || anyNA(old_cells)) stop("Selected assay has invalid cell names.")
+
+  # Agent note: Worker object intentionally contains only export inputs. Keep
+  # original object authoritative; this copy prevents unused assays, layers,
+  # graphs, commands, and high-dimensional loadings from crossing the process
+  # boundary and causing avoidable vector-size/memory peaks.
+  metadata <- tryCatch(obj@meta.data, error = function(e) NULL)
+  if (!is.data.frame(metadata)) stop("Selected object has invalid metadata.")
+  if (!"seurat_clusters" %in% colnames(metadata)) {
+    source_ident <- tryCatch(SeuratObject::Idents(obj), error = function(e) NULL)
+    if (!is.null(source_ident) && length(source_ident) == nrow(metadata)) {
+      ident_names <- names(source_ident)
+      if (is.null(ident_names)) ident_names <- rownames(metadata)
+      ident_idx <- match(rownames(metadata), ident_names)
+      if (!anyNA(ident_idx)) metadata$seurat_clusters <- source_ident[ident_idx]
+    }
+  }
+  keep_cols <- names(metadata)[vapply(metadata, function(v) is.atomic(v) || is.factor(v), logical(1))]
+  metadata <- if (length(keep_cols)) metadata[, keep_cols, drop = FALSE] else metadata[, 0, drop = FALSE]
+  metadata[] <- lapply(metadata, function(v) {
+    if (is.factor(v)) v <- as.character(v)
+    if (inherits(v, "POSIXt") || inherits(v, "Date")) v <- as.character(v)
+    if (is.logical(v)) v <- ifelse(v, "TRUE", "FALSE")
+    if (is.numeric(v)) v <- as.character(v)
+    v[is.na(v) | trimws(v) == ""] <- "Unknown"
+    v
+  })
+  colnames(metadata) <- make.unique(gsub("[^A-Za-z0-9_]+", "_", colnames(metadata)), sep = "_")
+  if (nrow(metadata) != length(old_cells)) {
+    stop("Metadata row count does not match selected assay cells.")
+  }
+  metadata <- metadata[old_cells, , drop = FALSE]
+  project_name <- tryCatch(as.character(obj@project.name), error = function(e) "")
+  project_name <- project_name[1]
+  if (!length(project_name) || is.na(project_name) || !nzchar(project_name)) {
+    project_name <- "LoupeExport"
+  }
+  worker_obj <- Seurat::CreateSeuratObject(
+    counts = counts,
+    assay = assay_name,
+    meta.data = metadata,
+    project = project_name
+  )
+  if (!identical(as.character(colnames(worker_obj)), old_cells)) {
+    stop("Worker object cell names do not match selected assay cells.")
+  }
+  SeuratObject::DefaultAssay(worker_obj) <- assay_name
+  emit_progress("Packaging Loupe metadata...", 22)
+
+  ident <- tryCatch(SeuratObject::Idents(obj), error = function(e) NULL)
+  if (!is.null(ident) && length(ident) == length(old_cells)) {
+    ident_names <- names(ident)
+    if (is.null(ident_names)) ident_names <- tryCatch(colnames(obj), error = function(e) old_cells)
+    ident_idx <- match(old_cells, ident_names)
+    if (!anyNA(ident_idx)) SeuratObject::Idents(worker_obj) <- ident[ident_idx]
+  }
+
+  reduction_names <- tryCatch(SeuratObject::Reductions(obj), error = function(e) character(0))
+  worker_reductions <- list()
+  for (reduction_name in reduction_names) {
+    reduction <- tryCatch(obj[[reduction_name]], error = function(e) NULL)
+    embeddings <- tryCatch(reduction@cell.embeddings, error = function(e) NULL)
+    if (!is.matrix(embeddings) || ncol(embeddings) != 2L) next
+    idx <- match(old_cells, rownames(embeddings))
+    if (anyNA(idx)) next
+    embeddings <- embeddings[idx, , drop = FALSE]
+    if (any(!is.finite(embeddings))) next
+    key <- tryCatch(as.character(reduction@key), error = function(e) "")
+    key <- key[1]
+    if (!length(key) || is.na(key) || !grepl("^[A-Za-z][A-Za-z0-9]*_$", key)) {
+      key <- paste0(gsub("[^A-Za-z0-9]", "", reduction_name), "_")
+      if (!grepl("^[A-Za-z]", key)) key <- paste0("dr_", key)
+      if (!grepl("_$", key)) key <- paste0(key, "_")
+    }
+    worker_reductions[[reduction_name]] <- tryCatch(
+      SeuratObject::CreateDimReducObject(
+        embeddings = embeddings,
+        assay = assay_name,
+        key = key
+      ),
+      error = function(e) NULL
+    )
+  }
+  worker_obj@reductions <- worker_reductions
+  emit_progress("Packaging Loupe projections...", 24)
+
+  misc <- tryCatch(obj@misc, error = function(e) NULL)
+  if (is.list(misc) && length(misc)) {
+    keep_misc <- intersect(names(misc), c("source_path", "input_path", "matrix_dir"))
+    worker_obj@misc <- misc[keep_misc]
+  }
+  emit_progress("Loupe worker payload is ready.", 25)
+  list(object = worker_obj, assay_name = assay_name)
 }
 
 .select_valid_projections <- function(obj, barcode_count, cells_keep = NULL) {
@@ -576,6 +808,182 @@ EXPORT_UI_TEXT <- list(
   })
 }
 
+.louper_worker_path <- function() {
+  candidates <- c(
+    file.path(getwd(), "interface", "export", "loupe_export_worker.R"),
+    file.path(getwd(), "Content", "interface", "export", "loupe_export_worker.R"),
+    file.path(dirname(getwd()), "Content", "interface", "export", "loupe_export_worker.R")
+  )
+  hit <- candidates[file.exists(candidates)]
+  if (!length(hit)) stop("loupeR subprocess worker was not found.")
+  normalizePath(hit[[1]], mustWork = TRUE)
+}
+
+.louper_page_path <- function(filename) {
+  path <- file.path(dirname(.louper_worker_path()), filename)
+  normalizePath(path, mustWork = TRUE)
+}
+
+.louper_progress_event <- function(line) {
+  line <- trimws(as.character(line %||% ""))
+  if (!nzchar(line)) return(NULL)
+  line_lower <- tolower(line)
+
+  if (grepl("extracting matrix, clusters, and projections", line_lower, fixed = TRUE)) {
+    return(list(text = EXPORT_UI_TEXT$ui_progress_extracting_loupe, pct = 8))
+  }
+  if (grepl("validating count matrix", line_lower, fixed = TRUE)) {
+    return(list(text = EXPORT_UI_TEXT$ui_progress_validating_count_matrix, pct = 18))
+  }
+  if (grepl("validating clusters", line_lower, fixed = TRUE)) {
+    return(list(text = EXPORT_UI_TEXT$ui_progress_validating_clusters, pct = 28))
+  }
+  if (grepl("validating projections", line_lower, fixed = TRUE)) {
+    return(list(text = EXPORT_UI_TEXT$ui_progress_validating_projections, pct = 38))
+  }
+  if (grepl("creating temporary hdf5 file", line_lower, fixed = TRUE)) {
+    return(list(text = EXPORT_UI_TEXT$ui_progress_writing_hdf5, pct = 58))
+  }
+  if (grepl("invoking louper executable", line_lower, fixed = TRUE)) {
+    return(list(text = EXPORT_UI_TEXT$ui_progress_building_loupe, pct = 80))
+  }
+  if (grepl("running command", line_lower, fixed = TRUE)) {
+    return(list(text = EXPORT_UI_TEXT$ui_progress_building_loupe, pct = 81))
+  }
+  if (grepl("validating input file", line_lower, fixed = TRUE)) {
+    return(list(text = EXPORT_UI_TEXT$ui_progress_validating_loupe_input, pct = 83))
+  }
+  if (grepl("initializing loupe file", line_lower, fixed = TRUE)) {
+    return(list(text = EXPORT_UI_TEXT$ui_progress_initializing_loupe_file, pct = 85))
+  }
+  if (grepl("converting count matrix", line_lower, fixed = TRUE)) {
+    return(list(text = EXPORT_UI_TEXT$ui_progress_converting_loupe_counts, pct = 88))
+  }
+  if (grepl("converting projections", line_lower, fixed = TRUE)) {
+    return(list(text = EXPORT_UI_TEXT$ui_progress_converting_loupe_projections, pct = 92))
+  }
+  if (grepl("converting clusters", line_lower, fixed = TRUE)) {
+    return(list(text = EXPORT_UI_TEXT$ui_progress_converting_loupe_clusters, pct = 95))
+  }
+  if (grepl("finished loupe file", line_lower, fixed = TRUE)) {
+    return(list(text = EXPORT_UI_TEXT$ui_progress_finishing_loupe, pct = 98))
+  }
+  if (grepl("copying loupe file", line_lower, fixed = TRUE)) {
+    return(list(text = EXPORT_UI_TEXT$ui_progress_copying_loupe, pct = 99))
+  }
+
+  # Some Louper builds report a percentage or completed/total count while
+  # creating the final file. Keep that signal inside final-build range so
+  # stage progress remains monotonic and never claims completion early.
+  if (grepl("progress|percent|complete|write|convert|create|build|process", line, ignore.case = TRUE)) {
+    pct_match <- regexec("(?i)([0-9]{1,3})\\s*%", line, perl = TRUE)
+    pct_parts <- regmatches(line, pct_match)[[1]]
+    if (length(pct_parts) >= 2 && nzchar(pct_parts[[2]])) {
+      raw_pct <- as.numeric(pct_parts[[2]])
+      if (is.finite(raw_pct) && raw_pct >= 0 && raw_pct <= 100) {
+        return(list(
+          text = EXPORT_UI_TEXT$ui_progress_building_loupe,
+          pct = 80 + (raw_pct * 0.18)
+        ))
+      }
+    }
+
+    ratio_match <- regexec("(?<![0-9])([0-9]+)\\s*(?:/|of)\\s*([0-9]+)(?![0-9])", line, perl = TRUE)
+    ratio_parts <- regmatches(line, ratio_match)[[1]]
+    if (length(ratio_parts) >= 3 && nzchar(ratio_parts[[2]]) && nzchar(ratio_parts[[3]])) {
+      completed <- as.numeric(ratio_parts[[2]])
+      total <- as.numeric(ratio_parts[[3]])
+      if (is.finite(completed) && is.finite(total) && total > 0 && completed >= 0 && completed <= total) {
+        return(list(
+          text = EXPORT_UI_TEXT$ui_progress_building_loupe,
+          pct = 80 + (18 * completed / total)
+        ))
+      }
+    }
+  }
+
+  NULL
+}
+
+.run_loupe_export_subprocess <- function(mode, payload, progress_cb = NULL) {
+  rscript <- Sys.which("Rscript")
+  if (!nzchar(rscript)) stop("Rscript is required for isolated loupeR export.")
+
+  work_dir <- tempfile("wanlab_louper_")
+  dir.create(work_dir, recursive = TRUE, showWarnings = FALSE)
+  on.exit(unlink(work_dir, recursive = TRUE, force = TRUE), add = TRUE)
+  input_path <- file.path(work_dir, "input.rds")
+  result_path <- file.path(work_dir, "result.rds")
+  log_path <- file.path(work_dir, "worker.log")
+  progress_path <- file.path(work_dir, "worker.progress")
+  if (is.list(payload)) payload$progress_path <- progress_path
+  saveRDS(payload, input_path)
+  # The worker has its own serialized payload. Release the parent-side list
+  # before waiting so it does not keep an extra export reference alive.
+  rm(payload)
+  invisible(gc(verbose = FALSE))
+
+  # Agent note: loupeR must run in a fresh R process so Seurat v4/v5 can load their
+  # own future namespace; loading it in the long-running Shiny process recreates the version collision.
+  # Agent note: Result file is completion sentinel; log polling is only used to
+  # stream LoupeR's existing stage messages to the busy overlay while worker runs.
+  launch <- tryCatch(
+    system2(
+      rscript,
+      c("--vanilla", shQuote(.louper_worker_path()), mode, shQuote(input_path), shQuote(result_path)),
+      stdout = log_path,
+      stderr = log_path,
+      wait = FALSE
+    ),
+    error = function(e) e
+  )
+  if (inherits(launch, "condition")) stop("Failed to start isolated loupeR worker: ", conditionMessage(launch))
+
+  if (!is.function(progress_cb)) progress_cb <- function(...) invisible(NULL)
+  progress_paths <- c(progress_path, log_path)
+  seen_lines <- integer(length(progress_paths))
+  last_pct <- 0
+  last_text <- ""
+  read_progress <- function() {
+    for (i in seq_along(progress_paths)) {
+      path <- progress_paths[[i]]
+      if (!file.exists(path)) next
+      lines <- tryCatch(readLines(path, warn = FALSE), error = function(e) character(0))
+      if (length(lines) < seen_lines[[i]]) seen_lines[[i]] <<- 0L
+      if (length(lines) <= seen_lines[[i]]) next
+      new_lines <- lines[seq.int(seen_lines[[i]] + 1L, length(lines))]
+      seen_lines[[i]] <<- length(lines)
+      for (line in new_lines) {
+        event <- .louper_progress_event(line)
+        if (is.null(event)) next
+        pct <- max(last_pct, as.numeric(event$pct))
+        if (!is.finite(pct)) pct <- last_pct
+        text <- as.character(event$text %||% "")
+        if (identical(text, last_text) && identical(pct, last_pct)) next
+        last_text <<- text
+        last_pct <<- pct
+        try(progress_cb(text = text, pct = pct), silent = TRUE)
+      }
+    }
+    invisible(NULL)
+  }
+
+  repeat {
+    read_progress()
+    if (file.exists(result_path)) break
+    Sys.sleep(0.1)
+  }
+  read_progress()
+
+  result <- if (file.exists(result_path)) readRDS(result_path) else NULL
+  if (!is.list(result) || !isTRUE(result$ok)) {
+    worker_log <- if (file.exists(log_path)) readLines(log_path, warn = FALSE) else character(0)
+    detail <- result$error %||% paste(tail(worker_log, 20L), collapse = "\n")
+    stop("Isolated loupeR worker failed: ", detail)
+  }
+  result$value
+}
+
 .ensure_louper_runtime <- function(prefer_lib = NULL) {
   # Add likely bootstrap library roots so an already-installed loupeR can be discovered.
   project_dir <- tryCatch(normalizePath(getwd(), mustWork = FALSE), error = function(e) getwd())
@@ -614,13 +1022,13 @@ EXPORT_UI_TEXT <- list(
 }
 
 # Compatibility-first export: preserve all valid metadata + all valid 2D embeddings.
-.export_to_loupe_simple <- function(sel, out_path, sel_name = NULL, shared_data = NULL, prefer_lib = NULL, assay_name = NULL, drop_invalid_cells = FALSE) {
+.export_to_loupe_simple_in_process <- function(sel, out_path, sel_name = NULL, shared_data = NULL, prefer_lib = NULL, assay_name = NULL, drop_invalid_cells = FALSE, sel_entry = NULL) {
   # Self-heal loupeR availability at export time (handles libpath/environment drift).
   .ensure_louper_runtime(prefer_lib = prefer_lib)
   if (!requireNamespace("Seurat", quietly = TRUE)) stop("Please install 'Seurat'.")
   if (!requireNamespace("SeuratObject", quietly = TRUE)) stop("Please install 'SeuratObject'.")
   
-  sel_entry <- sel
+  sel_entry <- sel_entry %||% sel
   obj <- .as_seurat_or_fail(sel)
   assay_choices <- .assays_with_counts(obj)
   if (!length(assay_choices)) stop("No assay with usable count matrix found.")
@@ -637,14 +1045,19 @@ EXPORT_UI_TEXT <- list(
   bc <- .derive_export_barcodes(obj, old_cells, drop_invalid_cells = drop_invalid_cells)
   keep_idx <- match(bc$kept_cells, old_cells)
   if (any(is.na(keep_idx))) stop("Barcode preprocessing produced cell names not found in assay counts.")
+  if (!length(keep_idx)) stop("No cells remain after barcode preprocessing.")
   kept_old_cells <- old_cells[keep_idx]
   new_barcodes <- bc$barcodes
 
-  # Root-cause fix: subset object once, then derive all export components from the same cell universe.
-  obj <- tryCatch(subset(obj, cells = kept_old_cells), error = function(e) {
-    stop("Failed to subset export object to valid barcode cells: ", conditionMessage(e))
-  })
-  counts <- loupeR::counts_matrix_from_assay(obj[[assay_name]])
+  # Agent note: Keep Seurat object intact. Filter only count columns, while
+  # cluster and projection helpers apply same cell index. This avoids a full
+  # Seurat copy for large datasets and preserves every retained cell/feature.
+  if (length(keep_idx) != length(old_cells) || any(keep_idx != seq_along(old_cells))) {
+    counts <- counts[, keep_idx, drop = FALSE]
+  }
+  if (ncol(counts) != length(new_barcodes)) {
+    stop("Filtered assay count matrix does not match exported barcode count.")
+  }
   colnames(counts) <- new_barcodes
   barcode_count <- ncol(counts)
   
@@ -653,7 +1066,12 @@ EXPORT_UI_TEXT <- list(
   obj <- sm$obj
   md_cols <- sm$md_cols
   
-  clusters <- .select_valid_clusters(obj, barcode_count = barcode_count, metadata_cols = md_cols)
+  clusters <- .select_valid_clusters(
+    obj,
+    barcode_count = barcode_count,
+    metadata_cols = md_cols,
+    cells_keep = kept_old_cells
+  )
   if (!length(clusters)) stop("No valid grouping columns found for Loupe export.")
   clusters <- lapply(clusters, function(f) {
     if (!is.factor(f)) return(f)
@@ -662,12 +1080,12 @@ EXPORT_UI_TEXT <- list(
     f
   })
   
-  projections <- .select_valid_projections(obj, barcode_count = barcode_count)
+  projections <- .select_valid_projections(obj, barcode_count = barcode_count, cells_keep = kept_old_cells)
   if (!length(projections)) {
     stop("No valid 2D projections found. Please run at least one 2D reduction (e.g., UMAP or tSNE).")
   }
   projections <- lapply(projections, function(emb) {
-    idx <- match(rownames(emb), colnames(obj))
+    idx <- match(rownames(emb), kept_old_cells)
     if (any(is.na(idx))) stop("Projection rownames do not align with subset export cells.")
     rownames(emb) <- new_barcodes[idx]
     emb
@@ -678,12 +1096,19 @@ EXPORT_UI_TEXT <- list(
     sel_name = sel_name,
     sel_entry = sel_entry,
     shared_data = shared_data,
-    assay_name = assay_name
+    assay_name = assay_name,
+    target_feature_count = nrow(counts)
   )
   
   out_dir  <- dirname(out_path)
   out_name <- tools::file_path_sans_ext(basename(out_path))
   if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+  # Agent note: LoupeR only needs count/cluster/projection payloads from here.
+  # Release Seurat references before HDF5/Louper work to lower peak resident
+  # memory; do not remove any exported component.
+  rm(sel, sel_entry, obj, assay_obj, sm, old_cells, bc, keep_idx, kept_old_cells, new_barcodes, md_cols)
+  invisible(gc(verbose = FALSE))
   
   loupeR::create_loupe(
     count_mat      = counts,
@@ -698,9 +1123,126 @@ EXPORT_UI_TEXT <- list(
   file.path(out_dir, paste0(out_name, ".cloupe"))
 }
 
+.export_to_loupe_simple <- function(sel, out_path, sel_name = NULL, shared_data = NULL, prefer_lib = NULL, assay_name = NULL, drop_invalid_cells = FALSE, progress_cb = NULL, sel_entry = NULL) {
+  prefer_lib <- normalizePath(prefer_lib %||% "", mustWork = FALSE)
+  if (!nzchar(prefer_lib) || !dir.exists(prefer_lib)) {
+    stop("The active Seurat environment is unavailable for isolated Loupe export.")
+  }
+  shared_snapshot <- list(
+    full_sample_sheet = tryCatch(shared_data$full_sample_sheet, error = function(e) NULL)
+  )
+  worker <- .loupe_worker_object(sel, assay_name = assay_name, progress_cb = progress_cb)
+  worker_entry <- sel_entry %||% .loupe_worker_entry(sel)
+  payload <- list(
+    sel = worker$object,
+    sel_entry = worker_entry,
+    out_path = out_path,
+    sel_name = sel_name,
+    shared_data = shared_snapshot,
+    prefer_lib = prefer_lib,
+    assay_name = worker$assay_name,
+    drop_invalid_cells = drop_invalid_cells,
+    page_export_path = .louper_page_path("page_export.R")
+  )
+  result <- .run_loupe_export_subprocess("export-simple", payload, progress_cb = progress_cb)
+  rm(payload, worker, sel, shared_snapshot)
+  invisible(gc(verbose = FALSE))
+  result
+}
+
 # ---------- UI ----------
 
+# Agent note: the isolated loupeR worker sources this file for helper functions only;
+# UI/server construction depends on parent-app helpers that intentionally are not loaded there.
+if (!identical(Sys.getenv("WANLAB_LOUPER_WORKER"), "1")) {
 export_ui <- fluidPage(
+  # Agent note: downloadHandler content starts after the browser download
+  # request reaches Shiny. Keep this capture listener so users see an immediate
+  # click/start state while that request is being established; do not replace it
+  # with a delay or a second Shiny input contract.
+  tags$script(HTML(sprintf(
+     "(function() {
+       if (window.__wanlabLoupeClickBound) return;
+       window.__wanlabLoupeClickBound = true;
+       window.__wanlabLoupeExportInFlight = window.__wanlabLoupeExportInFlight === true;
+       function setButtonBusy(busy) {
+         var button = document.getElementById('download_loupe_file_btn');
+         if (!button) return;
+         if (busy) {
+           button.setAttribute('aria-busy', 'true');
+           button.setAttribute('aria-disabled', 'true');
+           button.setAttribute('data-loupe-export-in-flight', 'true');
+         } else {
+           button.removeAttribute('aria-busy');
+           button.removeAttribute('aria-disabled');
+           button.removeAttribute('data-loupe-export-in-flight');
+         }
+       }
+       function handleLoupeState(payload) {
+         var state = String(payload && payload.state || '').toLowerCase();
+         if (state === 'started') {
+           window.__wanlabLoupeExportInFlight = true;
+           setButtonBusy(true);
+           return;
+         }
+         if (state === 'completed' || state === 'failed') {
+           window.__wanlabLoupeExportInFlight = false;
+           setButtonBusy(false);
+           return;
+         }
+         if (state === 'duplicate' && window.console && typeof window.console.warn === 'function') {
+           window.console.warn('[Loupe] Duplicate export request ignored; an export is already running.');
+         }
+       }
+       function bindStateHandler() {
+         if (window.__wanlabLoupeStateHandlerBound) return;
+         if (!window.Shiny || typeof window.Shiny.addCustomMessageHandler !== 'function') return;
+         window.Shiny.addCustomMessageHandler('wanlab-loupe-export-state', handleLoupeState);
+         window.__wanlabLoupeStateHandlerBound = true;
+       }
+       bindStateHandler();
+       document.addEventListener('shiny:connected', bindStateHandler);
+       document.addEventListener('click', function(event) {
+         var target = event && event.target;
+         var button = target && target.closest ? target.closest('#download_loupe_file_btn') : null;
+         if (!button) return;
+         if (window.__wanlabLoupeExportInFlight === true) {
+           event.preventDefault();
+           if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+           if (window.console && typeof window.console.warn === 'function') {
+             window.console.warn('[Loupe] Duplicate click ignored; an export is already running.');
+           }
+           return;
+         }
+         window.__wanlabLoupeExportInFlight = true;
+         setButtonBusy(true);
+         function valueOf(id) {
+           var el = document.getElementById(id);
+           return el ? String(el.value || '') : '';
+         }
+         var details = {
+           object: valueOf('export_object_name_input'),
+           assay: valueOf('export_assay_input'),
+           filename: valueOf('loupe_filename_input')
+         };
+         if (window.console && typeof window.console.info === 'function') {
+           window.console.info('[Loupe] Generate button clicked; export request starting.', details);
+         }
+         if (window.WLSpinnerOverlay && typeof window.WLSpinnerOverlay.show === 'function') {
+           window.WLSpinnerOverlay.show({
+             id: 'global_overlay',
+             text: %s,
+             pct: 0,
+             lock: true,
+             lightweight: true
+           });
+         } else if (window.console && typeof window.console.warn === 'function') {
+           window.console.warn('[Loupe] Busy overlay API is not ready at click time.');
+         }
+       }, true);
+     })();",
+    jsonlite::toJSON(EXPORT_UI_TEXT$ui_progress_starting_loupe, auto_unbox = TRUE)
+  ))),
   div(
     class = "card-page-wrap export-page-wrap",
     div(
@@ -737,7 +1279,8 @@ export_ui <- fluidPage(
             class = "btn-success btn-lg",
             icon = icon("download")
           ),
-          checkboxInput("export_drop_invalid_barcodes", EXPORT_UI_TEXT$ui_label_drop_invalid_cells, value = FALSE)
+          checkboxInput("export_drop_invalid_barcodes", EXPORT_UI_TEXT$ui_label_drop_invalid_cells, value = FALSE),
+          uiOutput("loupe_barcode_warning_ui")
         )
       ),
       column(
@@ -877,6 +1420,15 @@ export_ui <- fluidPage(
 # ---------- server ----------
 
 export_server <- function(input, output, session, shared_data) {
+  loupe_export_in_flight <- shiny::reactiveVal(FALSE)
+  send_loupe_export_state <- function(state) {
+    try(session$sendCustomMessage(
+      "wanlab-loupe-export-state",
+      list(state = as.character(state))
+    ), silent = TRUE)
+    invisible(NULL)
+  }
+
   observeEvent(input$export_open_figure_studio_btn, {
     updateNavbarPage(session, inputId = "main_navbar", selected = "figure_studio_umap")
   }, ignoreInit = TRUE)
@@ -914,6 +1466,57 @@ export_server <- function(input, output, session, shared_data) {
       label = EXPORT_UI_TEXT$ui_label_assay_select,
       choices = assay_choices,
       selected = assay_choices[[1]]
+    )
+  })
+
+  loupe_barcode_preview <- reactive({
+    object_name <- trimws(as.character(input$export_object_name_input %||% ""))
+    assay_name <- trimws(as.character(input$export_assay_input %||% ""))
+    if (!nzchar(object_name) || !nzchar(assay_name)) return(NULL)
+    sel <- selected_object_to_export()
+    obj <- .as_seurat_or_fail(sel)
+    cells <- .loupe_export_assay_cells(obj, assay_name)
+    .derive_export_barcodes(obj, cells, diagnose_only = TRUE)
+  })
+
+  output$loupe_barcode_warning_ui <- renderUI({
+    preview <- tryCatch(loupe_barcode_preview(), error = function(e) {
+      list(error = conditionMessage(e))
+    })
+    if (is.null(preview)) return(NULL)
+    if (!is.null(preview$error)) {
+      return(
+        div(
+          class = "alert alert-danger",
+          tags$strong(EXPORT_UI_TEXT$ui_text_barcode_check_error_prefix),
+          " ",
+          preview$error
+        )
+      )
+    }
+
+    n_invalid <- sum(!preview$compatible)
+    n_duplicate_cells <- sum(preview$duplicate)
+    if (n_invalid == 0L && n_duplicate_cells == 0L) {
+      return(
+        div(
+          class = "alert alert-success",
+          sprintf(EXPORT_UI_TEXT$ui_text_barcode_check_passed, length(preview$labels))
+        )
+      )
+    }
+
+    lines <- .loupe_export_barcode_issue_lines(preview)
+    if (isTRUE(input$export_drop_invalid_barcodes)) {
+      lines <- c(lines, EXPORT_UI_TEXT$ui_text_barcode_check_ready_after_removal)
+      alert_class <- "alert alert-warning"
+    } else {
+      lines <- c(lines, EXPORT_UI_TEXT$ui_text_barcode_check_enable_option)
+      alert_class <- "alert alert-danger"
+    }
+    div(
+      class = alert_class,
+      lapply(lines, function(line) tags$p(style = "margin:0 0 4px 0;", line))
     )
   })
   
@@ -965,6 +1568,19 @@ export_server <- function(input, output, session, shared_data) {
       fname
     },
     content = function(file) {
+      if (isTRUE(shiny::isolate(loupe_export_in_flight()))) {
+        message("[Loupe] duplicate export request ignored.")
+        send_loupe_export_state("duplicate")
+        stop("A Loupe export is already running.")
+      }
+      loupe_export_in_flight(TRUE)
+      loupe_export_final_state <- "failed"
+      send_loupe_export_state("started")
+      on.exit({
+        loupe_export_in_flight(FALSE)
+        send_loupe_export_state(loupe_export_final_state)
+      }, add = TRUE)
+      message("[Loupe] download handler content started.")
       # Log collector for the modal (optional)
       log_lines <- character()
       append_log <- function(...) {
@@ -974,6 +1590,21 @@ export_server <- function(input, output, session, shared_data) {
       
       # Run the export
       tmp_dir <- tempdir()
+      last_loupe_pct <- 0
+      loupe_progress <- function(text = NULL, pct = NULL) {
+        msg <- as.character(text %||% "")
+        if (!nzchar(trimws(msg))) msg <- EXPORT_UI_TEXT$ui_progress_preparing_loupe
+        pct_num <- suppressWarnings(as.numeric(pct))
+        if (length(pct_num) != 1L || !is.finite(pct_num)) pct_num <- last_loupe_pct
+        pct_num <- max(last_loupe_pct, min(100, pct_num))
+        last_loupe_pct <<- pct_num
+        try(overlay_show(text = msg, pct = pct_num, session = session, lock = TRUE, loader = "export"), silent = TRUE)
+      }
+      showNotification(EXPORT_UI_TEXT$ui_notification_generating_cloupe, type = "message", duration = NULL, id = "loupe_notification")
+      loupe_progress(EXPORT_UI_TEXT$ui_progress_preparing_loupe, pct = 0)
+      on.exit(removeNotification("loupe_notification"), add = TRUE)
+      on.exit(overlay_hide(session = session), add = TRUE)
+
       tryCatch({
         sel_name <- if (length(input$export_object_name_input)) {
           trimws(as.character(input$export_object_name_input[[1]]))
@@ -982,11 +1613,50 @@ export_server <- function(input, output, session, shared_data) {
         }
         sel <- .export_selected_entry(shared_data, sel_name)
         append_log("Selected dataset: ", sel_name)
-        
-        showNotification(EXPORT_UI_TEXT$ui_notification_generating_cloupe, type = "message", duration = NULL, id = "loupe_notification")
-        overlay_show(EXPORT_UI_TEXT$ui_notification_generating_cloupe)
-        on.exit(removeNotification("loupe_notification"), add = TRUE)
-        on.exit(overlay_hide(), add = TRUE)
+        message("[Loupe] selected dataset: ", sel_name)
+        obj <- .as_seurat_or_fail(sel)
+        assay_name <- trimws(as.character(input$export_assay_input %||% ""))
+        req(nzchar(assay_name))
+        loupe_progress(EXPORT_UI_TEXT$ui_progress_validating_barcodes, pct = 5)
+        barcode_preview <- .derive_export_barcodes(
+          obj,
+          .loupe_export_assay_cells(obj, assay_name),
+          diagnose_only = TRUE
+        )
+        barcode_has_issues <- any(!barcode_preview$compatible) || any(barcode_preview$duplicate)
+        if (barcode_has_issues) {
+          append_log(
+            "Barcode preflight: invalid=", sum(!barcode_preview$compatible),
+            " duplicate_cells=", sum(barcode_preview$duplicate),
+            " retained=", sum(barcode_preview$keep),
+            "/", length(barcode_preview$labels)
+          )
+          if (!isTRUE(input$export_drop_invalid_barcodes)) {
+            stop(
+              paste(
+                c(
+                  .loupe_export_barcode_issue_lines(barcode_preview),
+                  EXPORT_UI_TEXT$ui_text_barcode_check_enable_option
+                ),
+                collapse = " "
+              )
+            )
+          }
+        }
+
+        loupe_progress(EXPORT_UI_TEXT$ui_progress_preparing_disk_backed, pct = 7)
+        prepared <- .wanlab_prepare_disk_backed_selection(
+          selection = sel,
+          object_name = sel_name,
+          source_tag = sel_name,
+          progress_cb = loupe_progress
+        )
+        sel <- prepared$selection
+        append_log(
+          "Disk-backed preparation: changed=", isTRUE(prepared$changed),
+          " supported=", isTRUE(prepared$supported),
+          if (!is.null(prepared$root)) paste0(" root=", prepared$root) else ""
+        )
         
         tmp_out <- file.path(tmp_dir, "export.cloupe")
         append_log("Writing temporary export to: ", tmp_out)
@@ -997,15 +1667,20 @@ export_server <- function(input, output, session, shared_data) {
           shared_data = shared_data,
           prefer_lib = tryCatch(shared_data$active_environment$path, error = function(e) NULL),
           assay_name = input$export_assay_input %||% "",
-          drop_invalid_cells = isTRUE(input$export_drop_invalid_barcodes)
+          drop_invalid_cells = isTRUE(input$export_drop_invalid_barcodes),
+          progress_cb = loupe_progress
         )
         if (!file.exists(actual)) stop("Exporter did not write a .cloupe file.")
         append_log("Generated file: ", actual)
         copied <- file.copy(actual, file, overwrite = TRUE)
         if (!isTRUE(copied)) stop("Failed to copy the generated .cloupe file to the browser download location.")
+        loupe_progress(EXPORT_UI_TEXT$ui_progress_finalizing_loupe, pct = 100)
+        loupe_export_final_state <- "completed"
+        message("[Loupe] export completed.")
       }, error = function(e) {
         removeNotification("loupe_notification")
-        overlay_hide()
+        overlay_hide(session = session)
+        message("[Loupe] export failed: ", conditionMessage(e))
         showNotification(paste(EXPORT_UI_TEXT$ui_notification_error_generating_file_prefix, conditionMessage(e)), type = "error")
         if (exists(".show_export_error_modal")) {
           .show_export_error_modal(
@@ -1054,7 +1729,7 @@ export_server <- function(input, output, session, shared_data) {
         append_log("Selected profile: ", profile)
 
         showNotification(EXPORT_UI_TEXT$ui_notification_generating_h5ad, type = "message", duration = NULL, id = "h5ad_notification")
-        overlay_show(EXPORT_UI_TEXT$ui_notification_generating_h5ad)
+        overlay_show(EXPORT_UI_TEXT$ui_notification_generating_h5ad, loader = "export")
         on.exit(removeNotification("h5ad_notification"), add = TRUE)
         on.exit(overlay_hide(), add = TRUE)
 
@@ -1088,4 +1763,5 @@ export_server <- function(input, output, session, shared_data) {
       })
     }
   )
+}
 }

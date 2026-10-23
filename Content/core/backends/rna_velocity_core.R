@@ -26,7 +26,7 @@ rna_velocity_beta_get_object <- function(shared_data, object_name = NULL) {
   valid_nms <- rna_velocity_beta_object_names(shared_data)
   nm <- as.character(object_name %||% "")
   if (!nzchar(nm)) nm <- as.character(tryCatch(shared_data$active_object_name, error = function(e) "") %||% "")
-  if (!nzchar(nm) || !(nm %in% valid_nms)) nm <- if (length(valid_nms)) valid_nms[[1]] else ""
+  if (!nzchar(nm) || !(nm %in% valid_nms)) nm <- if (length(valid_nms)) valid_nms[[length(valid_nms)]] else ""
   if (!nzchar(nm) || !(nm %in% names(reg))) return(NULL)
 
   x <- reg[[nm]]
@@ -133,7 +133,7 @@ rna_velocity_beta_match_cells <- function(seurat_cells, loom_cells) {
     return(data.frame(seurat_cell = character(0), loom_cell = character(0), match_type = character(0), stringsAsFactors = FALSE))
   }
 
-  exact <- intersect(sc, lc)
+  exact <- sc[sc %in% lc]
   exact_df <- data.frame(
     seurat_cell = exact,
     loom_cell = exact,
@@ -169,6 +169,7 @@ rna_velocity_beta_match_cells <- function(seurat_cells, loom_cells) {
   if (!nrow(all_df)) return(all_df)
   all_df <- all_df[!duplicated(all_df$loom_cell), , drop = FALSE]
   all_df <- all_df[!duplicated(all_df$seurat_cell), , drop = FALSE]
+  all_df <- all_df[match(sc[sc %in% all_df$seurat_cell], all_df$seurat_cell), , drop = FALSE]
   rownames(all_df) <- NULL
   all_df
 }
@@ -182,6 +183,7 @@ rna_velocity_beta_run_from_loom <- function(
   mode = "stochastic",
   n_top_genes = 2000L,
   n_pcs = 30L,
+  pc_count = NULL,
   n_neighbors = 30L,
   min_shared_counts = 20L
 ) {
@@ -230,9 +232,11 @@ rna_velocity_beta_run_from_loom <- function(
     min_shared_counts = as.integer(max(1L, min_shared_counts)),
     n_top_genes = as.integer(max(200L, n_top_genes))
   )
+  pc_count_use <- as.integer(pc_count %||% n_pcs)
+  if (!is.finite(pc_count_use) || pc_count_use < 2L) stop("Velocity PC count must be at least 2.")
   scv$pp$moments(
     adata,
-    n_pcs = as.integer(max(2L, n_pcs)),
+    n_pcs = as.integer(pc_count_use),
     n_neighbors = as.integer(max(2L, n_neighbors))
   )
   scv$tl$velocity(adata, mode = as.character(mode %||% "stochastic"))
@@ -286,7 +290,10 @@ rna_velocity_beta_run_from_loom <- function(
     match_table = mt,
     reduction = reduction_use,
     group_col = gcol,
+    annotation = as.character(groups),
+    annotation_column = gcol,
     mode = as.character(mode %||% "stochastic"),
+    pc_count = pc_count_use,
     python = as.character(py_st$python %||% ""),
     summary = list(
       n_cells = nrow(vec),

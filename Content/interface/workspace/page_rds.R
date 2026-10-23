@@ -17,10 +17,10 @@ RDS_UI_TEXT <- list(
   ui_btn_add_workspace = "Add to Workspace",
   ui_btn_replace_workspace = "Replace Workspace",
   ui_btn_discard_imported_preview = "Discard Imported Preview",
-  ui_btn_download_all_datasets_rds = "Compatible Workspace Bundle (.rds)",
-  ui_btn_download_all_datasets_qs2 = "High-Efficiency (40-70% less size) Workspace Bundle (.qs2)",
-  ui_btn_download_selected_object_rds = "Compatible Selected Object Bundle (.rds)",
-  ui_btn_download_selected_object_qs2 = "High-Efficiency (40-70% less size) Selected Object Bundle (.qs2)",
+  ui_btn_download_all_datasets_rds = "Compatible Workspace Bundle (.sxrs)",
+  ui_btn_download_all_datasets_qs2 = "High-Efficiency (40-70% less size) Workspace Bundle (.sxrs2)",
+  ui_btn_download_selected_object_rds = "Compatible Selected Object Bundle (.sxrs)",
+  ui_btn_download_selected_object_qs2 = "High-Efficiency (40-70% less size) Selected Object Bundle (.sxrs2)",
   ui_btn_download_structure_tree_txt = "Download Full Structure Tree (.txt)",
   ui_btn_download_selected_object_structure_tree_txt = "Download Selected Object Structure Tree (.txt)",
   ui_btn_copy_usage_code = "Copy Code",
@@ -30,7 +30,7 @@ RDS_UI_TEXT <- list(
   ui_label_object = "Object:",
   ui_label_fast_checkpoint = "Fast checkpoint (no compression, larger file)",
   ui_label_show_diagnostics = "Show diagnostics",
-  ui_label_upload_rds = "Upload (.rds or .qs2):",
+  ui_label_upload_rds = "Upload (.sxrs or .sxrs2):",
   ui_text_active_environment = "Active environment: ",
   ui_text_all_tabs_enabled = "All tabs enabled",
   ui_text_analysis_date = "Analysis date: ",
@@ -49,23 +49,23 @@ RDS_UI_TEXT <- list(
   ui_text_diagnostics = "Diagnostics",
   ui_text_error_no_datasets_export = "No datasets are available to export yet. Please import data and/or run the pipeline before downloading.",
   ui_text_error_no_datasets_export_stop = "No datasets available to export.",
-  ui_text_error_no_seurat_objects_found = "No Seurat objects were found in this .rds.",
+  ui_text_error_no_seurat_objects_found = "No Seurat objects were found in this .sxrs file.",
   ui_text_error_no_seurat_objects_import = "No Seurat objects to import.",
-  ui_text_error_rds_not_readable = "This file could not be read as RDS or QS2.",
+  ui_text_error_rds_not_readable = "This file could not be read as SXRS or SXRS2.",
   ui_text_examples_columns_named_like_dbr_doublet = "Examples: columns named like 'dbr', 'doublet', 'whitelist', 'blacklist', 'keep', etc.",
   ui_text_export_time = "Export time: %s",
   ui_text_export_time_line = "Export time: %s",
-  ui_text_export_current_registered_seurat_objects_into = "Export current registered Seurat objects into one RDS bundle.",
-  ui_text_export_single_object_into_rds = "Export one selected object as a wrapped RDS bundle (.rds) that preserves plots and preferences.",
+  ui_text_export_current_registered_seurat_objects_into = "Export current registered Seurat objects into one SXRS bundle.",
+  ui_text_export_single_object_into_rds = "Export one selected object as a wrapped SXRS bundle (.sxrs) that preserves plots and preferences.",
   ui_text_export_wrap_empty = "No Seurat objects available to export yet.",
-  ui_text_export_keep_bundle_note = "If you have follow-up requests that cannot be completed inside this pipeline, export your workspace now and keep the .rds file. The exported .rds file plus Session Info can be used for any further analysis in R.",
+  ui_text_export_keep_bundle_note = "If you have follow-up requests that cannot be completed inside this pipeline, export your workspace now and keep the .sxrs file. The exported .sxrs file plus Session Info can be used for any further analysis in R.",
   ui_text_usage_code_note = "Use this code in RStudio when opening a workspace bundle exported from this page.",
   ui_text_exported = "Exported at: ",
   ui_text_faster_import_better_stability_add_only = "For faster import and better stability, add only the objects you currently need.",
   ui_text_force_enable_gated_tabs = "Force enable gated tabs",
   ui_text_header_analysis_parameters_by_page = "=== Analysis Parameters By Page ===",
   ui_text_header_session_info_current_runtime = "=== Session Info (Current Runtime) ===",
-  ui_text_import_saved_workspace_rds_single_seurat = "Import a saved workspace RDS, single Seurat object, or list containing Seurat objects.",
+  ui_text_import_saved_workspace_rds_single_seurat = "Import a saved SXRS workspace, single Seurat object, or list containing Seurat objects.",
   ui_text_import_wait_notice = "Once the upload progress bar is complete, object checking and unpacking will begin shortly.",
   ui_text_import_time_depends_number_size_selected = "Import time depends on the number and size of selected objects.",
   ui_text_imported_bundle_info = "Imported Bundle Info",
@@ -82,8 +82,8 @@ RDS_UI_TEXT <- list(
   ui_text_note = "Note: ",
   ui_text_page_section_prefix = "--- Page: %s ---",
   ui_text_pipeline_version = "Pipeline version: %s",
-  ui_text_overlay_reading_rds_file = "Reading and inspecting .rds file...",
-  ui_text_overlay_preparing_rds_bundle = "Saving RDS snapshot — this may take a while because R serializes the full Seurat workspace in one pass, and large objects make disk write + serialization slower. Waiting is normal and worth it: this checkpoint is your safest protection against losing work.",
+  ui_text_overlay_reading_rds_file = "Reading and inspecting .sxrs or .sxrs2 file...",
+  ui_text_overlay_preparing_rds_bundle = "Saving SXRS snapshot — this may take a while because R serializes the full Seurat workspace in one pass, and large objects make disk write + serialization slower. Waiting is normal and worth it: this checkpoint is your safest protection against losing work.",
   ui_text_fast_checkpoint_help = "Uses compress = FALSE to save faster. File size will be larger than compressed RDS.",
   ui_text_overlay_preparing_rds_structure_report = "Preparing structure tree report for download...",
   ui_text_overlay_preparing_quarto_report = "Preparing Quarto workspace report...",
@@ -100,7 +100,7 @@ RDS_UI_TEXT <- list(
   ui_text_quarto_cli_missing = "Quarto command line tool is not available in this runtime. Install Quarto CLI, then try again.",
   ui_text_quarto_package_missing = "R package 'quarto' is not available in this runtime. Run app bootstrap/install flow, then try again.",
   ui_text_qs2_package_missing = "R package 'qs2' is not available in this runtime. Run app bootstrap/install flow, then try again.",
-  ui_text_reading_inspecting_rds = "Reading and inspecting .rds ...",
+  ui_text_reading_inspecting_rds = "Reading and inspecting .sxrs or .sxrs2 ...",
   ui_text_scanning_for_seurat = "Scanning for Seurat objects ...",
   ui_text_scan_stopped_early_partial = "Scan stopped early (safety limit). Showing partial results.",
   ui_text_usage_code_copied = "Code copied to clipboard.",
@@ -134,9 +134,9 @@ RDS_UI_TEXT <- list(
   ui_text_no_parameters = "(no parameters)",
   ui_text_use_filters_metadata_table_below_quickly = "Use filters in the metadata table below to quickly find QC, clustering, sample, and doublet-related columns.",
   ui_text_why_some_tabs_disabled = "Why are some tabs disabled?",
-  ui_title_export_import_seurat_object_rds = "Export/Import Seurat Object (.rds)",
+  ui_title_export_import_seurat_object_rds = "Export/Import Seurat Object (.sxrs / .sxrs2)",
   ui_title_export_object = "Export Object",
-  ui_title_export_single_object = "Export Single Object Bundle (.rds)",
+  ui_title_export_single_object = "Export Single Object Bundle (.sxrs)",
   ui_title_usage_code_example = "RStudio Example (Workspace Bundle)",
   ui_title_usage_code_example_single = "RStudio Example (Single Object Bundle)",
   ui_title_usage_code_fold = "Show/Hide RStudio Example Code",
@@ -152,7 +152,7 @@ RDS_UI_TEXT <- list(
   ui_title_pipeline_stage_tab_gating = "Pipeline Stage & Tab Gating",
   ui_title_samples = "Samples",
   ui_title_final_barcode_list_optional = "Final barcode list (optional)",
-  ui_text_error_file_not_read_as_rds = "This file could not be read as RDS."
+  ui_text_error_file_not_read_as_rds = "This file could not be read as SXRS."
 
 )
 
@@ -179,8 +179,8 @@ RDS_UI_TEXT <- list(
 }
 
 RDS_WORKSPACE_EXPORT_USAGE_CODE <- paste(
-  "# 1) Read the exported workspace bundle (.rds)",
-  "bundle <- readRDS(\"PATH/TO/workspace_bundle.rds\")",
+  "# 1) Read the exported workspace bundle (.sxrs)",
+  "bundle <- readRDS(\"PATH/TO/workspace_bundle.sxrs\")",
   "",
   "# 2) List all object names in this bundle (one line)",
   "cat(\"Objects in bundle:\", paste(names(bundle$all_seurat_objects), collapse = \", \"), \"\\n\")",
@@ -202,8 +202,8 @@ RDS_WORKSPACE_EXPORT_USAGE_CODE <- paste(
 )
 
 RDS_SINGLE_EXPORT_USAGE_CODE <- paste(
-  "# 1) Read the exported single-object bundle (.rds)",
-  "bundle <- readRDS(\"PATH/TO/single_object_bundle.rds\")",
+  "# 1) Read the exported single-object bundle (.sxrs)",
+  "bundle <- readRDS(\"PATH/TO/single_object_bundle.sxrs\")",
   "",
   "# 2) List object names stored in this bundle",
   "cat(\"Objects in bundle:\", paste(names(bundle$all_seurat_objects), collapse = \", \"), \"\\n\")",
@@ -595,39 +595,19 @@ RDS_SINGLE_EXPORT_USAGE_CODE <- paste(
   tryCatch(do.call(Seurat::GetAssayData, alt_args), error = function(e) NULL)
 }
 
-.rds_build_elbow_plot <- function(sobj) {
-  if (is.null(sobj) || !inherits(sobj, "Seurat")) return(NULL)
-  stdev <- tryCatch({
-    red <- sobj[["pca"]]
-    if (is.null(red)) return(numeric())
-    as.numeric(slot(red, "stdev"))
-  }, error = function(e) numeric())
-  stdev <- stdev[is.finite(stdev) & !is.na(stdev)]
-  if (!length(stdev)) return(NULL)
-  df <- data.frame(
-    PC = seq_along(stdev),
-    Standard.Deviation = stdev,
-    stringsAsFactors = FALSE
-  )
-  ggplot2::ggplot(df, ggplot2::aes(x = PC, y = Standard.Deviation)) +
-    ggplot2::geom_line(color = "#2c7fb8", linewidth = 0.6) +
-    ggplot2::geom_point(color = "#2c7fb8", size = 1.4) +
-    ggplot2::labs(x = "PC", y = "Standard Deviation") +
-    ggplot2::theme_minimal(base_size = 11)
-}
-
 # Ensure plotting prereqs exist on a Seurat object and return {sobj, plots}
 .ensure_plot_prereqs <- function(sobj, desired_slot = "data") {
   reds <- tryCatch(names(sobj@reductions), error = function(e) character())
-  reds_low <- tolower(reds)
-  have_umap <- "umap" %in% reds_low
-  have_tsne <- "tsne" %in% reds_low
-  have_pca  <- "pca"  %in% reds_low
+  umap_name <- wanlab_resolve_embedding_reduction(sobj, "umap")
+  tsne_name <- wanlab_resolve_embedding_reduction(sobj, "tsne")
+  have_umap <- nzchar(umap_name)
+  have_tsne <- nzchar(tsne_name)
+  have_pca  <- "pca" %in% tolower(reds)
   
   default_red <- if (have_umap) {
-    "umap"
+    umap_name
   } else if (have_tsne) {
-    "tsne"
+    tsne_name
   } else if (have_pca) {
     "pca"
   } else {
@@ -641,7 +621,7 @@ RDS_SINGLE_EXPORT_USAGE_CODE <- paste(
       default_reduction   = default_red,
       available_reductions= tolower(tryCatch(names(sobj@reductions), error=function(e) character())),
       feature_slot        = slot_pref,
-      elbow               = .rds_build_elbow_plot(sobj)
+      elbow               = wanlab_build_standard_elbow_plot(sobj)
     )
   )
 }
@@ -712,6 +692,10 @@ rds_ui <- shiny::fluidPage(
       font-size: 11.5px !important;
       line-height: 1.2;
       padding: 5px 6px;
+    }
+    /* Keep short rows aligned with the existing three-line sample rows. */
+    #rds_review_card table.rds-review-dt tbody tr {
+      height: 52px;
     }
     #rds_review_card table.rds-review-dt tbody td.dt-type-numeric,
     #rds_review_card table.rds-review-dt tbody td.dt-right,
@@ -983,7 +967,7 @@ rds_ui <- shiny::fluidPage(
           icon_name = "file-import",
           class = "mb-3 rds-top-card rds-import-card",
           p(RDS_UI_TEXT$ui_text_import_saved_workspace_rds_single_seurat),
-          fileInput("import_rds_file", RDS_UI_TEXT$ui_label_upload_rds, accept = c(".rds", ".RDS", ".qs2", ".QS2")),
+          fileInput("import_rds_file", RDS_UI_TEXT$ui_label_upload_rds, accept = c(".sxrs", ".SXRS", ".sxrs2", ".SXRS2", ".rds", ".RDS", ".qs2", ".QS2")),
           div(
             class = "app-note-box rds-import-note",
             RDS_UI_TEXT$ui_text_import_wait_notice
@@ -1175,7 +1159,7 @@ rds_ui <- shiny::fluidPage(
     return(imported_active_chr)
   }
 
-  object_names[[1]]
+  object_names[[length(object_names)]]
 }
 
 # ---------------------------
@@ -1195,9 +1179,9 @@ rds_server <- function(input, output, session,
   .show_overlay <- function(msg = NULL) {
     # Uses overlay_show() from spinner_overlay.R
     if (is.null(msg) || !nzchar(msg)) {
-      overlay_show()
+      overlay_show(loader = "package")
     } else {
-      overlay_show(text = msg)
+      overlay_show(text = msg, loader = "package")
     }
   }
   .hide_overlay <- function() {
@@ -1273,7 +1257,7 @@ rds_server <- function(input, output, session,
   .read_workspace_bundle_file <- function(path, name = "") {
     ext <- tolower(tools::file_ext(as.character(name %||% "")))
     if (!nzchar(ext)) ext <- tolower(tools::file_ext(as.character(path %||% "")))
-    if (identical(ext, "qs2")) {
+    if (ext %in% c("sxrs2", "qs2")) {
       .require_qs2()
       return(qs2::qs_read(path, validate_checksum = TRUE))
     }
@@ -1367,7 +1351,7 @@ rds_server <- function(input, output, session,
     dbl     <- any(grepl("doublet|dbr", md_low))
     gnames  <- tryCatch(tolower(names(sobj@graphs)), error = function(e) character())
     neigh   <- any(grepl("snn|knn|neighbors", gnames))
-    has_umap<- any(tolower(reds) == "umap")
+    has_umap<- nzchar(wanlab_resolve_embedding_reduction(sobj, "umap"))
     idents_ok <- tryCatch({ ids <- Seurat::Idents(sobj); !is.null(ids) && length(levels(ids)) > 1 }, error = function(e) FALSE)
     stage <- if (isTRUE(neigh) || isTRUE(has_umap) || isTRUE(idents_ok)) "clustered_analyzed"
     else if (isTRUE(dbl)) "post_doublet"
@@ -3204,6 +3188,19 @@ rds_server <- function(input, output, session,
     
     for (n in nm) {
       sobj <- objs[[n]]$obj
+
+      # Agent note: Convert only reviewed/imported objects after selection.
+      # Keep original RDS authoritative; the working object changes only after
+      # BPCells staging and name/dimension validation complete.
+      disk_prep <- .wanlab_prepare_disk_backed_object(
+        sobj,
+        object_name = n,
+        source_tag = "rds-import",
+        progress_cb = function(text = NULL, pct = NULL) {
+          .show_overlay(paste0("Preparing ", n, ": ", as.character(text %||% "")))
+        }
+      )
+      sobj <- disk_prep$obj
       
       assay_id   <- input[[paste0("cfg_", n, "_assay")]]   %||% pend$meta[[n]]$defaults$assay
       slot_id    <- input[[paste0("cfg_", n, "_slot")]]    %||% pend$meta[[n]]$defaults$slot
@@ -3300,7 +3297,12 @@ rds_server <- function(input, output, session,
     shared_data$all_seurat_objects <- objs
     shared_data$full_sample_sheet <- .build_sample_sheet_from_registry(objs)
     
-    if (identical(import_mode, "add") && nzchar(previous_active_object) && previous_active_object %in% nm) {
+    # Workspace import creates a new object package. Land on its newest
+    # imported object, regardless of an older valid active object or a bundle
+    # focus hint. Those hints remain metadata, not canonical landing state.
+    if (length(imported_names)) {
+      shared_data$active_object_name <- imported_names[[length(imported_names)]]
+    } else if (identical(import_mode, "add") && nzchar(previous_active_object) && previous_active_object %in% nm) {
       shared_data$active_object_name <- previous_active_object
     } else {
       focus <- rds_default_focus()
@@ -3314,12 +3316,12 @@ rds_server <- function(input, output, session,
     # Guarantee a valid active object right after import commit.
     active_nm <- as.character(shared_data$active_object_name %||% "")
     if (!nzchar(active_nm) || !(active_nm %in% nm)) {
-      shared_data$active_object_name <- nm[[1]]
+      shared_data$active_object_name <- nm[[length(nm)]]
     }
     # Seed analysis boot active object explicitly so Analysis page hydration
     # does not wait on delayed selector/bootstrap reconciliation.
     try({
-      shared_data$analysis_boot$active_object <- .scalar_chr(shared_data$active_object_name, default = nm[[1]])
+      shared_data$analysis_boot$active_object <- .scalar_chr(shared_data$active_object_name, default = nm[[length(nm)]])
     }, silent = TRUE)
     
     shared_data$object_prefs <- lapply(nm, function(nm1) objs[[nm1]]$prefs)
@@ -3368,9 +3370,9 @@ rds_server <- function(input, output, session,
     .show_overlay("Opening Analysis page and finalizing data readiness…")
     updateNavbarPage(session, "main_navbar", selected = route_tab)
     session$sendCustomMessage("setActiveNav", route_tab)
-    if (identical(route_tab, "qc_tab")) {
-      try(overlay_hide_when_output_ready("qc_scatter_main", timeout_ms = 120000L), silent = TRUE)
-    }
+    # Destination page owns terminal overlay state: Analysis settles through
+    # its route/flush lifecycle; QC settles through its render-cycle outputs.
+    # Do not wait for a browser DOM marker or timeout here.
   }
 
   # Apply & Proceed (with confirmation notice)
@@ -3692,8 +3694,9 @@ rds_server <- function(input, output, session,
   }
   
   # --- Export handler (guard against empty) ---
+  # Agent note: SXRS is the app-facing RDS workspace suffix; SXRS2 is the app-facing QS2 suffix. Keep this mapping aligned with the upload filter and extension-based reader above.
   output$download_rds_btn <- downloadHandler(
-    filename = function() paste0("Seurat_Session_v", APP_VERSION, "_", format(Sys.time(), "%Y%m%d"), ".rds"),
+    filename = function() paste0("Seurat_Session_v", APP_VERSION, "_", format(Sys.time(), "%Y%m%d"), ".sxrs"),
     content = function(file) {
       if (is.null(shared_data$all_seurat_objects) || !length(shared_data$all_seurat_objects)) {
         showNotification(
@@ -3722,7 +3725,7 @@ rds_server <- function(input, output, session,
   )
 
   output$download_qs2_btn <- downloadHandler(
-    filename = function() paste0("Seurat_Session_v", APP_VERSION, "_", format(Sys.time(), "%Y%m%d"), ".qs2"),
+    filename = function() paste0("Seurat_Session_v", APP_VERSION, "_", format(Sys.time(), "%Y%m%d"), ".sxrs2"),
     content = function(file) {
       if (is.null(shared_data$all_seurat_objects) || !length(shared_data$all_seurat_objects)) {
         showNotification(
@@ -3920,7 +3923,7 @@ rds_server <- function(input, output, session,
     nms <- names(objs)
     if (!length(nms)) return(tags$div(class = "rds-muted", RDS_UI_TEXT$ui_text_export_wrap_empty))
     cur <- isolate(input$rds_single_export_object_name %||% "")
-    if (!nzchar(cur) || !(cur %in% nms)) cur <- nms[[1]]
+    if (!nzchar(cur) || !(cur %in% nms)) cur <- nms[[length(nms)]]
     selectInput("rds_single_export_object_name", RDS_UI_TEXT$ui_label_object, choices = nms, selected = cur, width = "460px")
   })
 
@@ -3929,7 +3932,7 @@ rds_server <- function(input, output, session,
     nms <- names(objs)
     if (!length(nms)) return("")
     nm <- as.character(input$rds_single_export_object_name %||% "")
-    if (!nzchar(nm) || !(nm %in% nms)) nm <- nms[[1]]
+    if (!nzchar(nm) || !(nm %in% nms)) nm <- nms[[length(nms)]]
     nm
   }
 
@@ -3942,7 +3945,7 @@ rds_server <- function(input, output, session,
         if (is.null(sobj) || !inherits(sobj, "Seurat")) next
         plots <- entry$plots %||% list()
         if (is.null(plots$elbow)) {
-          plots$elbow <- .rds_build_elbow_plot(sobj)
+          plots$elbow <- wanlab_build_standard_elbow_plot(sobj)
         }
         entry$plots <- plots
         all_objects[[nm]] <- entry
@@ -3989,7 +3992,7 @@ rds_server <- function(input, output, session,
       nm_safe <- gsub("[^A-Za-z0-9_]+", "_", nm)
       nm_safe <- gsub("^_+|_+$", "", nm_safe)
       if (!nzchar(nm_safe)) nm_safe <- "selected_object"
-      paste0("Seurat_Object_Bundle_", nm_safe, "_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".rds")
+      paste0("Seurat_Object_Bundle_", nm_safe, "_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".sxrs")
     },
     content = function(file) {
       objs <- shared_data$all_seurat_objects %||% list()
@@ -4031,7 +4034,7 @@ rds_server <- function(input, output, session,
       nm_safe <- gsub("[^A-Za-z0-9_]+", "_", nm)
       nm_safe <- gsub("^_+|_+$", "", nm_safe)
       if (!nzchar(nm_safe)) nm_safe <- "selected_object"
-      paste0("Seurat_Object_Bundle_", nm_safe, "_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".qs2")
+      paste0("Seurat_Object_Bundle_", nm_safe, "_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".sxrs2")
     },
     content = function(file) {
       objs <- shared_data$all_seurat_objects %||% list()
@@ -4114,8 +4117,7 @@ rds_server <- function(input, output, session,
   .rds_gate_detect_signals <- function(sobj) {
     assays <- tryCatch(Seurat::Assays(sobj), error = function(e) character())
     has_rna <- "RNA" %in% assays
-    reds_low <- tryCatch(tolower(names(sobj@reductions)), error = function(e) character())
-    has_umap <- "umap" %in% reds_low
+    has_umap <- nzchar(wanlab_resolve_embedding_reduction(sobj, "umap"))
     gnames_low <- tryCatch(tolower(names(sobj@graphs)), error = function(e) character())
     has_neighbors <- any(grepl("snn|knn|neighbors", gnames_low))
     idents_ok <- tryCatch({ ids <- Seurat::Idents(sobj); !is.null(ids) && length(levels(ids)) > 1 }, error = function(e) FALSE)

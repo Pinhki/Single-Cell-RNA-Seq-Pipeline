@@ -30,15 +30,18 @@ rna_velocity_v052_ui <- fluidPage(
         selectInput("rv052_group_by", "Group column (optional)", choices = c("(None)" = ""), selected = ""),
         tags$hr(),
         tags$strong("Step 2: Velocity parameters"),
-        selectInput("rv052_mode", "Velocity mode", choices = c("stochastic", "deterministic", "dynamical"), selected = "stochastic"),
+        selectInput("rv052_mode", "Velocity model", choices = c("stochastic", "dynamical"), selected = "stochastic"),
+        numericInput("rv052_pc_count", "PC count (Dura default: 11)", value = 11, min = 2, max = 100, step = 1),
         sliderInput("rv052_top_genes", "Top genes", min = 500, max = 5000, value = 2000, step = 100),
-        numericInput("rv052_n_pcs", "n_pcs", value = 30, min = 2, max = 100, step = 1),
         numericInput("rv052_neighbors", "n_neighbors", value = 30, min = 2, max = 200, step = 1),
         numericInput("rv052_min_shared_counts", "min_shared_counts", value = 20, min = 1, max = 200, step = 1),
         actionButton("rv052_run_btn", "Run RNA Velocity", class = "btn btn-primary btn-sm"),
         tags$hr(),
         sliderInput("rv052_arrow_scale", "Arrow scale", min = 0.2, max = 4, value = 1.0, step = 0.1),
         sliderInput("rv052_max_arrows", "Max arrows shown", min = 300, max = 4000, value = 1200, step = 100),
+        selectInput("rv052_display_mode", "Display mode", choices = c("Point only" = "point", "Small arrows" = "small_arrows", "Grid" = "grid", "Sparse grid" = "sparse_grid", "Stream" = "stream"), selected = "point"),
+        selectInput("rv052_color_by", "Color by", choices = c("Annotation" = "annotation", "Group" = "group", "Latent time" = "latent_time"), selected = "annotation"),
+        checkboxInput("rv052_latent_time", "Use latent time for dynamical results", value = FALSE),
         tags$hr(),
         uiOutput("rv052_status_ui"),
         tags$hr(),
@@ -54,6 +57,21 @@ rna_velocity_v052_ui <- fluidPage(
       9,
       tabsetPanel(
         id = "rv052_tabs",
+        tabPanel(
+          "PCA / PC selection",
+          div(
+            class = "plot_area_card_style",
+            div(
+              class = "card p-3",
+              h4("PCA elbow plot"),
+              p(
+                class = "small text-muted",
+                "Use this preview to choose the PC count. The red line marks the current velocity setting."
+              ),
+              plotOutput("rv052_elbow_plot", height = "420px")
+            )
+          )
+        ),
         tabPanel(
           "Velocity Field",
           div(
@@ -87,6 +105,14 @@ rna_velocity_v052_server <- function(input, output, session, shared_data) {
       toImageButtonOptions = list(format = "png", filename = file_stub, scale = 2)
     )
   }
+  .plot_settings <- function() trajectory_plot_settings_normalize(list(velocity = list(
+    model = input$rv052_mode %||% "stochastic",
+    pc_count = input$rv052_pc_count %||% 11,
+    display_mode = input$rv052_display_mode %||% "point",
+    color_by = input$rv052_color_by %||% "annotation",
+    annotation_column = input$rv052_group_by %||% "",
+    latent_time = isTRUE(input$rv052_latent_time)
+  )))
 
   rv <- reactiveValues(
     runtime = NULL,
@@ -94,6 +120,21 @@ rna_velocity_v052_server <- function(input, output, session, shared_data) {
     dat = NULL,
     last_error = ""
   )
+  .publish_overlay <- function(result, object_name = input$rv052_object) {
+    if (!is.list(result) || is.null(result$vectors)) return(invisible(FALSE))
+    record <- trajectory_overlay_record_from_velocity(result, plotting = result$plotting$velocity %||% .plot_settings()$velocity)
+    registry <- shared_data$all_seurat_objects %||% list()
+    nm <- as.character(object_name %||% "")[[1]]
+    if (!nzchar(nm) || is.null(registry[[nm]])) stop("RNA velocity overlay target object is unavailable.", call. = FALSE)
+    entry <- registry[[nm]]
+    sobj <- if (is.list(entry) && !is.null(entry$obj)) entry$obj else entry
+    if (is.null(sobj) || !inherits(sobj, "Seurat")) stop("RNA velocity overlay target is not a Seurat object.", call. = FALSE)
+    sobj <- trajectory_overlay_write(sobj, record)
+    if (is.list(entry) && !is.null(entry$obj)) entry$obj <- sobj else entry <- sobj
+    registry[[nm]] <- entry
+    shared_data$all_seurat_objects <- registry
+    invisible(TRUE)
+  }
 
   beta_result_object_controls_server(
     input = input,
@@ -103,8 +144,15 @@ rna_velocity_v052_server <- function(input, output, session, shared_data) {
     id_prefix = "rv052_result_io",
     get_current_object = function() rv$dat,
     set_current_object = function(obj) {
+      if (is.list(obj)) obj$provenance <- list(source = "imported_result")
       rv$dat <- obj
-      rv$last_error <- ""
+      publish_error <- tryCatch({ .publish_overlay(obj); NULL }, error = function(e) e)
+      if (inherits(publish_error, "error")) {
+        rv$last_error <- paste("Imported RNA velocity loaded, but overlay publish failed:", conditionMessage(publish_error))
+        warning(sprintf("[rna_velocity][overlay] %s", rv$last_error), call. = FALSE, immediate. = TRUE)
+      } else {
+        rv$last_error <- ""
+      }
       rv$status <- "Imported RNA velocity result object is now active."
     },
     write_metadata_to_active_object = function(res_obj, sobj) {
@@ -198,6 +246,41 @@ rna_velocity_v052_server <- function(input, output, session, shared_data) {
     }
   })
 
+  output$rv052_elbow_plot <- renderPlot({
+    nm <- as.character(input$rv052_object %||% "")[[1]]
+    validate(need(nzchar(nm), "Select a Seurat object to view its PCA elbow plot."))
+
+    sobj <- tryCatch(
+      rna_velocity_beta_get_object(shared_data, nm),
+      error = function(e) NULL
+    )
+    validate(need(!is.null(sobj), "The selected Seurat object is not available."))
+
+    p <- tryCatch(wanlab_build_standard_elbow_plot(sobj), error = function(e) NULL)
+    validate(need(!is.null(p), "No PCA elbow data are available for this object. Run PCA first or choose another object."))
+
+    pc <- suppressWarnings(as.integer(input$rv052_pc_count %||% 11L))
+    if (!is.finite(pc) || is.na(pc) || pc < 2L) pc <- 11L
+
+    p +
+      ggplot2::geom_vline(
+        xintercept = pc,
+        linetype = "dashed",
+        linewidth = 0.7,
+        color = "#c0392b"
+      ) +
+      ggplot2::annotate(
+        "text",
+        x = pc,
+        y = Inf,
+        label = sprintf("Selected PC %d", pc),
+        vjust = 1.3,
+        hjust = 1.05,
+        color = "#c0392b",
+        size = 3.5
+      )
+  })
+
   observeEvent(input$rv052_run_btn, {
     req(nzchar(input$rv052_object %||% ""))
     fi <- input$rv052_loom
@@ -219,10 +302,13 @@ rna_velocity_v052_server <- function(input, output, session, shared_data) {
         python_path = py,
         mode = input$rv052_mode,
         n_top_genes = as.integer(input$rv052_top_genes %||% 2000L),
-        n_pcs = as.integer(input$rv052_n_pcs %||% 30L),
+        n_pcs = as.integer(input$rv052_pc_count %||% 11L),
+        pc_count = as.integer(input$rv052_pc_count %||% 11L),
         n_neighbors = as.integer(input$rv052_neighbors %||% 30L),
         min_shared_counts = as.integer(input$rv052_min_shared_counts %||% 20L)
       )
+      out$plotting <- .plot_settings()
+      .publish_overlay(out)
 
       rv$dat <- out
       rv$last_error <- ""
@@ -245,6 +331,9 @@ rna_velocity_v052_server <- function(input, output, session, shared_data) {
     vec <- as.data.frame(rv$dat$vectors, stringsAsFactors = FALSE)
     validate(need(nrow(vec) > 0, "No velocity vectors available."))
 
+    settings <- trajectory_plot_settings_normalize(rv$dat$plotting %||% .plot_settings())$velocity
+    diagnostic <- trajectory_velocity_display_diagnostic(trajectory_overlay_record_from_velocity(rv$dat, plotting = settings), settings$display_mode)
+    validate(need(!nzchar(diagnostic), diagnostic))
     max_n <- as.integer(input$rv052_max_arrows %||% 1200L)
     if (nrow(vec) > max_n) {
       set.seed(1)
@@ -257,15 +346,16 @@ rna_velocity_v052_server <- function(input, output, session, shared_data) {
 
     vec$xend <- vec$x + vec$vx * scl
     vec$yend <- vec$y + vec$vy * scl
+    if (identical(settings$color_by, "latent_time") && identical(settings$model, "dynamical")) vec$plot_color <- vec$latent_time else if (identical(settings$color_by, "annotation")) vec$plot_color <- vec$group else vec$plot_color <- vec$group
 
     p <- plotly::plot_ly(
       vec,
       x = ~x,
       y = ~y,
-      color = ~group,
+      color = ~plot_color,
       type = "scattergl",
       mode = "markers",
-      marker = list(size = 4, opacity = 0.72),
+      marker = list(size = max(1, settings$point_size), opacity = min(1, max(0.05, settings$arrow_alpha))),
       hovertemplate = paste0(
         "cell=%{text}<br>",
         "speed=%{customdata:.4f}<extra></extra>"
@@ -274,6 +364,7 @@ rna_velocity_v052_server <- function(input, output, session, shared_data) {
       customdata = ~speed
     )
 
+    if (identical(settings$display_mode, "point")) return(.with_plotly_tools(p, file_stub = "rna_velocity_v052"))
     p <- plotly::add_segments(
       p,
       x = ~x,
@@ -281,7 +372,7 @@ rna_velocity_v052_server <- function(input, output, session, shared_data) {
       xend = ~xend,
       yend = ~yend,
       inherit = FALSE,
-      line = list(color = "rgba(17,24,39,0.35)", width = 1),
+      line = list(color = sprintf("rgba(17,24,39,%s)", settings$arrow_alpha), width = settings$stream_linewidth),
       hoverinfo = "skip",
       showlegend = FALSE
     )

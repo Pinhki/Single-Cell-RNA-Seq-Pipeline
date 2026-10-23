@@ -3,17 +3,6 @@ library(patchwork)
 # MAIN ANALYSIS MODULE FOR SEURAT4 #
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
-.analysis_build_elbow_plot <- function(seurat_obj) {
-  pca_dims <- suppressWarnings(tryCatch(
-    ncol(Embeddings(seurat_obj, reduction = "pca")),
-    error = function(e) NA_integer_
-  ))
-  if (is.finite(pca_dims) && !is.na(pca_dims) && pca_dims >= 1L) {
-    return(ElbowPlot(seurat_obj, ndims = as.integer(pca_dims)))
-  }
-  ElbowPlot(seurat_obj)
-}
-
 #' Run a selected normalization method on a Seurat object
 #'
 #' @param seurat_obj The merged, filtered Seurat object from QC.
@@ -44,10 +33,12 @@ run_normalization <- function(seurat_obj, method) {
   message("  - Running PCA...")
   seurat_obj <- RunPCA(seurat_obj, npcs = 50, verbose = FALSE)
   
-  elbow_plot <- .analysis_build_elbow_plot(seurat_obj)
+  # Agent note: PCA remains part of normalization for downstream analysis, but
+  # elbow generation is user-triggered from the missing-plot card so this run
+  # never spends time rendering a plot in the background.
   return(list(
     object = seurat_obj,
-    elbow_plot = elbow_plot
+    elbow_plot = NULL
   ))
 }
 
@@ -97,7 +88,7 @@ library(harmony)
   delim <- as.character(opts$delimiter %||% "_")
   if (!nzchar(delim)) delim <- "_"
   alias_by <- as.character(opts$alias_by %||% integrate_by)
-  max_len <- max(1L, as.integer(opts$alias_max_len %||% 8L))
+  max_len <- max(1L, as.integer(opts$alias_max_len %||% 10L))
 
   md <- seurat_obj@meta.data
   if (!alias_by %in% colnames(md)) {
@@ -126,7 +117,9 @@ library(harmony)
     stop("barcode_suffix generated duplicated cell names; please provide a stricter alias_map.")
   }
 
-  colnames(seurat_obj) <- new_names
+  # SeuratObject 4.x requires RenameCells to update all cell-keyed slots;
+  # direct colnames<- assignment is not reliable for Seurat objects.
+  seurat_obj <- SeuratObject::RenameCells(object = seurat_obj, new.names = new_names)
   seurat_obj$barcode_suffix_alias <- per_cell_alias
   seurat_obj$barcode_suffix_source <- source_vals
   seurat_obj@misc$barcode_suffix <- list(
@@ -206,8 +199,42 @@ library(harmony)
   selected
 }
 
-run_integration <- function(seurat_obj, method, integrate_by, barcode_suffix = list(enabled = FALSE, delimiter = "_")) {
+.integration_progress_report <- function(progress_cb,
+                                         stage,
+                                         completed = NULL,
+                                         total = NULL,
+                                         detail = NULL) {
+  if (!is.function(progress_cb)) return(invisible(NULL))
+  progress_cb(
+    stage = as.character(stage),
+    completed = completed,
+    total = total,
+    detail = detail
+  )
+  invisible(NULL)
+}
+
+run_integration <- function(
+  seurat_obj,
+  method,
+  integrate_by,
+  barcode_suffix = list(enabled = FALSE, delimiter = "_"),
+  progress_cb = NULL,
+  reference_datasets = character(0)
+) {
+  reference_datasets <- unique(as.character(reference_datasets %||% character(0)))
+  reference_datasets <- reference_datasets[!is.na(reference_datasets) & nzchar(reference_datasets)]
+  if (length(reference_datasets) && !identical(method, "RPCA")) {
+    stop("Selected reference datasets are supported only for RPCA integration.")
+  }
   
+  .integration_progress_report(
+    progress_cb,
+    stage = "starting",
+    completed = 0L,
+    total = 1L,
+    detail = paste("Starting data integration using method:", method)
+  )
   message(paste("--- Starting data integration using method:", method, "---"))
   
   # Increase the parallel processing memory limit, as integration can be memory-intensive.
@@ -238,28 +265,101 @@ run_integration <- function(seurat_obj, method, integrate_by, barcode_suffix = l
     DefaultAssay(seurat_obj) <- "RNA"
     
     message("  - Splitting object by sample for SCTransform...")
+    .integration_progress_report(
+      progress_cb,
+      stage = "split",
+      completed = 0L,
+      total = 1L,
+      detail = "Splitting object by sample."
+    )
     obj_list <- SplitObject(seurat_obj, split.by = integrate_by)
+    .integration_progress_report(
+      progress_cb,
+      stage = "split",
+      completed = 1L,
+      total = 1L,
+      detail = sprintf("Split object into %d samples.", length(obj_list))
+    )
     
     message("  - Performing SCTransform on each sample...")
-    obj_list <- lapply(X = obj_list, FUN = function(x) {
+    sample_total <- length(obj_list)
+    .integration_progress_report(
+      progress_cb,
+      stage = "sample_preprocessing",
+      completed = 0L,
+      total = sample_total,
+      detail = sprintf("Preparing %d samples with SCTransform.", sample_total)
+    )
+    obj_list <- lapply(seq_along(obj_list), function(i) {
+      x <- obj_list[[i]]
       DefaultAssay(x) <- "RNA"
-      SCTransform(x, assay = "RNA", verbose = FALSE)
+      x <- SCTransform(x, assay = "RNA", verbose = FALSE)
+      .integration_progress_report(
+        progress_cb,
+        stage = "sample_preprocessing",
+        completed = i,
+        total = sample_total,
+        detail = sprintf("SCTransform sample %d of %d.", i, sample_total)
+      )
+      x
     })
     
     message("  - Selecting integration features and preparing anchors...")
+    .integration_progress_report(
+      progress_cb,
+      stage = "feature_setup",
+      completed = 0L,
+      total = 2L,
+      detail = "Selecting integration features."
+    )
     integ_features <- SelectIntegrationFeatures(object.list = obj_list, nfeatures = 3000)
+    .integration_progress_report(
+      progress_cb,
+      stage = "feature_setup",
+      completed = 1L,
+      total = 2L,
+      detail = "Preparing SCTransform integration anchors."
+    )
     obj_list <- PrepSCTIntegration(object.list = obj_list, anchor.features = integ_features)
     integration_dims <- .integration_dims(obj_list, length(integ_features))
+    .integration_progress_report(
+      progress_cb,
+      stage = "feature_setup",
+      completed = 2L,
+      total = 2L,
+      detail = "Integration features and anchor preparation complete."
+    )
     
     message("  - Finding integration anchors...")
+    .integration_progress_report(
+      progress_cb,
+      stage = "anchor_search",
+      completed = 0L,
+      total = 1L,
+      detail = "Finding integration anchors."
+    )
     integ_anchors <- FindIntegrationAnchors(
       object.list = obj_list,
       normalization.method = "SCT",
       anchor.features = integ_features,
       dims = integration_dims
     )
+    .integration_progress_report(
+      progress_cb,
+      stage = "anchor_search",
+      completed = 1L,
+      total = 1L,
+      detail = "Integration anchors found."
+    )
     
     message("  - Integrating data...")
+    .integration_progress_report(
+      progress_cb,
+      stage = "integration_data",
+      completed = 0L,
+      total = 1L,
+      detail = "Integrating data."
+    )
     k_weight <- .integration_k_weight(integ_anchors)
     message("  - Using integration k.weight: ", k_weight)
     seurat_integrated <- tryCatch(
@@ -273,6 +373,13 @@ run_integration <- function(seurat_obj, method, integrate_by, barcode_suffix = l
         stop("IntegrateData failed with adaptive k.weight=", k_weight, ": ", conditionMessage(e))
       }
     )
+    .integration_progress_report(
+      progress_cb,
+      stage = "integration_data",
+      completed = 1L,
+      total = 1L,
+      detail = "Integrated data."
+    )
     
     # Set the default assay to the new 'integrated' assay for downstream steps
     DefaultAssay(seurat_integrated) <- "integrated"
@@ -283,29 +390,88 @@ run_integration <- function(seurat_obj, method, integrate_by, barcode_suffix = l
     DefaultAssay(seurat_obj) <- "RNA"
     
     message("  - Splitting object by sample...")
+    .integration_progress_report(
+      progress_cb,
+      stage = "split",
+      completed = 0L,
+      total = 1L,
+      detail = "Splitting object by sample."
+    )
     obj_list <- SplitObject(seurat_obj, split.by = integrate_by)
+    .integration_progress_report(
+      progress_cb,
+      stage = "split",
+      completed = 1L,
+      total = 1L,
+      detail = sprintf("Split object into %d samples.", length(obj_list))
+    )
     
     message("  - Performing standard normalization and feature selection for each sample...")
-    obj_list <- lapply(X = obj_list, FUN = function(x) {
+    sample_total <- length(obj_list)
+    .integration_progress_report(
+      progress_cb,
+      stage = "sample_preprocessing",
+      completed = 0L,
+      total = sample_total,
+      detail = sprintf("Normalizing and selecting features for %d samples.", sample_total)
+    )
+    obj_list <- lapply(seq_along(obj_list), function(i) {
+      x <- obj_list[[i]]
       x <- NormalizeData(x, verbose = FALSE)
       x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000, verbose = FALSE)
-      return(x)
+      .integration_progress_report(
+        progress_cb,
+        stage = "sample_preprocessing",
+        completed = i,
+        total = sample_total,
+        detail = sprintf("Normalized and selected features for sample %d of %d.", i, sample_total)
+      )
+      x
     })
     
     if (method %in% c("CCA", "RPCA")) {
       
       message("  - Selecting integration features...")
+      .integration_progress_report(
+        progress_cb,
+        stage = "feature_setup",
+        completed = 0L,
+        total = 1L,
+        detail = "Selecting integration features."
+      )
       integ_features <- SelectIntegrationFeatures(object.list = obj_list)
       integration_dims <- .integration_dims(obj_list, length(integ_features))
+      .integration_progress_report(
+        progress_cb,
+        stage = "feature_setup",
+        completed = 1L,
+        total = 1L,
+        detail = "Integration features selected."
+      )
       if (method == "RPCA") {
         message("  - Running per-sample scaling/PCA required by RPCA anchors...")
-        obj_list <- lapply(X = obj_list, FUN = function(x) {
+        .integration_progress_report(
+          progress_cb,
+          stage = "method_preparation",
+          completed = 0L,
+          total = sample_total,
+          detail = sprintf("Scaling and running PCA for %d samples.", sample_total)
+        )
+        obj_list <- lapply(seq_along(obj_list), function(i) {
+          x <- obj_list[[i]]
           x <- ScaleData(x, features = integ_features, verbose = FALSE)
           x <- RunPCA(
             x,
             features = integ_features,
             npcs = max(integration_dims),
             verbose = FALSE
+          )
+          .integration_progress_report(
+            progress_cb,
+            stage = "method_preparation",
+            completed = i,
+            total = sample_total,
+            detail = sprintf("Scaled and ran PCA for sample %d of %d.", i, sample_total)
           )
           x
         })
@@ -314,14 +480,55 @@ run_integration <- function(seurat_obj, method, integrate_by, barcode_suffix = l
       # Determine the correct reduction method for FindIntegrationAnchors
       reduction_method <- if (method == "RPCA") "rpca" else "cca"
       message(paste("  - Finding integration anchors using method:", reduction_method, "..."))
+      # Agent note: Seurat expects reference dataset indices after SplitObject;
+      # leave this NULL for the existing all-pairwise behavior.
+      reference_indices <- NULL
+      if (length(reference_datasets)) {
+        missing_references <- setdiff(reference_datasets, names(obj_list))
+        if (length(missing_references)) {
+          stop(
+            "Selected reference dataset(s) were not found after splitting by '",
+            integrate_by,
+            "': ",
+            paste(missing_references, collapse = ", ")
+          )
+        }
+        reference_indices <- match(reference_datasets, names(obj_list))
+        if (length(reference_indices) < 2L) {
+          stop("RPCA reference integration requires at least two reference datasets.")
+        }
+        message("  - Using selected RPCA reference datasets: ", paste(reference_datasets, collapse = ", "))
+      }
+      .integration_progress_report(
+        progress_cb,
+        stage = "anchor_search",
+        completed = 0L,
+        total = 1L,
+        detail = sprintf("Finding integration anchors using %s.", toupper(reduction_method))
+      )
       integ_anchors <- FindIntegrationAnchors(
         object.list = obj_list,
         anchor.features = integ_features,
         reduction = reduction_method,
-        dims = integration_dims
+        dims = integration_dims,
+        reference = reference_indices
+      )
+      .integration_progress_report(
+        progress_cb,
+        stage = "anchor_search",
+        completed = 1L,
+        total = 1L,
+        detail = "Integration anchors found."
       )
       
       message("  - Integrating data...")
+      .integration_progress_report(
+        progress_cb,
+        stage = "integration_data",
+        completed = 0L,
+        total = 1L,
+        detail = "Integrating data."
+      )
       k_weight <- .integration_k_weight(integ_anchors)
       message("  - Using integration k.weight: ", k_weight)
       seurat_integrated <- tryCatch(
@@ -334,6 +541,13 @@ run_integration <- function(seurat_obj, method, integrate_by, barcode_suffix = l
           stop("IntegrateData failed with adaptive k.weight=", k_weight, ": ", conditionMessage(e))
         }
       )
+      .integration_progress_report(
+        progress_cb,
+        stage = "integration_data",
+        completed = 1L,
+        total = 1L,
+        detail = "Integrated data."
+      )
       
       DefaultAssay(seurat_integrated) <- "integrated"
       
@@ -341,18 +555,43 @@ run_integration <- function(seurat_obj, method, integrate_by, barcode_suffix = l
       
       # Harmony requires a single, merged object with PCA run first.
       message("  - Merging objects and running initial PCA for Harmony...")
+      .integration_progress_report(
+        progress_cb,
+        stage = "method_preparation",
+        completed = 0L,
+        total = 4L,
+        detail = "Preparing PCA for Harmony."
+      )
       # We can use the original object as it has all the cells
       seurat_obj <- NormalizeData(seurat_obj, verbose = FALSE)
+      .integration_progress_report(progress_cb, "method_preparation", 1L, 4L, "Normalized data for Harmony.")
       seurat_obj <- FindVariableFeatures(seurat_obj, verbose = FALSE)
+      .integration_progress_report(progress_cb, "method_preparation", 2L, 4L, "Selected variable features for Harmony.")
       h_feats <- .integration_pca_features(seurat_obj, max_features = 3000L)
       if (!length(h_feats)) stop("No features available for Harmony PCA.")
       seurat_obj <- ScaleData(seurat_obj, features = h_feats, verbose = FALSE)
+      .integration_progress_report(progress_cb, "method_preparation", 3L, 4L, "Scaled data for Harmony PCA.")
       harmony_npcs <- .safe_pca_npcs(seurat_obj, length(h_feats))
       seurat_obj <- RunPCA(seurat_obj, features = h_feats, npcs = harmony_npcs, verbose = FALSE)
+      .integration_progress_report(progress_cb, "method_preparation", 4L, 4L, "Initial PCA for Harmony complete.")
       
       message("  - Running Harmony algorithm...")
+      .integration_progress_report(
+        progress_cb,
+        stage = "harmony_run",
+        completed = 0L,
+        total = 1L,
+        detail = "Running Harmony algorithm."
+      )
       # Run Harmony on the selected integration grouping variable.
       seurat_integrated <- RunHarmony(seurat_obj, group.by.vars = integrate_by, assay.use = "RNA")
+      .integration_progress_report(
+        progress_cb,
+        stage = "harmony_run",
+        completed = 1L,
+        total = 1L,
+        detail = "Harmony algorithm complete."
+      )
       # For Harmony, you typically proceed with the original "RNA" assay for downstream analysis,
       # but use the new "harmony" reduction for UMAP and clustering.
       DefaultAssay(seurat_integrated) <- "RNA"
@@ -366,9 +605,23 @@ run_integration <- function(seurat_obj, method, integrate_by, barcode_suffix = l
   # Final common steps for all methods except Harmony (which already did this)
   if (method != "Harmony") {
     message("  - Scaling data and running PCA on integrated assay...")
+    .integration_progress_report(
+      progress_cb,
+      stage = "post_integration_pca",
+      completed = 0L,
+      total = 2L,
+      detail = "Scaling integrated data."
+    )
     pca_feats <- .integration_pca_features(seurat_integrated, max_features = 3000L)
     if (!length(pca_feats)) stop("No features available for post-integration PCA.")
     seurat_integrated <- ScaleData(seurat_integrated, features = pca_feats, verbose = FALSE)
+    .integration_progress_report(
+      progress_cb,
+      stage = "post_integration_pca",
+      completed = 1L,
+      total = 2L,
+      detail = "Scaled integrated data."
+    )
     post_npcs <- .safe_pca_npcs(seurat_integrated, length(pca_feats))
     seurat_integrated <- RunPCA(
       seurat_integrated,
@@ -376,13 +629,36 @@ run_integration <- function(seurat_obj, method, integrate_by, barcode_suffix = l
       npcs = post_npcs,
       verbose = FALSE
     )
+    .integration_progress_report(
+      progress_cb,
+      stage = "post_integration_pca",
+      completed = 2L,
+      total = 2L,
+      detail = "Integrated PCA complete."
+    )
+  } else {
+    .integration_progress_report(
+      progress_cb,
+      stage = "post_integration_pca",
+      completed = 2L,
+      total = 2L,
+      detail = "Harmony output is ready."
+    )
   }
   
+  .integration_progress_report(
+    progress_cb,
+    stage = "complete",
+    completed = 1L,
+    total = 1L,
+    detail = "Integration complete."
+  )
   message("--- Integration complete! ---")
-  elbow_plot <- .analysis_build_elbow_plot(seurat_integrated)
   return(list(
     object = seurat_integrated,
-    elbow_plot = elbow_plot
+    # Agent note: Keep integration output plot-free; the Analysis page owns
+    # the explicit Generate elbow plot action and creates it only on click.
+    elbow_plot = NULL
   ))
 }
 

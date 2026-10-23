@@ -318,7 +318,7 @@ VDJ_SAFE_EXPORT_UI_TEXT <- list(
   )
 }
 
-.vdj_safe_export_to_loupe <- function(sel, out_path, sample_mode = "auto", split_sample = "", assay_name = NULL) {
+.vdj_safe_export_to_loupe_in_process <- function(sel, out_path, sample_mode = "auto", split_sample = "", assay_name = NULL) {
   if (!requireNamespace("loupeR", quietly = TRUE)) stop("Please install 'loupeR'.")
   if (!requireNamespace("Seurat", quietly = TRUE)) stop("Please install 'Seurat'.")
   if (!requireNamespace("SeuratObject", quietly = TRUE)) stop("Please install 'SeuratObject'.")
@@ -363,6 +363,24 @@ VDJ_SAFE_EXPORT_UI_TEXT <- list(
   )
 }
 
+.vdj_safe_export_to_loupe <- function(sel, out_path, sample_mode = "auto", split_sample = "", assay_name = NULL, prefer_lib = NULL, progress_cb = NULL) {
+  prefer_lib <- normalizePath(prefer_lib %||% "", mustWork = FALSE)
+  if (!nzchar(prefer_lib) || !dir.exists(prefer_lib)) {
+    stop("The active Seurat environment is unavailable for isolated Loupe export.")
+  }
+  .run_loupe_export_subprocess("export-vdj-safe", list(
+    sel = sel,
+    out_path = out_path,
+    sample_mode = sample_mode,
+    split_sample = split_sample,
+    assay_name = assay_name,
+    prefer_lib = prefer_lib,
+    page_export_path = .louper_page_path("page_export.R"),
+    page_vdj_path = .louper_page_path("page_export_vdj_safe.R")
+  ), progress_cb = progress_cb)
+}
+
+if (!identical(Sys.getenv("WANLAB_LOUPER_WORKER"), "1")) {
 export_vdj_safe_ui <- fluidPage(
   div(
     class = "card-page-wrap",
@@ -564,6 +582,14 @@ export_vdj_safe_server <- function(input, output, session, shared_data) {
         type = "message", duration = NULL, id = "vdj_safe_loupe_notification"
       )
 
+      loupe_progress <- function(text = NULL, pct = NULL) {
+        msg <- as.character(text %||% "")
+        if (!nzchar(trimws(msg))) msg <- EXPORT_UI_TEXT$ui_progress_preparing_loupe
+        try(overlay_show(text = msg, pct = pct, session = session, lock = TRUE, loader = "export"), silent = TRUE)
+      }
+      loupe_progress(EXPORT_UI_TEXT$ui_progress_preparing_loupe, pct = 1)
+      on.exit(overlay_hide(session = session), add = TRUE)
+
       log_lines <- character()
       append_log <- function(...) {
         ts <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
@@ -579,15 +605,20 @@ export_vdj_safe_server <- function(input, output, session, shared_data) {
           tmp_out,
           sample_mode = mode,
           split_sample = split_sample,
-          assay_name = input$vdj_safe_export_assay_input %||% ""
+          assay_name = input$vdj_safe_export_assay_input %||% "",
+          prefer_lib = tryCatch(shared_data$active_environment$path, error = function(e) NULL),
+          progress_cb = loupe_progress
         )
         append_log("Prepared export with ", res$n_cells, " cells.")
         actual <- res$path
         if (!file.exists(actual)) stop("Exporter did not write a .cloupe file.")
-        file.copy(actual, file, overwrite = TRUE)
+        copied <- file.copy(actual, file, overwrite = TRUE)
+        if (!isTRUE(copied)) stop("Failed to copy the generated .cloupe file to the browser download location.")
+        loupe_progress(EXPORT_UI_TEXT$ui_progress_finalizing_loupe, pct = 100)
         removeNotification("vdj_safe_loupe_notification")
       }, error = function(e) {
         removeNotification("vdj_safe_loupe_notification")
+        overlay_hide(session = session)
         showNotification(
           paste(VDJ_SAFE_EXPORT_UI_TEXT$ui_notification_error_prefix, conditionMessage(e)),
           type = "error"
@@ -604,4 +635,5 @@ export_vdj_safe_server <- function(input, output, session, shared_data) {
       })
     }
   )
+}
 }

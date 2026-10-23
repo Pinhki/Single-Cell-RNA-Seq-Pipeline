@@ -3,6 +3,13 @@ if (!exists("%||%", mode = "function")) {
   `%||%` <- function(a, b) if (!is.null(a)) a else b
 }
 
+FIGURE_CODE_CARD_TEXT <- list(
+  save_recipe = "Save Recipe to Workspace",
+  download_recipe = "Download Recipe JSON",
+  saved_recipe = "Recipe saved with dataset '%s'.",
+  missing_dataset = "Select a valid dataset before saving the recipe."
+)
+
 figure_code_card_assets <- htmltools::singleton(
   shiny::tagList(
     wl_code_block_assets(),
@@ -88,11 +95,42 @@ figure_code_card_ui <- function(id,
         )
       ),
       shiny::div(class = "wl-figure-code-scroll", shiny::uiOutput(ns("code_block_ui")))
+      ,
+      shiny::div(
+        class = "wl-figure-code-toolbar",
+        shiny::actionButton(
+          ns("save_recipe_workspace"),
+          label = shiny::tagList(shiny::icon("save"), FIGURE_CODE_CARD_TEXT$save_recipe),
+          class = "btn btn-sm btn-outline-secondary"
+        ),
+        shiny::downloadButton(
+          ns("download_recipe_json"),
+          label = FIGURE_CODE_CARD_TEXT$download_recipe,
+          class = "btn btn-sm btn-outline-secondary"
+        )
+      )
     )
   )
 }
 
-figure_code_card_server <- function(id, code_text_reactive, notes_reactive = NULL) {
+.figure_recipe_from_code <- function(code_text) {
+  lines <- strsplit(as.character(code_text %||% ""), "\n", fixed = TRUE)[[1]]
+  prefix <- "# PIPELINE_RECIPE_JSON: "
+  marker <- lines[startsWith(lines, prefix)]
+  if (!length(marker)) return(NULL)
+  tryCatch(
+    jsonlite::fromJSON(substring(marker[[1]], nchar(prefix) + 1L), simplifyVector = FALSE),
+    error = function(e) NULL
+  )
+}
+
+figure_code_card_server <- function(id,
+                                    code_text_reactive,
+                                    notes_reactive = NULL,
+                                    shared_data = NULL,
+                                    object_name_reactive = NULL,
+                                    studio_name = id,
+                                    recipe_reactive = NULL) {
   shiny::moduleServer(id, function(input, output, session) {
     `%||%` <- function(a, b) if (!is.null(a)) a else b
     code_text_rv <- shiny::reactiveVal("")
@@ -134,6 +172,76 @@ figure_code_card_server <- function(id, code_text_reactive, notes_reactive = NUL
       }
     }, ignoreInit = TRUE)
 
+    current_recipe <- shiny::reactive({
+      object_name <- if (is.function(object_name_reactive)) {
+        as.character(object_name_reactive() %||% "")[[1]]
+      } else {
+        ""
+      }
+      custom <- if (is.function(recipe_reactive)) recipe_reactive() else NULL
+      if (is.list(custom) && length(custom)) return(custom)
+      embedded <- .figure_recipe_from_code(code_text_rv())
+      if (is.list(embedded) && length(embedded)) {
+        embedded$schema_version <- 1L
+        embedded$studio <- as.character(studio_name %||% id)[[1]]
+        embedded$object_name <- object_name
+        embedded$r_code <- as.character(code_text_rv() %||% "")
+        return(embedded)
+      }
+      list(
+        schema_version = 1L,
+        studio = as.character(studio_name %||% id)[[1]],
+        object_name = object_name,
+        analysis_recipe = list(object_name = object_name),
+        figure_recipe = list(r_code = as.character(code_text_rv() %||% ""))
+      )
+    })
+
+    output$download_recipe_json <- shiny::downloadHandler(
+      filename = function() {
+        studio_key <- gsub("[^A-Za-z0-9_-]+", "_", as.character(studio_name %||% id)[[1]])
+        paste0(studio_key, "_recipe.json")
+      },
+      content = function(file) {
+        jsonlite::write_json(current_recipe(), path = file, auto_unbox = TRUE, pretty = TRUE, null = "null")
+      }
+    )
+
+    observeEvent(input$save_recipe_workspace, {
+      object_name <- as.character(current_recipe()$object_name %||% "")[[1]]
+      registry <- tryCatch(shared_data$all_seurat_objects, error = function(e) NULL)
+      entry <- if (is.list(registry) && nzchar(object_name)) registry[[object_name]] else NULL
+      obj <- if (is.list(entry) && !is.null(entry$obj)) entry$obj else entry
+      if (is.null(obj) || !inherits(obj, "Seurat")) {
+        shiny::showNotification(FIGURE_CODE_CARD_TEXT$missing_dataset, type = "warning", duration = 4)
+        return(invisible(NULL))
+      }
+
+      payload <- current_recipe()
+      payload$saved_at <- format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z")
+      recipe_key <- paste0(
+        gsub("[^A-Za-z0-9_-]+", "_", as.character(studio_name %||% id)[[1]]),
+        "_",
+        format(Sys.time(), "%Y%m%d_%H%M%S")
+      )
+      misc <- tryCatch(obj@misc, error = function(e) list())
+      if (!is.list(misc$pipeline_recipes)) misc$pipeline_recipes <- list()
+      misc$pipeline_recipes[[recipe_key]] <- payload
+      obj@misc <- misc
+      if (is.list(entry) && !is.null(entry$obj)) {
+        entry$obj <- obj
+        registry[[object_name]] <- entry
+      } else {
+        registry[[object_name]] <- obj
+      }
+      shared_data$all_seurat_objects <- registry
+      shiny::showNotification(
+        sprintf(FIGURE_CODE_CARD_TEXT$saved_recipe, object_name),
+        type = "message",
+        duration = 3
+      )
+    }, ignoreInit = TRUE)
+
     if (is.function(notes_reactive)) {
       output$notes_ui <- shiny::renderUI({
         notes <- notes_reactive()
@@ -148,6 +256,21 @@ figure_code_card_server <- function(id, code_text_reactive, notes_reactive = NUL
 
 .figure_code_val <- function(x) {
   paste(deparse(x, width.cutoff = 500), collapse = "")
+}
+
+figure_recipe_code_lines <- function(analysis_recipe = list(), figure_recipe = list()) {
+  recipe_json <- jsonlite::toJSON(
+    list(analysis_recipe = analysis_recipe, figure_recipe = figure_recipe),
+    auto_unbox = TRUE,
+    null = "null"
+  )
+  c(
+    "# Reproducible recipe captured from current pipeline controls",
+    paste0("# PIPELINE_RECIPE_JSON: ", recipe_json),
+    sprintf("analysis_recipe <- %s", .figure_code_val(analysis_recipe)),
+    sprintf("figure_recipe <- %s", .figure_code_val(figure_recipe)),
+    ""
+  )
 }
 
 .figure_code_chr <- function(x, fallback = "") {
@@ -201,6 +324,7 @@ figure_generate_umap_script <- function(params) {
   if (!length(pal)) pal <- NULL
 
   lines <- c(
+    figure_recipe_code_lines(list(object_name = params$object_name), params),
     "# 1) Load packages",
     "library(Seurat)",
     "library(ggplot2)",
@@ -579,6 +703,7 @@ figure_generate_dotplot_script <- function(params) {
   gene_group_spec <- .figure_code_chr(params$gene_group_spec, "")
   ident_group_spec <- .figure_code_chr(params$ident_group_spec, "")
   lines <- c(
+    figure_recipe_code_lines(list(object_name = params$object_name), params),
     "# 1) Load packages",
     "library(Seurat)",
     "library(ggplot2)",
@@ -750,6 +875,7 @@ figure_generate_alluvial_script <- function(params) {
   `%||%` <- function(a, b) if (!is.null(a)) a else b
   split_col <- params$condition_col %||% NULL
   lines <- c(
+    figure_recipe_code_lines(list(object_name = params$object_name), params),
     "# 1) Load packages",
     "library(Seurat)",
     "library(ggplot2)",
@@ -813,6 +939,7 @@ figure_generate_cluster_alluvial_script <- function(params) {
   `%||%` <- function(a, b) if (!is.null(a)) a else b
   split_col <- params$split_col %||% NULL
   lines <- c(
+    figure_recipe_code_lines(list(object_name = params$object_name), params),
     "# 1) Load packages",
     "library(Seurat)",
     "library(ggplot2)",

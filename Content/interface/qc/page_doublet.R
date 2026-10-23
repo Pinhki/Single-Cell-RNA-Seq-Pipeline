@@ -362,7 +362,7 @@ doublet_server <- function(input, output, session, shared_data){
   
   # Navigation fix: Use updateNavbarPage instead of updateTabsetPanel
   observeEvent(input$dbl_proceed_analysis, {
-    overlay_show(DOUBLET_UI_TEXT$t_text_preparing_singlet_subset_for_analysis)
+    overlay_show(DOUBLET_UI_TEXT$t_text_preparing_singlet_subset_for_analysis, loader = "filter")
     on.exit(overlay_hide(), add = TRUE)
     ent <- .get_entry(); req(ent)
     seu <- .get_seurat(); req(seu)
@@ -403,10 +403,10 @@ doublet_server <- function(input, output, session, shared_data){
   })
   
   show_blocker <- function(msg = "Working…", pct = NULL){
-    overlay_show(text = msg, pct = pct)
+    overlay_show(text = msg, pct = pct, loader = "metrics")
   }
   update_blocker <- function(msg = NULL, pct = NULL){
-    overlay_show(text = msg %||% "Working…", pct = pct)
+    overlay_show(text = msg %||% "Working…", pct = pct, loader = "metrics")
   }
   hide_blocker <- function(){
     overlay_hide()
@@ -416,8 +416,17 @@ doublet_server <- function(input, output, session, shared_data){
   output$dbl_obj_picker <- renderUI({
     reg <- shared_data$all_seurat_objects %||% list()
     validate(need(length(reg) > 0, "No Seurat objects available."))
-    # prefer the pre-doublet filtered bundle; else fall back to active; else first
-    nm_default <- shared_data$pre_doublet_bundle %||% shared_data$active_object_name %||% names(reg)[1]
+    # Prefer explicit pre-doublet/active context; missing context resolves to
+    # newest registry entry under the shared active-object contract.
+    object_names <- names(reg) %||% character(0)
+    nm_default <- as.character(shared_data$pre_doublet_bundle %||% shared_data$active_object_name %||% "")
+    nm_default <- if (length(nm_default) && nzchar(nm_default[[1]]) && nm_default[[1]] %in% object_names) {
+      nm_default[[1]]
+    } else if (length(object_names)) {
+      object_names[[length(object_names)]]
+    } else {
+      ""
+    }
     selectInput("dbl_obj_name", DOUBLET_UI_TEXT$t_label_object, choices = names(reg), selected = nm_default)
   })
   
@@ -483,8 +492,89 @@ doublet_server <- function(input, output, session, shared_data){
         sprintf("Selected sample '%s' has not run scDblFinder/DBR yet. Run DBR for this sample scope first.", scope))
   })
   
+  .dbl_task <- new.env(parent = emptyenv())
+  .dbl_task$run_seq <- 0L
+  .dbl_task$task_id <- ""
+  .dbl_task$pause_requested <- FALSE
+  .dbl_task$paused <- FALSE
+  .dbl_task$skip_requested <- FALSE
+  .dbl_task$cancel_requested <- FALSE
+  .dbl_task$controls_available <- isTRUE(ok_later)
+  .dbl_controls <- function(state = "running", note = NULL) {
+    actions <- if (identical(state, "paused")) {
+      list(
+        overlay_control_action("resume", label = "Resume"),
+        overlay_control_action(
+          "cancel",
+          label = "Cancel",
+          confirm_title = "Cancel doublet detection?",
+          confirm_detail = "Completed results will be discarded. The last valid state stays unchanged.",
+          confirm_label = "Confirm cancel"
+        )
+      )
+    } else if (identical(state, "running") && isTRUE(.dbl_task$controls_available)) {
+      list(
+        overlay_control_action("pause", label = "Pause"),
+        overlay_control_action(
+          "skip",
+          label = "Skip remaining DBR",
+          confirm_title = "Skip remaining DBR rates?",
+          confirm_detail = "Finish current DBR, keep completed DBRs, then build the summary.",
+          confirm_label = "Skip remaining"
+        ),
+        overlay_control_action(
+          "cancel",
+          label = "Cancel",
+          confirm_title = "Cancel doublet detection?",
+          confirm_detail = "Completed results will be discarded. The last valid state stays unchanged.",
+          confirm_label = "Confirm cancel"
+        )
+      )
+    } else {
+      list()
+    }
+    overlay_controls(
+      task_id = .dbl_task$task_id,
+      actions = actions,
+      state = state,
+      note = note %||% if (identical(state, "paused")) {
+        "Paused after current DBR. Resume to continue or cancel."
+      } else if (identical(state, "running") && isTRUE(.dbl_task$controls_available)) {
+        "Pause, skip, and cancel take effect after the current DBR."
+      } else if (identical(state, "running")) {
+        "Controls unavailable because safe event checkpoints are not available."
+      } else {
+        "Controls unavailable during this step. The current R call cannot be paused safely."
+      }
+    )
+  }
+  observeEvent(input$global_overlay_action, {
+    payload <- input$global_overlay_action
+    if (!is.list(payload)) return()
+    if (!identical(as.character(payload$taskId %||% ""), .dbl_task$task_id)) return()
+    action <- as.character(payload$action %||% "")
+    if (identical(action, "pause")) .dbl_task$pause_requested <- TRUE
+    if (identical(action, "resume")) .dbl_task$pause_requested <- FALSE
+    if (identical(action, "skip")) .dbl_task$skip_requested <- TRUE
+    if (identical(action, "cancel")) .dbl_task$cancel_requested <- TRUE
+  }, ignoreInit = TRUE)
+  session$onSessionEnded(function() {
+    .dbl_task$cancel_requested <- TRUE
+  })
+
   # --- run scDblFinder (per-sample) + pre-cache UMAP into meta ---
   observeEvent(input$dbl_run, {
+    .dbl_task$run_seq <- as.integer(.dbl_task$run_seq) + 1L
+    .dbl_task$task_id <- paste0("doublet-detection-", .dbl_task$run_seq)
+    .dbl_task$pause_requested <- FALSE
+    .dbl_task$paused <- FALSE
+    .dbl_task$skip_requested <- FALSE
+    .dbl_task$cancel_requested <- FALSE
+    .dbl_task$controls_available <- isTRUE(ok_later)
+    on.exit({
+      .dbl_task$cancel_requested <- TRUE
+      .dbl_task$task_id <- ""
+    }, add = TRUE)
     seu <- .get_seurat(); req(seu)
     dbl_notice(list(type = "info", msg = "Running scDblFinder..."))
     
@@ -519,14 +609,20 @@ doublet_server <- function(input, output, session, shared_data){
     
     # ---- progress accounting (per-sample granularity) ----
     auto_units  <- if (isTRUE(input$dbl_include_auto)) 1 else 0              # treat auto as 1 unit
-    dbr_units   <- length(rates) * max(1, length(target_samples))            # per-sample within each dbr
+    per_dbr_units <- max(1, length(target_samples))                           # per-sample within each dbr
+    dbr_units   <- length(rates) * per_dbr_units
     final_units <- 2                                                         # cache UMAP + finalize
     total_units <- auto_units + dbr_units + final_units
     units_done  <- 0
     
     pct <- function(){ if (total_units <= 0) 0 else (units_done / total_units) * 100 }
     
-    show_blocker("Preparing scDblFinder runs…", pct())
+    overlay_show(
+      text = "Preparing scDblFinder runs...",
+      pct = pct(),
+      loader = "metrics",
+      controls = .dbl_controls()
+    )
     on.exit(hide_blocker(), add = TRUE)
     
     yield <- function(){ Sys.sleep(0.02); if (ok_later) later::run_now(0.001) }
@@ -536,12 +632,23 @@ doublet_server <- function(input, output, session, shared_data){
     on.exit(progress$close(), add = TRUE)
     last_ui_ts <- as.numeric(Sys.time())
     last_ui_pct <- -1L
-    .push_ui <- function(message_txt, pct_val, detail_txt = NULL, force = FALSE) {
+    .push_ui <- function(message_txt,
+                         pct_val,
+                         detail_txt = NULL,
+                         force = FALSE,
+                         control_state = NULL,
+                         control_note = NULL) {
       now <- as.numeric(Sys.time())
       pct_i <- as.integer(round(pct_val %||% 0))
       should_push <- isTRUE(force) || (pct_i != last_ui_pct) || ((now - last_ui_ts) >= 0.35)
       if (!isTRUE(should_push)) return(invisible(NULL))
-      overlay_show(text = message_txt, pct = pct_i)
+      state_use <- control_state %||% if (isTRUE(.dbl_task$paused)) "paused" else "running"
+      overlay_show(
+        text = message_txt,
+        pct = pct_i,
+        loader = "metrics",
+        controls = .dbl_controls(state = state_use, note = control_note)
+      )
       progress$set(
         value = units_done,
         message = message_txt %||% "Running scDblFinder…",
@@ -550,6 +657,30 @@ doublet_server <- function(input, output, session, shared_data){
       last_ui_ts <<- now
       last_ui_pct <<- pct_i
       invisible(NULL)
+    }
+    dbl_checkpoint <- function(pct_val, detail_txt) {
+      if (!isTRUE(.dbl_task$controls_available)) return("continue")
+      if (isTRUE(.dbl_task$cancel_requested)) return("cancel")
+      if (isTRUE(.dbl_task$skip_requested)) return("skip")
+      if (!isTRUE(.dbl_task$pause_requested)) return("continue")
+      .dbl_task$paused <- TRUE
+      .push_ui(
+        "Doublet detection paused.",
+        pct_val,
+        "Paused after current DBR. Resume to continue or cancel.",
+        force = TRUE,
+        control_state = "paused",
+        control_note = "Paused after current DBR. Resume to continue or cancel."
+      )
+      repeat {
+        yield()
+        if (isTRUE(.dbl_task$cancel_requested)) return("cancel")
+        if (isTRUE(.dbl_task$skip_requested)) return("skip")
+        if (isTRUE(.dbl_task$pause_requested)) next
+        .dbl_task$paused <- FALSE
+        .push_ui("Resuming doublet detection...", pct_val, detail_txt, force = TRUE)
+        return("continue")
+      }
     }
     progress$set(value = 0,
                  message = "Preparing scDblFinder runs…",
@@ -566,8 +697,13 @@ doublet_server <- function(input, output, session, shared_data){
       
       units_done <- units_done + 1
       .push_ui("Finished auto", pct(), "Wrote DF.class_auto", force = TRUE); yield()
+      if (isTRUE(.dbl_task$cancel_requested)) {
+        showNotification("Doublet detection cancelled. Last valid state remains unchanged.", type = "message")
+        return(invisible(NULL))
+      }
     }
     
+    completed_rates <- numeric(0)
     for (r in rates) {
       tag_class <- .col_class_dbr(r)
       .push_ui(
@@ -626,16 +762,40 @@ doublet_server <- function(input, output, session, shared_data){
         sprintf("Wrote %s (mem %.0f MB)", tag_class, .mem_used_mb()),
         force = TRUE
       ); yield()
+      completed_rates <- c(completed_rates, r)
+      checkpoint <- dbl_checkpoint(pct(), sprintf("Completed dbr=%.3f.", r))
+      if (identical(checkpoint, "cancel")) {
+        showNotification("Doublet detection cancelled. Last valid state remains unchanged.", type = "message")
+        return(invisible(NULL))
+      }
+      if (identical(checkpoint, "skip")) {
+        total_units <- auto_units + length(completed_rates) * per_dbr_units + final_units
+        showNotification("Remaining DBR rates skipped. Building the summary from completed results.", type = "message")
+        break
+      }
     }
     
-    .push_ui("Caching UMAP coordinates…", pct(), "Writing UMAP1_quick / UMAP2_quick", force = TRUE); yield()
-    
+    .push_ui(
+      "Caching UMAP coordinates...",
+      pct(),
+      "Writing UMAP1_quick / UMAP2_quick",
+      force = TRUE,
+      control_state = "unavailable",
+      control_note = "Controls unavailable during this step. The current R call cannot be paused safely."
+    ); yield()
     seu <- .cache_umap_into_meta(seu)
     
     units_done <- units_done + 1
-    .push_ui("Finalizing…", pct(), "Updating registry", force = TRUE); yield()
+    .push_ui(
+      "Finalizing...",
+      pct(),
+      "Updating registry",
+      force = TRUE,
+      control_state = "unavailable",
+      control_note = "Controls unavailable during this step. The current R call cannot be paused safely."
+    ); yield()
     
-    seu <- .update_registry(seu, dbr_runs = rates, has_auto = have_auto,
+    seu <- .update_registry(seu, dbr_runs = completed_rates, has_auto = have_auto,
                             seed = input$dbl_seed, sample_col = sample_col)
     ent <- .get_entry(); ent$obj <- seu
     shared_data$all_seurat_objects[[input$dbl_obj_name]] <- ent
@@ -643,7 +803,7 @@ doublet_server <- function(input, output, session, shared_data){
     units_done <- units_done + 1
     .push_ui("All jobs completed.", pct(), paste(done_tags, collapse = ", "), force = TRUE); yield()
 
-    dbl_notice(list(type = "info", msg = sprintf("scDblFinder finished: %d DBR run(s)%s.", length(rates), if (isTRUE(input$dbl_include_auto)) " + auto" else "")))
+    dbl_notice(list(type = "info", msg = sprintf("scDblFinder finished: %d DBR run(s)%s.", length(completed_rates), if (isTRUE(input$dbl_include_auto)) " + auto" else "")))
   }, ignoreInit = TRUE)
   
   # --- summary table & plot (Summary tab) ---
@@ -972,7 +1132,7 @@ doublet_server <- function(input, output, session, shared_data){
       list(chosen_tag = tag, source_col = cl_col, kept_n = length(kept_cells), total_n = ncol(seu))
     )
     
-    sobj_filtered <- .reset_subset_analysis_state(sobj_filtered)
+    sobj_filtered <- wanlab_reset_subset_analysis_state(sobj_filtered)
     out_name <- paste0(entry_name, "_dbl_", tag)
     shared_data$all_seurat_objects[[out_name]] <- list(
       obj   = sobj_filtered,

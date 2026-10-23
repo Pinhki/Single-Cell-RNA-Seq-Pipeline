@@ -42,6 +42,13 @@
         document.addEventListener('shiny:value', function() { refreshAllAccordions(document); }, true);
 
         // Keep CSS layout tokens synced with actual navbar/footer heights.
+        var layoutRoot = document.documentElement;
+        function setLayoutVar(name, value) {
+          var next = String(value);
+          if (layoutRoot.style.getPropertyValue(name) === next) return;
+          layoutRoot.style.setProperty(name, next);
+        }
+
         function syncLayoutHeightVars() {
           var nav = document.querySelector('.navbar');
           var footer = document.querySelector('.footer');
@@ -55,19 +62,23 @@
           var navH = navRect ? Math.ceil(navRect.height || 56) : 56;
           if (isDesktopRail) navH = 0;
           var footerH = footer ? Math.ceil(footer.getBoundingClientRect().height || 0) : 0;
-          document.documentElement.style.setProperty('--nav-h', navH + 'px');
-          if (navRect) document.documentElement.style.setProperty('--nav-rail-h', Math.ceil(navRect.height || 0) + 'px');
-          document.documentElement.style.setProperty('--footer-h', footerH + 'px');
+          setLayoutVar('--nav-h', navH + 'px');
+          if (navRect) setLayoutVar('--nav-rail-h', Math.ceil(navRect.height || 0) + 'px');
+          setLayoutVar('--footer-h', footerH + 'px');
         }
 
-        if (document.readyState !== 'loading') setTimeout(syncLayoutHeightVars, 0);
-        document.addEventListener('DOMContentLoaded', syncLayoutHeightVars);
-        document.addEventListener('shiny:connected', syncLayoutHeightVars);
+        function initializeLayoutHeightSync() {
+          syncLayoutHeightVars();
+        }
+
+        if (document.readyState !== 'loading') initializeLayoutHeightSync();
+        document.addEventListener('DOMContentLoaded', initializeLayoutHeightSync);
+        document.addEventListener('shiny:connected', initializeLayoutHeightSync);
+        document.addEventListener('shiny:value', syncLayoutHeightVars, true);
+        document.addEventListener('shown.bs.collapse', syncLayoutHeightVars, true);
+        document.addEventListener('hidden.bs.collapse', syncLayoutHeightVars, true);
         window.addEventListener('resize', syncLayoutHeightVars);
         window.addEventListener('load', syncLayoutHeightVars);
-
-        var layoutObs = new MutationObserver(function() { syncLayoutHeightVars(); });
-        layoutObs.observe(document.documentElement, { childList: true, subtree: true });
 
         // Global resizable-plot contract:
         // .app-resizable-plot container resize must force Plotly reflow.
@@ -82,13 +93,36 @@
           }
         }
 
+        // ResizeObserver and Plotly.resize can notify each other. Treat plot
+        // geometry as the event contract: queue each container once per frame
+        // and publish a resize only for a new measured size. Rebinding the
+        // same Shiny output must not schedule another resize by itself.
         var resizePlotlyRaf = null;
+        var resizePlotlyPending = new Set();
         function scheduleResizePlotly(container) {
-          if (resizePlotlyRaf) window.cancelAnimationFrame(resizePlotlyRaf);
+          if (!container) return;
+          resizePlotlyPending.add(container);
+          if (resizePlotlyRaf) return;
           resizePlotlyRaf = window.requestAnimationFrame(function() {
-            resizePlotlyInContainer(container);
-            window.setTimeout(function() { resizePlotlyInContainer(container); }, 70);
+            resizePlotlyRaf = null;
+            var pending = resizePlotlyPending;
+            resizePlotlyPending = new Set();
+            pending.forEach(function(node) {
+              resizePlotlyInContainer(node);
+            });
           });
+        }
+
+        function queueObservedPlotResize(entry) {
+          var target = entry && entry.target ? entry.target : null;
+          if (!target) return;
+          var rect = entry.contentRect || target.getBoundingClientRect();
+          var width = Math.round((Number(rect.width) || 0) * 100) / 100;
+          var height = Math.round((Number(rect.height) || 0) * 100) / 100;
+          var signature = width + 'x' + height;
+          if (target.__wlLastPlotlyResizeSignature === signature) return;
+          target.__wlLastPlotlyResizeSignature = signature;
+          scheduleResizePlotly(target);
         }
 
         var rsObserver = null;
@@ -97,13 +131,15 @@
           if (!rsObserver) {
             rsObserver = new ResizeObserver(function(entries) {
               for (var i = 0; i < entries.length; i++) {
-                scheduleResizePlotly(entries[i].target);
+                queueObservedPlotResize(entries[i]);
               }
             });
           }
           var scope = root || document;
           var nodes = scope.querySelectorAll('.app-resizable-plot');
           for (var j = 0; j < nodes.length; j++) {
+            if (nodes[j].__wlPlotlyResizeObserved) continue;
+            nodes[j].__wlPlotlyResizeObserved = true;
             rsObserver.observe(nodes[j]);
             scheduleResizePlotly(nodes[j]);
           }
@@ -206,6 +242,31 @@
         document.addEventListener('shiny:connected', checkAndCollapseSidebar);
         window.addEventListener('resize', checkAndCollapseSidebar);
 
+        function updateScrollFade(el) {
+          if (!el || !el.classList.contains('Pinhki-scroll-fade')) return;
+          var maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+          el.classList.toggle('is-scroll-top', el.scrollTop > 1);
+          el.classList.toggle('is-scroll-bottom', el.scrollTop < maxScroll - 1);
+        }
+
+        function updateAllScrollFades() {
+          document.querySelectorAll('.Pinhki-scroll-fade').forEach(updateScrollFade);
+        }
+
+        function scheduleScrollFadeUpdate() {
+          window.requestAnimationFrame(updateAllScrollFades);
+        }
+
+        document.addEventListener('scroll', function(event) {
+          if (event.target instanceof Element && event.target.matches('.Pinhki-scroll-fade')) {
+            updateScrollFade(event.target);
+          }
+        }, true);
+        window.addEventListener('resize', scheduleScrollFadeUpdate);
+        document.addEventListener('shiny:value', scheduleScrollFadeUpdate);
+        document.addEventListener('shiny:bound', scheduleScrollFadeUpdate);
+        document.addEventListener('shiny:connected', scheduleScrollFadeUpdate);
+
         function injectPortraitResizeHandles() {
           var pages = document.querySelectorAll('.plotting-page');
           pages.forEach(function (page) {
@@ -265,9 +326,10 @@
         document.addEventListener('DOMContentLoaded', injectPortraitResizeHandles);
         document.addEventListener('shiny:connected', injectPortraitResizeHandles);
         document.addEventListener('shown.bs.tab', injectPortraitResizeHandles, true);
-        
-        var portraitObserver = new MutationObserver(injectPortraitResizeHandles);
-        portraitObserver.observe(document.documentElement, { childList: true, subtree: true });
+        // Dynamic page content arrives through Shiny values or completed tab
+        // transitions. Do not observe documentElement: Data Browser mounts a
+        // large subtree and this callback must not rescan it per mutation.
+        document.addEventListener('shiny:value', injectPortraitResizeHandles, true);
 
         document.addEventListener('DOMContentLoaded', function() { initResizeHandles(document); });
         document.addEventListener('shiny:connected', function() { initResizeHandles(document); });
@@ -355,10 +417,7 @@
 
         window.addEventListener('resize', refitAll);
         document.addEventListener('shown.bs.tab', refitAll, true);
-        window.addEventListener('load', function() {
-          window.setTimeout(refitAll, 0);
-          window.setTimeout(refitAll, 150);
-        });
+        window.addEventListener('load', refitAll);
       })();
 
 (function () {
@@ -391,16 +450,14 @@
             var page = pages[i];
             var leftPanel = firstVisible(page, '.plotting-left-panel');
             if (!leftPanel) {
-              page.classList.remove('float-left-panel');
-              page.classList.remove('float-plot-area');
+              setFloatingMode(page, null);
               continue;
             }
 
             var pageRect = page.getBoundingClientRect();
             var isVisible = (page.offsetParent !== null) && (pageRect.width > 0) && (pageRect.height > 0);
             if (!isDesktop || !isVisible) {
-              page.classList.remove('float-left-panel');
-              page.classList.remove('float-plot-area');
+              setFloatingMode(page, null);
               continue;
             }
 
@@ -410,8 +467,7 @@
 
             // Per-page lock: keep left panel floating mode stable (no class flipping).
             if (page.classList.contains('qc-lock-left-float')) {
-              page.classList.remove('float-plot-area');
-              page.classList.add('float-left-panel');
+              setFloatingMode(page, 'left');
               continue;
             }
 
@@ -432,93 +488,46 @@
             }
             if (!isFinite(rightH) || rightH <= 0) rightH = leftH;
 
-            page.classList.remove('float-left-panel');
-            page.classList.remove('float-plot-area');
-            if (leftH >= rightH) {
-              page.classList.add('float-plot-area');
-            } else {
-              page.classList.add('float-left-panel');
-            }
+            setFloatingMode(page, leftH >= rightH ? 'plot' : 'left');
           }
         }
 
-        var timer = null;
-        function syncSoon() {
-          if (timer) window.clearTimeout(timer);
-          timer = window.setTimeout(syncPlotPanelFloatingMode, 40);
+        function setFloatingMode(page, mode) {
+          var wantsLeft = mode === 'left';
+          var wantsPlot = mode === 'plot';
+          if (page.classList.contains('float-left-panel') !== wantsLeft) {
+            page.classList.toggle('float-left-panel', wantsLeft);
+          }
+          if (page.classList.contains('float-plot-area') !== wantsPlot) {
+            page.classList.toggle('float-plot-area', wantsPlot);
+          }
         }
 
-        if (document.readyState !== 'loading') syncSoon();
-        document.addEventListener('DOMContentLoaded', syncSoon);
-        document.addEventListener('shiny:connected', syncSoon);
+        var syncRaf = 0;
+        function syncSoon() {
+          if (syncRaf) return;
+          syncRaf = window.requestAnimationFrame(function () {
+            syncRaf = 0;
+            syncPlotPanelFloatingMode();
+          });
+        }
+
+        function initializePlotLayoutSync() {
+          syncSoon();
+        }
+
+        if (document.readyState !== 'loading') initializePlotLayoutSync();
+        document.addEventListener('DOMContentLoaded', initializePlotLayoutSync);
+        document.addEventListener('shiny:connected', initializePlotLayoutSync);
+        document.addEventListener('shiny:value', syncSoon, true);
         document.addEventListener('shown.bs.tab', syncSoon, true);
         document.addEventListener('shown.bs.collapse', syncSoon, true);
         document.addEventListener('hidden.bs.collapse', syncSoon, true);
         window.addEventListener('resize', syncSoon);
         window.addEventListener('load', syncSoon);
-
-        var obs = new MutationObserver(syncSoon);
-        obs.observe(document.documentElement, { childList: true, subtree: true });
       })();
 
 (function () {
-        // Global slider policy: debounce reactive updates so expensive renders
-        // trigger once after drag settles, instead of on every tiny movement.
-        function patchSliderRatePolicy() {
-          if (!window.Shiny || !Shiny.inputBindings || !Shiny.inputBindings.bindingNames) return;
-          var rec = Shiny.inputBindings.bindingNames['shiny.sliderInput'];
-          if (!rec || !rec.binding) return;
-          var binding = rec.binding;
-          if (binding.__wanlabDebouncePatched) return;
-          binding.getRatePolicy = function() {
-            return { policy: 'debounce', delay: 220 };
-          };
-          binding.__wanlabDebouncePatched = true;
-        }
-
-        if (document.readyState !== 'loading') setTimeout(patchSliderRatePolicy, 0);
-        document.addEventListener('DOMContentLoaded', patchSliderRatePolicy);
-        document.addEventListener('shiny:connected', patchSliderRatePolicy);
-      })();
-
-(function () {
-        function syncTabPillIndicators() {
-          var navs = document.querySelectorAll(
-            '.tabbable > .nav.nav-tabs, .tabbable > .nav.nav-pills, ' +
-            '.app-tabs-wrap .nav.nav-tabs, .app-tabs-wrap .nav.nav-pills'
-          );
-
-          for (var i = 0; i < navs.length; i++) {
-            var nav = navs[i];
-            if (!nav) continue;
-            nav.classList.add('app-tab-pill-track');
-
-            if (!nav.dataset.pillScrollBound) {
-              nav.addEventListener('scroll', function () {
-                syncTabPillIndicators();
-              }, { passive: true });
-              nav.dataset.pillScrollBound = '1';
-            }
-
-            var active = nav.querySelector(
-              'li.active > a, .nav-item.active > a, .nav-link.active'
-            );
-
-            if (!active) {
-              nav.style.setProperty('--app-tab-pill-w', '0px');
-              continue;
-            }
-
-            var activeItem = active.closest('li, .nav-item');
-            var x = ((activeItem ? activeItem.offsetLeft : 0) + active.offsetLeft) + nav.scrollLeft;
-            var w = active.offsetWidth;
-            if (!isFinite(x)) x = 0;
-            if (!isFinite(w)) w = 0;
-            nav.style.setProperty('--app-tab-pill-x', x + 'px');
-            nav.style.setProperty('--app-tab-pill-w', w + 'px');
-          }
-        }
-
         function fitTabLabels() {
           var nodes = document.querySelectorAll(
             '.tabbable > .nav.nav-tabs a, .tabbable > .nav.nav-tabs .nav-link, ' +
@@ -538,23 +547,14 @@
               el.classList.add('app-tab-fit-xs');
             }
           }
-          syncTabPillIndicators();
         }
 
-        var timer = null;
-        function fitSoon() {
-          if (timer) window.clearTimeout(timer);
-          timer = window.setTimeout(fitTabLabels, 30);
-        }
-
-        if (document.readyState !== 'loading') fitSoon();
-        document.addEventListener('DOMContentLoaded', fitSoon);
-        document.addEventListener('shiny:connected', fitSoon);
-        document.addEventListener('shown.bs.tab', fitSoon, true);
-        window.addEventListener('resize', fitSoon);
-
-        var obs = new MutationObserver(fitSoon);
-        obs.observe(document.documentElement, { childList: true, subtree: true });
+        if (document.readyState !== 'loading') fitTabLabels();
+        document.addEventListener('DOMContentLoaded', fitTabLabels);
+        document.addEventListener('shiny:connected', fitTabLabels);
+        document.addEventListener('shown.bs.tab', fitTabLabels, true);
+        document.addEventListener('shiny:value', fitTabLabels, true);
+        window.addEventListener('resize', fitTabLabels);
       })();
 
 (function () {
@@ -631,68 +631,26 @@
           for (var i = 0; i < nodes.length; i++) ensureDualExportButtons(nodes[i]);
         }
 
+        function scanTargetAndApply(target) {
+          if (!target) return;
+          if (target.matches && target.matches('.js-plotly-plot')) {
+            ensureDualExportButtons(target);
+          }
+          if (!target.querySelectorAll) return;
+          var nodes = target.querySelectorAll('.js-plotly-plot');
+          for (var i = 0; i < nodes.length; i++) ensureDualExportButtons(nodes[i]);
+        }
+
         document.addEventListener('plotly_afterplot', function (ev) {
           ensureDualExportButtons(ev && ev.target);
         }, true);
 
         document.addEventListener('DOMContentLoaded', function () {
           scanAndApply();
-          setTimeout(scanAndApply, 400);
-          setTimeout(scanAndApply, 1200);
         });
-
-        // Handle dynamically inserted outputs from Shiny re-rendering.
-        var mo = new MutationObserver(function () { scanAndApply(); });
-        mo.observe(document.documentElement, { childList: true, subtree: true });
-      })();
-
-(function () {
-        // Global slider optimization:
-        // suppress reactive updates while dragging; allow update on mouse/touch release.
-        var draggingSliderIds = new Set();
-
-        function markDraggingFromHandle(el) {
-          var irs = el.closest('.irs');
-          if (!irs) return;
-          var input = irs.previousElementSibling;
-          if (!input) return;
-          if (!input.id) return;
-          if (!input.classList.contains('js-range-slider')) return;
-          draggingSliderIds.add(input.id);
-        }
-
-        document.addEventListener('mousedown', function (ev) {
-          var t = ev.target;
-          if (!t) return;
-          if (t.closest('.irs-handle') || t.closest('.irs-slider') || t.closest('.irs-line') || t.closest('.irs-bar')) {
-            markDraggingFromHandle(t);
-          }
+        document.addEventListener('shiny:value', function (ev) {
+          scanTargetAndApply(ev && ev.target);
         }, true);
-
-        document.addEventListener('touchstart', function (ev) {
-          var t = ev.target;
-          if (!t) return;
-          if (t.closest('.irs-handle') || t.closest('.irs-slider') || t.closest('.irs-line') || t.closest('.irs-bar')) {
-            markDraggingFromHandle(t);
-          }
-        }, true);
-
-        function clearDraggingSetSoon() {
-          // Let the final post-release slider event pass through first.
-          setTimeout(function () { draggingSliderIds.clear(); }, 0);
-        }
-
-        document.addEventListener('mouseup', clearDraggingSetSoon, true);
-        document.addEventListener('touchend', clearDraggingSetSoon, true);
-        document.addEventListener('touchcancel', clearDraggingSetSoon, true);
-
-        $(document).on('shiny:inputchanged', function (ev) {
-          // Block intermediate updates while user is dragging slider handles.
-          if (!ev || !ev.name) return;
-          if (draggingSliderIds.has(ev.name)) {
-            ev.preventDefault();
-          }
-        });
       })();
 
 (function () {
@@ -715,31 +673,6 @@
           el.style.display = 'flex';
         }
 
-        var uploadPollTimer = null;
-        function startUploadProgressPoll() {
-          if (uploadPollTimer) {
-            clearInterval(uploadPollTimer);
-            uploadPollTimer = null;
-          }
-          var ticks = 0;
-          uploadPollTimer = setInterval(function () {
-            ticks += 1;
-            var bar = document.querySelector('#import_rds_file_progress .progress-bar');
-            var w = bar ? parseFloat((bar.style.width || '0').replace('%', '')) : 0;
-            if (isFinite(w) && w >= 100) {
-              showGlobalOverlayNow('Reading and inspecting .rds file...');
-              clearInterval(uploadPollTimer);
-              uploadPollTimer = null;
-              return;
-            }
-            // safety stop after ~60s to avoid long-running timer
-            if (ticks >= 300) {
-              clearInterval(uploadPollTimer);
-              uploadPollTimer = null;
-            }
-          }, 200);
-        }
-
         function bindRdsUploadOverlayHooks() {
           if (bound || !window.jQuery) return;
           bound = true;
@@ -754,7 +687,6 @@
           // Fallback trigger: file chooser changed (covers edge cases where inputType differs).
           window.jQuery(document).on('change.rdsUploadOverlayGlobal', '#import_rds_file', function () {
             showGlobalOverlayNow('Uploading and preparing .rds import...');
-            startUploadProgressPoll();
           });
         }
 
@@ -792,7 +724,7 @@
           if (leave) {
             allowExit = true;
             window.removeEventListener('beforeunload', beforeUnloadHandler);
-            setTimeout(function () { window.history.back(); }, 0);
+            window.history.back();
             return;
           }
           try {
@@ -861,9 +793,4 @@
         document.addEventListener('shiny:value', function () {
           window.requestAnimationFrame(applyFlags);
         });
-
-        var mo = new MutationObserver(function () {
-          window.requestAnimationFrame(applyFlags);
-        });
-        mo.observe(document.documentElement, { childList: true, subtree: true });
       })();

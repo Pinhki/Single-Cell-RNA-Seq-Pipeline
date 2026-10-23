@@ -40,13 +40,17 @@ core_analysis_tab_a_run_integration <- function(
   seurat_obj,
   method = "CCA",
   integrate_by = "batch",
-  barcode_suffix = list(enabled = FALSE, delimiter = "_")
+  barcode_suffix = list(enabled = FALSE, delimiter = "_"),
+  progress_cb = NULL,
+  reference_datasets = character(0)
 ) {
   backend <- .analysis_v5_source_main()
   backend$run_integration(
     seurat_obj = seurat_obj,
     method = method,
     integrate_by = integrate_by,
-    barcode_suffix = barcode_suffix
+    barcode_suffix = barcode_suffix,
+    progress_cb = progress_cb,
+    reference_datasets = reference_datasets
   )
 }

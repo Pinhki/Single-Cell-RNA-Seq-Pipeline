@@ -51,9 +51,10 @@ testthat::test_that("plotting pages override internal tab bar top margin", {
 
   testthat::expect_true(
     grepl(
-      "\\.plotting-page\\s+\\.app-tabs-wrap\\s*>\\s*\\.nav\\.nav-tabs[^{]*\\{[^}]*margin-top\\s*:\\s*0",
+      ".app-tabs-wrap:has(> .tab-content > .tab-pane.active .plotting-page) > .nav.nav-tabs",
       global_css,
-      perl = TRUE
+      fixed = TRUE
     )
   )
+  testthat::expect_true(grepl("margin-top: 0 !important;", global_css, fixed = TRUE))
 })

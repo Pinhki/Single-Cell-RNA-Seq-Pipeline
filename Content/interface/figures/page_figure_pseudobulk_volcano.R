@@ -551,7 +551,27 @@ figure_pseudobulk_volcano_server <- function(input, output, session, shared_data
     mode <- input$figure_pbv_mode %||% "overview"
     obj_name <- selected_dataset_name()
     sty <- figure_shared_plot_settings_values(.theme_settings, track_reactive = TRUE)
+    analysis_recipe <- list(object_name = obj_name, pseudobulk_result = mode)
+    figure_recipe <- list(
+      studio = "Pseudobulk Volcano Studio",
+      fdr_threshold = .finite_num(input$figure_pbv_fdr_threshold, 0.05),
+      fold_change_cutoff = abs(.finite_num(input$figure_pbv_fc_cutoff, 0.25)),
+      title = input$figure_pbv_plot_title %||% "Pseudobulk Volcano",
+      colors = list(
+        up = .safe_hex(input$figure_pbv_color_up, "#B91C1C"),
+        down = .safe_hex(input$figure_pbv_color_down, "#1D4ED8"),
+        nonsignificant = .safe_hex(input$figure_pbv_color_nonsig, "#9CA3AF")
+      ),
+      point_size = .finite_num(sty$point_size, 1),
+      point_alpha = .finite_num(input$figure_pbv_alpha, 0.75),
+      magnify = list(
+        enabled = isTRUE(input$figure_pbv_use_magnify) && identical(mode, "custom"),
+        shape = input$figure_pbv_magnify_shape %||% "rect",
+        projection = input$figure_pbv_magnify_proj %||% "facing"
+      )
+    )
     lines <- c(
+      figure_recipe_code_lines(analysis_recipe, figure_recipe),
       "# 1) Load packages",
       "library(ggplot2)",
       "library(ggmagnify)",
@@ -609,7 +629,13 @@ figure_pseudobulk_volcano_server <- function(input, output, session, shared_data
     paste(lines, collapse = "\n")
   })
 
-  figure_code_card_server("figure_pbv_code_card", code_text_reactive = .generate_script)
+  figure_code_card_server(
+    "figure_pbv_code_card",
+    code_text_reactive = .generate_script,
+    shared_data = shared_data,
+    object_name_reactive = selected_dataset_name,
+    studio_name = "Pseudobulk Volcano Studio"
+  )
 
   .pdf_bundle <- function(kind, width_px = NULL, height_px = NULL) {
     req(identical(kind, "pbv_pdf"))

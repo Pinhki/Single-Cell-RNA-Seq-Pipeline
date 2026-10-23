@@ -2,10 +2,19 @@ UI_TEXT <- list(
   t_btn_apply_filter_add_workspace = "Apply filter & add to workspace",
   t_btn_import_vdj = "Import VDJ",
   t_btn_view_diagnostics = "View diagnostics",
+  t_btn_select_visible_clones = "Select visible",
+  t_btn_clear_clone_selection = "Clear",
+  t_choice_clone_size_threshold = "Clone-size threshold",
+  t_choice_selected_clones = "Selected clones",
+  t_choice_rank_cell_count = "Cell count",
+  t_choice_rank_percent = "Percent",
   t_label_blue_channel = "Blue channel",
   t_label_feature = "Feature:",
   t_label_green_channel = "Green channel",
   t_label_minimum_clone_size = "Minimum clone size",
+  t_label_clone_display = "Display:",
+  t_label_clone_rank_by = "Rank by:",
+  t_label_clone_top_n = "Top N:",
   t_label_object = "Object:",
   t_label_operation = "Operation:",
   t_label_red_channel = "Red channel",
@@ -21,6 +30,8 @@ UI_TEXT <- list(
   t_title_qc_vdj_integration_tcr_bcr = "QC: VDJ Integration (TCR/BCR)",
   t_title_vdj_clone_overlay = "VDJ clone overlay",
   t_title_vdj_input = "VDJ Input",
+  t_title_top_clone_selector = "Top clone selector",
+  t_text_clone_selector_note = "Identical clonotype ID text is pooled across samples. Selection is shared with TCR/BCR Studio.",
   t_text_applying_vdj_filter_and_creating_workspace_object = "Applying VDJ filter and creating workspace object…",
   t_text_all_object_samples_matched_imported_vdj_files = "All object samples are matched by imported VDJ files.",
   t_text_diagnostics_note = "Diagnostics reflect the currently selected object and its attached VDJ metadata.",
@@ -42,38 +53,14 @@ library(shinycssloaders)
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
 .vdj_get_assay_data <- function(sobj, assay = NULL, layer = "data") {
-  aa <- as.character(assay %||% "")
-  if (!nzchar(aa)) aa <- tryCatch(as.character(Seurat::DefaultAssay(sobj)), error = function(e) "")
-  ga_formals <- tryCatch(names(formals(Seurat::GetAssayData)), error = function(e) character(0))
-  use_layer <- "layer" %in% ga_formals
-  args <- if (isTRUE(use_layer)) {
-    list(object = sobj, layer = layer)
-  } else {
-    list(object = sobj, slot = layer)
-  }
-  if (nzchar(aa)) args$assay <- aa
-  out <- tryCatch(do.call(Seurat::GetAssayData, args), error = function(e) NULL)
-  if (!is.null(out)) return(out)
-  alt_args <- list(object = sobj)
-  alt_args[[if (isTRUE(use_layer)) "slot" else "layer"]] <- layer
-  if (nzchar(aa)) alt_args$assay <- aa
-  tryCatch(do.call(Seurat::GetAssayData, alt_args), error = function(e) NULL)
+  core_feature_get_assay_data(sobj, assay = assay, layer = layer)
 }
 
 .vdj_rgb_hex <- function(a, b, c) {
-  .scale <- function(x) {
-    x <- suppressWarnings(as.numeric(x))
-    x[!is.finite(x)] <- NA_real_
-    q <- suppressWarnings(stats::quantile(x, 0.99, na.rm = TRUE))
-    if (is.finite(q)) x <- pmin(x, q)
-    rng <- range(x, na.rm = TRUE)
-    if (!all(is.finite(rng)) || diff(rng) == 0) return(rep(0, length(x)))
-    (x - rng[1]) / diff(rng)
-  }
-  R <- .scale(a); G <- .scale(b); B <- .scale(c)
-  cols <- grDevices::rgb(R, G, B, alpha = 0.9)
-  cols[!is.finite(R) | !is.finite(G) | !is.finite(B)] <- "#00000012"
-  cols
+  red <- core_feature_quantile_scale(a, 0.99)
+  green <- core_feature_quantile_scale(b, 0.99)
+  blue <- core_feature_quantile_scale(c, 0.99)
+  grDevices::rgb(red, green, blue, alpha = 0.9)
 }
 
 vdj_ui <- fluidPage(
@@ -195,6 +182,10 @@ vdj_ui <- fluidPage(
     .vdj-unmatched-fold summary { cursor: pointer; color: #a16207; font-size: 12px; }
     .vdj-upload-map-row { margin-bottom: 8px; }
     .vdj-upload-map-file { font-size: 13px; color: #0f172a; word-break: break-word; }
+    .vdj-clone-table-wrap { max-height: 190px; overflow: auto; margin: 6px 0; }
+    .vdj-clone-table-wrap .dataTables_wrapper { font-size: 11px; }
+    .vdj-clone-table-wrap table.dataTable td,
+    .vdj-clone-table-wrap table.dataTable th { padding: 3px 5px !important; white-space: nowrap; }
   "))),
   div(
     class = "page-header",
@@ -282,7 +273,39 @@ vdj_ui <- fluidPage(
                           sliderInput("vdj_clone_threshold", UI_TEXT$t_label_minimum_clone_size, min = 1, max = 50, value = 2, step = 1)
                         )
                       )
+                    ),
+                    radioButtons(
+                      "vdj_overlay_mode",
+                      UI_TEXT$t_label_clone_display,
+                      choices = stats::setNames(c("clone_size", "selected"), c(UI_TEXT$t_choice_clone_size_threshold, UI_TEXT$t_choice_selected_clones)),
+                      selected = "clone_size",
+                      inline = TRUE
                     )
+                  ),
+                  tags$details(
+                    open = NA,
+                    tags$summary(UI_TEXT$t_title_top_clone_selector),
+                    fluidRow(
+                      column(
+                        7,
+                        selectInput(
+                          "vdj_clone_ranking",
+                          UI_TEXT$t_label_clone_rank_by,
+                          choices = stats::setNames(c("cell_count", "percent"), c(UI_TEXT$t_choice_rank_cell_count, UI_TEXT$t_choice_rank_percent)),
+                          selected = "cell_count"
+                        )
+                      ),
+                      column(
+                        5,
+                        sliderInput("vdj_clone_top_n", UI_TEXT$t_label_clone_top_n, min = 5, max = 50, value = 10, step = 1)
+                      )
+                    ),
+                    fluidRow(
+                      column(7, actionButton("vdj_clone_select_visible", UI_TEXT$t_btn_select_visible_clones, class = "btn btn-default btn-xs", style = "width:100%;")),
+                      column(5, actionButton("vdj_clone_clear", UI_TEXT$t_btn_clear_clone_selection, class = "btn btn-default btn-xs", style = "width:100%;"))
+                    ),
+                    div(class = "vdj-clone-table-wrap", DT::DTOutput("vdj_clone_rank_table")),
+                    tags$small(class = "text-muted", UI_TEXT$t_text_clone_selector_note)
                   ),
                   div(class = "vdj-plot-canvas", qc_with_busy_spinner(plotlyOutput("vdj_feature_umap_plot", height = "410px"))))
             ),
@@ -336,6 +359,7 @@ vdj_ui <- fluidPage(
 
 vdj_server <- function(input, output, session, shared_data) {
   .vdj_debug <- TRUE
+  .vdj_clone_state_version <- reactiveVal(0L)
   .vdj_log <- function(...) {
     if (!isTRUE(.vdj_debug)) return(invisible(NULL))
     msg <- paste(..., collapse = " ")
@@ -508,8 +532,9 @@ vdj_server <- function(input, output, session, shared_data) {
 
   output$vdj_object_picker_ui <- renderUI({
     nms <- .obj_names(); req(length(nms) > 0)
-    sel <- input$vdj_object_name %||% shared_data$active_object_name %||% nms[[1]]
-    if (!(sel %in% nms)) sel <- nms[[1]]
+    newest_object <- nms[[length(nms)]]
+    sel <- input$vdj_object_name %||% shared_data$active_object_name %||% newest_object
+    if (!length(sel) || !nzchar(as.character(sel[[1]])) || !(sel[[1]] %in% nms)) sel <- newest_object
     selectInput("vdj_object_name", UI_TEXT$t_label_object, choices = nms, selected = sel)
   })
 
@@ -1826,7 +1851,7 @@ vdj_server <- function(input, output, session, shared_data) {
   })
 
   observeEvent(input$vdj_import_btn, {
-    overlay_show("Importing VDJ and mapping to cells…")
+    overlay_show("Importing VDJ and mapping to cells…", loader = "import")
     on.exit(overlay_hide(), add = TRUE)
     .vdj_log("vdj_import_btn clicked.", "has_upload=", is.data.frame(input$vdj_file) && nrow(input$vdj_file))
     if (!is.null(input$vdj_file) && is.data.frame(input$vdj_file) && nrow(input$vdj_file)) {
@@ -1948,7 +1973,7 @@ vdj_server <- function(input, output, session, shared_data) {
   })
 
   observeEvent(input$vdj_apply_meta_btn, {
-    overlay_show("Applying staged VDJ metadata to selected object…")
+    overlay_show("Applying staged VDJ metadata to selected object…", loader = "package")
     on.exit(overlay_hide(), add = TRUE)
     sobj <- .get_obj(); req(sobj)
     nm <- input$vdj_object_name %||% shared_data$active_object_name %||% ""
@@ -2071,7 +2096,7 @@ vdj_server <- function(input, output, session, shared_data) {
       if (!identical(sig_try, .vdj_umap_sig())) {
         .vdj_umap_sig(sig_try)
         vdj_status(list(msg = "Generating temporary UMAP for VDJ view…", type = "warn"))
-        overlay_show("Generating temporary UMAP for VDJ view…")
+        overlay_show("Generating temporary UMAP for VDJ view…", loader = "embedding")
         on.exit(overlay_hide(), add = TRUE)
         set.seed(42)
         sobj2 <- tryCatch(.cache_umap_into_meta(sobj, seed = 42L), error = function(e) NULL)
@@ -2147,9 +2172,116 @@ vdj_server <- function(input, output, session, shared_data) {
     md <- sobj@meta.data
     df$vdj_tcr_clone_size <- suppressWarnings(as.numeric(md[df$cell, "vdj_tcr_clone_size"] %||% 0))
     df$vdj_bcr_clone_size <- suppressWarnings(as.numeric(md[df$cell, "vdj_bcr_clone_size"] %||% 0))
+    df$vdj_tcr_clone <- if ("vdj_tcr_clone" %in% colnames(md)) vdj_clone_valid_ids(md[df$cell, "vdj_tcr_clone"]) else NA_character_
+    df$vdj_bcr_clone <- if ("vdj_bcr_clone" %in% colnames(md)) vdj_clone_valid_ids(md[df$cell, "vdj_bcr_clone"]) else NA_character_
     attr(df, "emb_name") <- emb_name
     df
   })
+
+  .qc_clone_state <- reactive({
+    .vdj_clone_state_version()
+    vdj_clone_state_get(
+      session,
+      input$vdj_object_name %||% shared_data$active_object_name %||% "",
+      input$vdj_filter_feature %||% "tcr"
+    )
+  })
+
+  .write_qc_clone_state <- function(selected = NULL, labels = NULL, initialized = TRUE) {
+    nm <- input$vdj_object_name %||% shared_data$active_object_name %||% ""
+    feature <- input$vdj_filter_feature %||% "tcr"
+    current <- vdj_clone_state_get(session, nm, feature)
+    next_selected <- if (is.null(selected)) current$selected %||% character(0) else selected
+    next_labels <- if (is.null(labels)) current$labels %||% character(0) else labels
+    changed <- !identical(as.character(current$selected %||% character(0)), as.character(next_selected %||% character(0))) ||
+      !identical(current$labels %||% character(0), next_labels %||% character(0)) ||
+      !identical(isTRUE(current$initialized), isTRUE(initialized))
+    if (!changed) return(invisible(NULL))
+    vdj_clone_state_set(session, nm, feature, next_selected, next_labels, initialized)
+    .vdj_clone_state_version(.vdj_clone_state_version() + 1L)
+    invisible(NULL)
+  }
+
+  .qc_clone_rank <- reactive({
+    sobj <- .get_obj()
+    req(sobj)
+    state <- .qc_clone_state()
+    vdj_clone_rank_table(
+      sobj@meta.data,
+      feature = input$vdj_filter_feature %||% "tcr",
+      ranking = input$vdj_clone_ranking %||% "cell_count",
+      label_map = state$labels %||% character(0)
+    )
+  })
+
+  .qc_visible_clones <- reactive({
+    ranked <- .qc_clone_rank()
+    top_n <- suppressWarnings(as.integer(input$vdj_clone_top_n %||% 10L))
+    if (!is.finite(top_n) || top_n < 1L) top_n <- 10L
+    utils::head(ranked, top_n)
+  })
+
+  observe({
+    ranked <- .qc_clone_rank()
+    req(nrow(ranked) > 0)
+    state <- .qc_clone_state()
+    if (isTRUE(state$initialized)) return(invisible(NULL))
+    .write_qc_clone_state(selected = utils::head(ranked$clonotype_id, 10L), initialized = TRUE)
+  })
+
+  output$vdj_clone_rank_table <- DT::renderDT({
+    visible <- .qc_visible_clones()
+    selected <- .qc_clone_state()$selected %||% character(0)
+    display <- data.frame(
+      Select = ifelse(visible$clonotype_id %in% selected, "[x]", "[ ]"),
+      Rank = visible$rank,
+      Label = visible$label,
+      Count = visible$cell_count,
+      `Clonotype ID` = visible$clonotype_id,
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    )
+    DT::datatable(
+      display,
+      rownames = FALSE,
+      escape = TRUE,
+      selection = list(mode = "multiple", target = "row", selected = which(visible$clonotype_id %in% selected)),
+      editable = list(target = "cell", disable = list(columns = c(0L, 1L, 3L, 4L))),
+      options = list(dom = "t", paging = FALSE, ordering = FALSE, scrollX = TRUE, scrollY = "150px", scrollCollapse = TRUE)
+    )
+  }, server = FALSE)
+
+  observeEvent(input$vdj_clone_rank_table_rows_selected, {
+    visible <- .qc_visible_clones()
+    selected_rows <- as.integer(input$vdj_clone_rank_table_rows_selected %||% integer(0))
+    selected_rows <- selected_rows[selected_rows >= 1L & selected_rows <= nrow(visible)]
+    current <- .qc_clone_state()$selected %||% character(0)
+    hidden <- setdiff(current, visible$clonotype_id)
+    .write_qc_clone_state(selected = unique(c(hidden, visible$clonotype_id[selected_rows])))
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$vdj_clone_select_visible, {
+    current <- .qc_clone_state()$selected %||% character(0)
+    .write_qc_clone_state(selected = unique(c(current, .qc_visible_clones()$clonotype_id)))
+  })
+
+  observeEvent(input$vdj_clone_clear, {
+    .write_qc_clone_state(selected = character(0))
+  })
+
+  observeEvent(input$vdj_clone_rank_table_cell_edit, {
+    info <- input$vdj_clone_rank_table_cell_edit
+    row_index <- suppressWarnings(as.integer(info$row %||% NA_integer_))
+    col_index <- suppressWarnings(as.integer(info$col %||% NA_integer_)) + 1L
+    visible <- .qc_visible_clones()
+    req(is.finite(row_index), row_index >= 1L, row_index <= nrow(visible), identical(col_index, 3L))
+    next_label <- trimws(as.character(info$value %||% ""))
+    req(nzchar(next_label))
+    state <- .qc_clone_state()
+    labels <- state$labels %||% character(0)
+    labels[visible$clonotype_id[[row_index]]] <- next_label
+    .write_qc_clone_state(labels = labels)
+  }, ignoreInit = TRUE)
 
   # Agent note: Keep Plotly outputs behind reactiveVal shields. Direct render
   # dependencies recreate htmlwidgets during unrelated shared-state invalidations
@@ -2157,12 +2289,16 @@ vdj_server <- function(input, output, session, shared_data) {
   observe({
     df <- .get_umap_df()
     feat <- input$vdj_filter_feature %||% "tcr"
+    overlay_mode <- input$vdj_overlay_mode %||% "clone_size"
     th <- as.numeric(input$vdj_clone_threshold %||% 2)
     if (!is.finite(th)) th <- 2
     nm <- input$vdj_object_name %||% shared_data$active_object_name %||% ""
+    clone_state <- .qc_clone_state()
     sig <- paste(
       nm, attr(df, "emb_name") %||% "", nrow(df %||% data.frame()),
-      feat, th,
+      feat, overlay_mode, th,
+      paste(clone_state$selected %||% character(0), collapse = ","),
+      paste(clone_state$labels %||% character(0), collapse = ","),
       sum(df$vdj_tcr_clone_size %||% 0, na.rm = TRUE),
       sum(df$vdj_bcr_clone_size %||% 0, na.rm = TRUE),
       sep = "|"
@@ -2182,6 +2318,67 @@ vdj_server <- function(input, output, session, shared_data) {
           )
       )
       .vdj_log("feature plot refresh", sig)
+      return(invisible(NULL))
+    }
+    if (identical(overlay_mode, "selected")) {
+      clone_ids <- if (identical(feat, "bcr")) df$vdj_bcr_clone else df$vdj_tcr_clone
+      selected_ids <- intersect(clone_state$selected %||% character(0), unique(clone_ids[!is.na(clone_ids)]))
+      rank_table <- .qc_clone_rank()
+      label_lookup <- stats::setNames(rank_table$label, rank_table$clonotype_id)
+      selected_labels <- unname(label_lookup[selected_ids])
+      if (anyDuplicated(selected_labels)) {
+        .vdj_feature_plot(
+          plotly::plotly_empty(type = "scatter", mode = "markers") %>%
+            layout(
+              title = "Selected clone overlay",
+              annotations = list(list(
+                text = "Selected clone labels must be unique.",
+                x = 0.5, y = 0.5, xref = "paper", yref = "paper",
+                showarrow = FALSE
+              ))
+            )
+        )
+        return(invisible(NULL))
+      }
+      selected_mask <- !is.na(clone_ids) & clone_ids %in% selected_ids
+      p <- plot_ly(type = "scattergl", mode = "markers")
+      if (any(!selected_mask)) {
+        p <- add_trace(
+          p,
+          data = df[!selected_mask, , drop = FALSE],
+          x = ~UMAP_1,
+          y = ~UMAP_2,
+          marker = list(size = 4, color = "rgba(170,170,170,0.28)"),
+          hoverinfo = "skip",
+          showlegend = FALSE
+        )
+      }
+      clone_colors <- scales::hue_pal()(max(1L, length(selected_ids)))
+      for (i in seq_along(selected_ids)) {
+        clone_id <- selected_ids[[i]]
+        d_clone <- df[!is.na(clone_ids) & clone_ids == clone_id, , drop = FALSE]
+        if (!nrow(d_clone)) next
+        trace_label <- selected_labels[[i]]
+        p <- add_trace(
+          p,
+          data = d_clone,
+          x = ~UMAP_1,
+          y = ~UMAP_2,
+          name = trace_label,
+          text = paste0(trace_label, "<br>Clonotype ID: ", clone_id),
+          hovertemplate = "%{text}<extra></extra>",
+          marker = list(size = 5, color = clone_colors[[i]], opacity = 0.95),
+          showlegend = TRUE
+        )
+      }
+      .vdj_feature_plot(p %>% layout(
+        title = if (identical(feat, "bcr")) "Selected BCR clones" else "Selected TCR clones",
+        xaxis = list(title = UI_TEXT$t_text_umap_1),
+        yaxis = list(title = UI_TEXT$t_text_umap_2, scaleanchor = "x", scaleratio = 1),
+        paper_bgcolor = "rgba(0,0,0,0)",
+        plot_bgcolor = "rgba(0,0,0,0)"
+      ))
+      .vdj_log("selected clone plot refresh", sig)
       return(invisible(NULL))
     }
     val <- if (identical(feat, "bcr")) df$vdj_bcr_clone_size else df$vdj_tcr_clone_size
@@ -2372,7 +2569,7 @@ vdj_server <- function(input, output, session, shared_data) {
 
   observeEvent(input$vdj_apply_filter_btn, {
     sobj <- .get_obj(); req(sobj)
-    overlay_show(UI_TEXT$t_text_applying_vdj_filter_and_creating_workspace_object)
+    overlay_show(UI_TEXT$t_text_applying_vdj_filter_and_creating_workspace_object, loader = "filter")
     on.exit(overlay_hide(), add = TRUE)
     nm <- input$vdj_object_name %||% shared_data$active_object_name
 
@@ -2397,7 +2594,7 @@ vdj_server <- function(input, output, session, shared_data) {
     }
 
     sobj_f <- subset(sobj, cells = cells_keep)
-    sobj_f <- .reset_subset_analysis_state(sobj_f)
+    sobj_f <- wanlab_reset_subset_analysis_state(sobj_f)
     base <- sprintf("%s_%s_cl%d_filtered", nm, feat, as.integer(th))
     new_nm <- base
     i <- 1L

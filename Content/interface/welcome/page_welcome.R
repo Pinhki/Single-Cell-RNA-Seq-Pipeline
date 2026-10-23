@@ -125,7 +125,7 @@ WELCOME_UI_TEXT <- list(
   ui_text_credit_built_with = "Built with: R, Seurat, Shiny. For detailed package usage, please check sessionInfo().",
   ui_text_credit_version = "Version: %s",
   ui_text_credit_codex_note = "Developed with support from Codex powered by ChatGPT, Antigravity by Gemini, and Cursor.\nPlease cross-check key results in the app using multiple methods for best accuracy.\nIf discrepancies beyond package-version differences are observed, please contact the author immediately to protect analysis integrity.",
-  ui_text_credit_use_policy = "<strong>Unauthorized</strong> LLM-assisted <strong>reverse engineering, modification, or adaptation</strong> of this app is strictly <strong>prohibited</strong>. Ask permission and contribute with <strong>etiquette</strong>."
+  ui_text_credit_use_policy = "Original code is licensed under GNU GPL v3. Third-party components retain their own licenses."
 )
 
 library(shiny)

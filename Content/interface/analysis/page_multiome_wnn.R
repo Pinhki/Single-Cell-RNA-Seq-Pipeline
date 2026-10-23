@@ -108,11 +108,12 @@ multiome_wnn_server <- function(input, output, session, shared_data) {
     obj <- .registry_obj(input$wnn_object)
     req(!is.null(obj))
 
-    overlay_show("Running WNN integration…")
+    overlay_show("Running WNN integration…", loader = "integration")
     on.exit(overlay_hide(), add = TRUE)
 
     tryCatch({
       DefaultAssay(obj) <- "RNA"
+      pca_created_here <- !"pca" %in% names(obj@reductions)
       if (!"pca" %in% names(obj@reductions)) {
         obj <- NormalizeData(obj, verbose = FALSE)
         obj <- FindVariableFeatures(obj, verbose = FALSE)
@@ -152,6 +153,14 @@ multiome_wnn_server <- function(input, output, session, shared_data) {
       obj <- FindClusters(obj, graph.name = "wsnn", resolution = input$wnn_resolution, verbose = FALSE)
 
       new_name <- paste0(input$wnn_object, "_wnn")
+      pca_owner <- if (isTRUE(pca_created_here)) new_name else input$wnn_object
+      obj <- wanlab_set_reduction_provenance(
+        obj, "pca", pca_owner, "pca",
+        tryCatch(ncol(Seurat::Embeddings(obj, "pca")), error = function(e) NA_integer_)
+      )
+      obj <- wanlab_set_reduction_provenance(
+        obj, "wnn.umap", new_name, "pca", input$wnn_rna_dims
+      )
       .registry_put(new_name, obj, stage = "analysis")
       shared_data$active_object_name <- new_name
       wnn_result_name(new_name)

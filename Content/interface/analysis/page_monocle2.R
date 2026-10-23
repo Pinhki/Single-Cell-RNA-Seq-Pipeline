@@ -172,6 +172,21 @@ monocle2_server <- function(input, output, session, shared_data) {
   }
 
   rv <- reactiveValues(status = MONOCLE2_UI_TEXT$status_ready, traj_dat = NULL, beam_dat = NULL, last_error = "", runtime = NULL)
+  .publish_overlay <- function(result, object_name = input$monocle2_object) {
+    if (!is.list(result) || is.null(result$emb)) return(invisible(FALSE))
+    record <- trajectory_overlay_record_from_monocle(result)
+    registry <- shared_data$all_seurat_objects %||% list()
+    nm <- as.character(object_name %||% "")[[1]]
+    if (!nzchar(nm) || is.null(registry[[nm]])) stop("Monocle2 overlay target object is unavailable.", call. = FALSE)
+    entry <- registry[[nm]]
+    sobj <- if (is.list(entry) && !is.null(entry$obj)) entry$obj else entry
+    if (is.null(sobj) || !inherits(sobj, "Seurat")) stop("Monocle2 overlay target is not a Seurat object.", call. = FALSE)
+    sobj <- trajectory_overlay_write(sobj, record)
+    if (is.list(entry) && !is.null(entry$obj)) entry$obj <- sobj else entry <- sobj
+    registry[[nm]] <- entry
+    shared_data$all_seurat_objects <- registry
+    invisible(TRUE)
+  }
   beta_result_object_controls_server(
     input = input,
     output = output,
@@ -187,8 +202,14 @@ monocle2_server <- function(input, output, session, shared_data) {
         updateTabsetPanel(session, "monocle2_workflow_tabs", selected = "Step 2 BEAM")
       } else {
         rv$traj_dat <- obj
+        publish_error <- tryCatch({ .publish_overlay(obj); NULL }, error = function(e) e)
+        if (inherits(publish_error, "error")) {
+          rv$last_error <- paste("Imported Monocle2 trajectory loaded, but overlay publish failed:", conditionMessage(publish_error))
+          warning(sprintf("[monocle2][overlay] %s", rv$last_error), call. = FALSE, immediate. = TRUE)
+        } else {
+          rv$last_error <- ""
+        }
         rv$status <- "Imported Monocle2 trajectory result is now active."
-        rv$last_error <- ""
         updateTabsetPanel(session, "monocle2_workflow_tabs", selected = "Step 1 Trajectory")
       }
     },
@@ -360,6 +381,7 @@ monocle2_server <- function(input, output, session, shared_data) {
           root_state = input$monocle2_root_state %||% NULL,
           reverse = isTRUE(input$monocle2_reverse)
         )
+        .publish_overlay(dat)
 
         setProgress(value = 0.85, detail = "Preparing branch-state options")
         rv$traj_dat <- dat

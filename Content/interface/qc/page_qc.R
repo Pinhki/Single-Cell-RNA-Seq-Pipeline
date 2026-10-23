@@ -389,7 +389,7 @@ qc_server <- function(input, output, session, shared_data) {
   }
 
   .show_qc_overlay <- function(text = "Preparing QC plots...") {
-    overlay_show(text)
+    overlay_show(text, loader = "metrics")
     qc_overlay_on(TRUE)
     invisible(NULL)
   }
@@ -1071,7 +1071,7 @@ qc_server <- function(input, output, session, shared_data) {
         )
       ),
       div(
-        class = "wl-side",
+        class = "wl-side qc-scatter-card",
         fluidRow(
           column(
             12,
@@ -3248,7 +3248,7 @@ qc_server <- function(input, output, session, shared_data) {
     if (!any(ms$keep)) return(list(ok = FALSE, reason = "empty_after_filter"))
 
     sobj_filtered <- subset(x = ao, cells = rownames(md)[ms$keep])
-    sobj_filtered <- .reset_subset_analysis_state(sobj_filtered)
+    sobj_filtered <- wanlab_reset_subset_analysis_state(sobj_filtered)
     reg <- shared_data$all_seurat_objects %||% list()
     make_unique_filtered_name <- function(base_name, registry) {
       root <- if (grepl("_rna_filtered(?:_[0-9]+)?$", base_name, ignore.case = TRUE)) {
@@ -3299,7 +3299,7 @@ qc_server <- function(input, output, session, shared_data) {
 
   observeEvent(input$qc_refresh_btn, {
     df <- qc_table_data(); req(df, nrow(df) > 0)
-    overlay_show("Applying filters and adding filtered samples to workspace…")
+    overlay_show("Applying filters and adding filtered samples to workspace…", loader = "filter")
     on.exit(overlay_hide(), add = TRUE)
 
     applied <- character(0)
@@ -3394,7 +3394,9 @@ qc_server <- function(input, output, session, shared_data) {
     # QC completed when proceeding to Analysis directly
     shared_data$qc_completed <- TRUE
 
-    shared_data$active_object_name <- entry_names[[1]]
+    # Filtering preserves creation/result order. Landing on newest result
+    # keeps startup consistent with the canonical active-object contract.
+    shared_data$active_object_name <- entry_names[[length(entry_names)]]
     showNotification(
       sprintf("Filtering complete: %d sample(s) ready. Select one or more objects on the Analysis page.",
               length(entry_names)),

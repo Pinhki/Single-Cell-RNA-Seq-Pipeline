@@ -20,7 +20,9 @@ options(shiny.maxRequestSize = 50 * 1024^3)
 # - docs/agents/core/CORE_ARCHITECTURE_CONTRACTS.md
 # - docs/agents/contracts/SHARED_DATA_CONTRACT.md
 here::i_am("app.R")
-WANLAB_DIAG_MODE <- !identical(Sys.getenv("WANLAB_DIAG_MODE", "1"), "0")
+# High-volume Analysis traces are an explicit diagnostic mode. Keep normal
+# startup quiet; enable with WANLAB_DIAG_MODE=1 during a focused server trace.
+WANLAB_DIAG_MODE <- identical(Sys.getenv("WANLAB_DIAG_MODE", "0"), "1")
 APP_VERSION <- "0.5.2"
 MINIMUM_COMPATIBLE_VERSION <- "0.2.0"
 MAXIMUM_COMPATIBLE_VERSION <- "1.0.0"
@@ -31,7 +33,7 @@ wanlab_registry_entry_object <- function(entry) {
   entry
 }
 
-wanlab_canonicalize_object_entry <- function(entry) {
+wanlab_canonicalize_object_entry <- function(entry, object_name = "") {
   sobj <- wanlab_registry_entry_object(entry)
   if (is.null(sobj) || !inherits(sobj, "Seurat")) return(NULL)
   out <- if (is.list(entry)) entry else list()
@@ -58,6 +60,22 @@ wanlab_canonicalize_object_entry <- function(entry) {
       }
     }
     out$meta$linked_files$vdj <- vdj_df[, c("chain", "source_name"), drop = FALSE]
+  }
+  bind_aliases <- get0("wanlab_bind_canonical_embedding_aliases", mode = "function", ifnotfound = NULL)
+  if (is.function(bind_aliases)) {
+    confirmed_dims <- out$prefs$confirmed_dims
+    embedding_prefs <- out$prefs$embedding_params
+    preferred_raw <- if (is.list(confirmed_dims)) confirmed_dims$value else confirmed_dims
+    preferred_raw <- preferred_raw %||% if (is.list(embedding_prefs)) embedding_prefs$dims else NULL
+    preferred_dims <- suppressWarnings(as.integer(
+      preferred_raw %||% NA_integer_
+    ))
+    preferred_dims <- preferred_dims[is.finite(preferred_dims) & !is.na(preferred_dims)]
+    out$obj <- bind_aliases(
+      out$obj,
+      object_name = as.character(object_name %||% ""),
+      preferred_dims = if (length(preferred_dims)) preferred_dims[[1L]] else NULL
+    )
   }
   out
 }
@@ -90,99 +108,12 @@ wanlab_canonicalize_registry <- function(registry, sample_sheet = NULL) {
     nms[[i]] <- candidate
     used <- c(used, candidate)
   }
-  names(out) <- make.unique(nms)
+  final_names <- make.unique(nms)
+  out <- lapply(seq_along(out), function(i) {
+    wanlab_canonicalize_object_entry(out[[i]], object_name = final_names[[i]])
+  })
+  names(out) <- final_names
   out
-}
-
-.reset_subset_analysis_state <- function(sobj, source_object_name = "") {
-  if (is.null(sobj)) return(sobj)
-
-  md <- tryCatch(sobj@meta.data, error = function(e) NULL)
-  if (!is.null(md) && nrow(md)) {
-    cols <- colnames(md)
-    lower_cols <- tolower(cols)
-    drop_patterns <- c(
-      "^anno_",
-      "^annotation_",
-      "^singler_",
-      "^markergene_",
-      "^celltypist_",
-      "^db_",
-      "^monocle2_",
-      "^nichenet_",
-      "^niches_",
-      "^cellchat_",
-      "^scenic_",
-      "^rv052_",
-      "^sctenifoldknk_"
-    )
-    drop_by_pattern <- vapply(
-      lower_cols,
-      function(cc) any(vapply(drop_patterns, function(pp) grepl(pp, cc, ignore.case = TRUE, perl = TRUE), logical(1))),
-      logical(1)
-    )
-    drop_meta <- cols[
-      lower_cols %in% c("seurat_clusters") |
-        grepl("(^|_)(snn|nn|wsnn|wknn)_res\\.[0-9]+", cols, ignore.case = TRUE) |
-        grepl("(^|_)(snn|nn|wsnn|wknn)\\.res\\.[0-9]+", cols, ignore.case = TRUE) |
-        grepl("(^|_)leiden_res\\.[0-9]+", cols, ignore.case = TRUE) |
-        grepl("^seurat_clusters_res\\.[0-9]+", cols, ignore.case = TRUE) |
-        grepl("^sweep_(nn_)?res\\.[0-9]+", cols, ignore.case = TRUE) |
-        drop_by_pattern
-    ]
-    keep_meta <- setdiff(cols, unique(drop_meta))
-    sobj@meta.data <- md[, keep_meta, drop = FALSE]
-  }
-
-  # Reset identities so downstream tabs do not inherit stale cluster identities.
-  tryCatch({
-    md2 <- sobj@meta.data
-    if (!is.null(md2) && "orig.ident" %in% colnames(md2)) {
-      Seurat::Idents(sobj) <- factor(as.character(md2$orig.ident))
-    } else if (!is.null(md2) && nrow(md2)) {
-      Seurat::Idents(sobj) <- factor(rep("subset", nrow(md2)), levels = "subset")
-    }
-  }, error = function(e) NULL)
-
-  # Clear graph / neighbor state so fresh clustering is computed for the subset.
-  tryCatch({
-    if (!is.null(sobj@graphs) && length(sobj@graphs)) sobj@graphs <- list()
-  }, error = function(e) NULL)
-  tryCatch({
-    if (!is.null(sobj@neighbors) && length(sobj@neighbors)) sobj@neighbors <- list()
-  }, error = function(e) NULL)
-
-  source_object_name <- as.character(source_object_name %||% character())
-  source_object_name <- source_object_name[!is.na(source_object_name)]
-  source_object_name <- if (length(source_object_name)) source_object_name[[1]] else ""
-  if (nzchar(source_object_name)) {
-    # Agent note: Reclustering preserves parent projections for comparison, but
-    # names and provenance must bind them to their owner before child analysis.
-    sobj <- wanlab_suffix_inherited_reductions(sobj, source_object_name)
-  } else {
-    # QC filtering retains historical reset behavior; only reclustering supplies
-    # an owner and preserves parent reductions as comparison layers.
-    tryCatch({
-      reduction_names <- names(sobj@reductions)
-      drop_reductions <- reduction_names[
-        tolower(reduction_names) %in% c("pca", "umap", "tsne", "umap3d", "tsne3d")
-      ]
-      sobj@reductions <- sobj@reductions[setdiff(reduction_names, drop_reductions)]
-    }, error = function(e) NULL)
-  }
-
-  # Clear matching command history so re-runs reflect the subset, not the parent.
-  tryCatch({
-    cmd_names <- names(sobj@commands)
-    if (length(cmd_names)) {
-      drop_cmd <- cmd_names[
-        grepl("runpca|runumap|runtsne|findneighbors|findclusters", cmd_names, ignore.case = TRUE)
-      ]
-      sobj@commands <- sobj@commands[setdiff(cmd_names, drop_cmd)]
-    }
-  }, error = function(e) NULL)
-
-  sobj
 }
 
 # Keep all sourced app modules/pages in the same environment as app.R,
@@ -212,10 +143,12 @@ wanlab_canonicalize_registry <- function(registry, sample_sheet = NULL) {
 
 # ---- Modules ----
 # Shared UI infrastructure
+.time_source("interface/shared/processing_motion.R")
 .time_source("interface/shared/spinner_overlay.R")
 .time_source("interface/shared/qc_busy_spinner.R")
 .time_source("interface/shared/card_page_template.R")
 .time_source("interface/shared/plot_card_state_helpers.R")
+.time_source("interface/shared/elbow_plot_helpers.R")
 .time_source("interface/shared/gene_selectize_helpers.R")
 .time_source("interface/shared/object_selector.R")
 .time_source("interface/shared/code_block_helpers.R")
@@ -225,6 +158,7 @@ wanlab_canonicalize_registry <- function(registry, sample_sheet = NULL) {
 .time_source("interface/shared/vdj_clone_overlay_utils.R")
 .time_source("interface/shared/vdj_payload_utils.R")
 .time_source("interface/shared/admin_tab_registry.R")
+.time_source("interface/shared/large_data_storage_helpers.R")
 .time_source("interface/components/right_sidebar_registry_helpers.R")
 .time_source("interface/components/component_right_sidebar.R")
 .time_source("interface/components/component_navbar.R") 
@@ -236,16 +170,20 @@ wanlab_canonicalize_registry <- function(registry, sample_sheet = NULL) {
 .time_source("interface/setup/page_environment.R")
 # Canonical reduction ownership shared by app, UI adapters, and versioned cores.
 .time_source("core/reduction_provenance.R")
+.time_source("core/subset_analysis_state.R")
+.time_source("core/backends/trajectory_overlay_core.R")
 # Independent beta analysis backend helpers
 .time_source("core/backends/cellchat_core.R")
 .time_source("core/backends/scenic_core.R")
 .time_source("core/backends/monocle2_core.R")
+.time_source("core/backends/monocle3_core.R")
 .time_source("core/backends/nichenet_core.R")
 .time_source("core/backends/niches_core.R")
 .time_source("core/backends/sctenifoldknk_core.R")
 .time_source("core/backends/rna_velocity_core.R")
 .time_source("core/backends/singler_annotation_core.R")
 .time_source("core/backends/h5ad_export_core.R")
+.time_source("core/feature_expression_plot_core.R")
 # Core backend routing/helpers (versioned core trees)
 .resolve_core_variant <- function(env_name = NULL) {
   nm <- tolower(as.character(env_name %||% ""))
@@ -307,6 +245,7 @@ wanlab_canonicalize_registry <- function(registry, sample_sheet = NULL) {
 .time_source("interface/analysis/page_cellchat.R")
 .time_source("interface/analysis/page_scenic.R")
 .time_source("interface/analysis/page_monocle2.R")
+.time_source("interface/analysis/page_monocle3.R")
 .time_source("interface/analysis/page_nichenet.R")
 .time_source("interface/analysis/page_niches.R")
 .time_source("interface/analysis/page_sctenifoldknk.R")
@@ -379,6 +318,7 @@ ui <- tagList(
     cellchat_ui = cellchat_ui,
     scenic_ui = scenic_ui,
     monocle2_ui = monocle2_ui,
+    monocle3_ui = monocle3_ui,
     nichenet_ui = nichenet_ui,
     niches_ui = niches_ui,
     sctenifoldknk_ui = sctenifoldknk_ui,
@@ -450,22 +390,41 @@ server <- function(input, output, session) {
       any(vapply(reg_new, function(ent) {
         !is.list(ent) || is.null(ent$obj) || is.null(ent$prefs) || is.null(ent$plots) || is.null(ent$analysis_cache)
       }, logical(1)))
-    if (isTRUE(shape_changed)) {
+    # Agent note: Canonicalization can repair reduction aliases/provenance while
+    # preserving the wrapper shape; content changes must reach shared_data or
+    # downstream pages will continue seeing the pre-repair object.
+    registry_changed <- !identical(reg_now, reg_new)
+    if (isTRUE(shape_changed) || isTRUE(registry_changed)) {
       shared_data$all_seurat_objects <- reg_new
     }
     valid_names <- names(shared_data$all_seurat_objects %||% list()) %||% character(0)
     active_nm <- as.character(shared_data$active_object_name %||% "")
     if (!nzchar(active_nm) || !(active_nm %in% valid_names)) {
-      shared_data$active_object_name <- if (length(valid_names)) valid_names[[1]] else NULL
+      # Registry insertion order is object creation order. Missing active state
+      # must resolve to newest object, not oldest object. This is global; page
+      # landing and backend resolvers must follow same rule.
+      shared_data$active_object_name <- if (length(valid_names)) valid_names[[length(valid_names)]] else NULL
     }
     shared_data$object_prefs <- lapply(shared_data$all_seurat_objects %||% list(), function(ent) {
       if (is.list(ent) && is.list(ent$prefs)) ent$prefs else list()
     })
     invisible(NULL)
   }
+  # Agent note: Canonicalize registry before page observers inspect object
+  # structure. Late reduction-alias repair changes Data Browser control keys
+  # and otherwise looks like an external object replacement, causing a second
+  # loading overlay without user action.
   observeEvent(shared_data$all_seurat_objects, {
     .sync_registry_to_canonical()
-  }, ignoreInit = FALSE)
+    if (isTRUE(WANLAB_DIAG_MODE)) {
+      message(sprintf(
+        "[REGISTRY_DBG][%s] canonicalized active=%s objects=%d",
+        format(Sys.time(), "%H:%M:%OS3"),
+        as.character(shared_data$active_object_name %||% ""),
+        length(shared_data$all_seurat_objects %||% list())
+      ))
+    }
+  }, ignoreInit = FALSE, priority = 1100)
 
   emergency_recovery_triggered <- FALSE
   emergency_recovery_modal_shown <- FALSE
@@ -965,7 +924,7 @@ server <- function(input, output, session) {
   for (nm in c(
     "contam", "hto", "doublet", "vdj", "barcode", "flowgate",
     "atac_qc", "analysis", "recluster", "recluster_new", "multiome_wnn",
-    "cellchat", "scenic", "monocle2", "nichenet", "niches", "sctenifoldknk", "rna_velocity_v052",
+    "cellchat", "scenic", "monocle2", "monocle3", "nichenet", "niches", "sctenifoldknk", "rna_velocity_v052",
     "multiome_marker", "export", "export_vdj_safe", "multiome_export_check",
     "rds", "figure_umap", "figure_feature", "figure_dotplot", "figure_alluvial", "figure_cluster_alluvial", "figure_tcr_studio", "figure_color_picker_lab", "figure_poline_lab", "cellwhisperer"
   )) assign(nm, FALSE, envir = module_init)
@@ -1024,6 +983,7 @@ server <- function(input, output, session) {
     if (identical(tab, "cellchat_tab")) .init_once("cellchat", function() cellchat_server(input, output, session, shared_data))
     if (identical(tab, "scenic_tab")) .init_once("scenic", function() scenic_server(input, output, session, shared_data))
     if (identical(tab, "monocle2_tab")) .init_once("monocle2", function() monocle2_server(input, output, session, shared_data))
+    if (identical(tab, "monocle3_tab")) .init_once("monocle3", function() monocle3_server(input, output, session, shared_data))
     if (identical(tab, "nichenet_tab")) .init_once("nichenet", function() nichenet_server(input, output, session, shared_data))
     if (identical(tab, "niches_tab")) .init_once("niches", function() niches_server(input, output, session, shared_data))
     if (identical(tab, "sctenifoldknk_tab")) .init_once("sctenifoldknk", function() sctenifoldknk_server(input, output, session, shared_data))
@@ -1270,7 +1230,7 @@ server <- function(input, output, session) {
         preferred_active_name(obj_reg, focus_name = "", imported_active_name = ""),
         error = function(e) ""
       )
-      shared_data$active_object_name <- if (nzchar(target_active)) target_active else obj_names[[1]]
+      shared_data$active_object_name <- if (nzchar(target_active)) target_active else obj_names[[length(obj_names)]]
     }
 
     unlocked_tabs <- c(
@@ -1493,7 +1453,7 @@ server <- function(input, output, session) {
       imported <- as.character(st$imported_names %||% character(0))
     }
     if (!length(imported)) return(invisible(NULL))
-    shared_data$active_object_name <- imported[[1]]
+    shared_data$active_object_name <- imported[[length(imported)]]
     .fast_set_state(imported_names = imported)
 
     .init_once("analysis", function() analysis_server(input, output, session, shared_data))

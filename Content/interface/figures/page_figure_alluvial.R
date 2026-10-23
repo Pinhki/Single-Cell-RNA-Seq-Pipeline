@@ -321,10 +321,8 @@ figure_alluvial_server <- function(input, output, session, shared_data) {
     if (is.null(sobj) || !inherits(sobj, "Seurat")) return(NULL)
     group_col <- as.character(group_col %||% "")
     if (!nzchar(group_col) || !(group_col %in% colnames(sobj@meta.data))) return(NULL)
-    reds <- tryCatch(tolower(names(sobj@reductions)), error = function(e) character(0))
-    red_use <- if ("umap" %in% reds) names(sobj@reductions)[match("umap", reds)] else NULL
-    if (is.null(red_use) && length(names(sobj@reductions))) red_use <- names(sobj@reductions)[1]
-    if (is.null(red_use) || !nzchar(red_use)) return(NULL)
+    red_use <- figure_resolve_reduction_name(sobj, "umap")
+    if (!nzchar(red_use)) return(NULL)
 
     p_tmp <- tryCatch(Seurat::DimPlot(sobj, reduction = red_use, group.by = group_col), error = function(e) NULL)
     if (is.null(p_tmp) || !inherits(p_tmp, "ggplot")) return(NULL)
@@ -868,7 +866,13 @@ figure_alluvial_server <- function(input, output, session, shared_data) {
       cluster_palette = input$figure_alluvial_cluster_palette
     ))
   })
-  figure_code_card_server("figure_alluvial_code_card", code_text_reactive = generated_plot_code)
+  figure_code_card_server(
+    "figure_alluvial_code_card",
+    code_text_reactive = generated_plot_code,
+    shared_data = shared_data,
+    object_name_reactive = selected_dataset_name,
+    studio_name = "TCR Alluvial Studio"
+  )
 
   .figure_alluvial_pdf_bundle <- function(kind, width_px = NULL, height_px = NULL) {
     req(identical(kind, "alluvial_pdf"))

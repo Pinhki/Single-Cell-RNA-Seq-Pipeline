@@ -143,7 +143,16 @@ contamination_correction_server <- function(input, output, session, shared_data)
   observe({
     reg <- shared_data$all_seurat_objects %||% list()
     nms <- names(reg)
-    updateSelectInput(session, "contam_object", choices = nms, selected = if (length(nms)) nms[[1]] else "")
+    active_name <- as.character(shared_data$active_object_name %||% "")
+    active_name <- if (length(active_name)) active_name[[1]] else ""
+    selected_name <- if (length(nms) && nzchar(active_name) && active_name %in% nms) {
+      active_name
+    } else if (length(nms)) {
+      nms[[length(nms)]]
+    } else {
+      ""
+    }
+    updateSelectInput(session, "contam_object", choices = nms, selected = selected_name)
   })
 
   observeEvent(input$contam_run_btn, {

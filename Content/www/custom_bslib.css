@@ -19,7 +19,7 @@
   --Pinhki-radius-sm-inner: clamp(0px, calc(var(--Pinhki-radius-sm) - var(--Pinhki-concentric-step)), 999px);
   --Pinhki-radius-md-inner: clamp(0px, calc(var(--Pinhki-radius-md) - var(--Pinhki-concentric-step)), 999px);
   --Pinhki-radius-lg-inner: clamp(0px, calc(var(--Pinhki-radius-lg) - var(--Pinhki-concentric-step)), 999px);
-  --Pinhki-mac-window-radius: 18px;
+  --Pinhki-mac-window-radius: 17px;
   --Pinhki-notification-edge-gap: 4px;
   --Pinhki-mac-notification-corner: var(--Pinhki-mac-window-radius);
   --Pinhki-notification-light-surface: 255, 255, 255;
@@ -311,6 +311,11 @@ body.app-dark-mode .Pinhki-platform-mac #shiny-notification-panel .shiny-notific
   border-left: 1px solid #dee2e6;
 }
 
+/* Shared shell contract: sidebars sit flush against the viewport edge. */
+.bslib-sidebar-layout.sidebar-right > .sidebar {
+  border-radius: 0 !important;
+}
+
 /* bslib adds body-level gap spacing (16px) via .bslib-gap-spacing.
    In page-fill + sidebar mode this creates a visible right inset.
    Keep body padding flush so sidebar hugs the viewport edge. */
@@ -471,6 +476,28 @@ body:not(.app-dark-mode) .app-page .important_card_style {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+/* Shared overflow hint: transparent fades follow actual scroll position. */
+.Pinhki-scroll-fade {
+  --Pinhki-scroll-fade-size: 18px;
+  -webkit-mask-image: linear-gradient(#000, #000);
+  mask-image: linear-gradient(#000, #000);
+}
+
+.Pinhki-scroll-fade.is-scroll-top.is-scroll-bottom {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--Pinhki-scroll-fade-size), #000 calc(100% - var(--Pinhki-scroll-fade-size)), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--Pinhki-scroll-fade-size), #000 calc(100% - var(--Pinhki-scroll-fade-size)), transparent 100%);
+}
+
+.Pinhki-scroll-fade.is-scroll-top:not(.is-scroll-bottom) {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--Pinhki-scroll-fade-size), #000 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--Pinhki-scroll-fade-size), #000 100%);
+}
+
+.Pinhki-scroll-fade.is-scroll-bottom:not(.is-scroll-top) {
+  -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - var(--Pinhki-scroll-fade-size)), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - var(--Pinhki-scroll-fade-size)), transparent 100%);
 }
 .sidebar-bottom-actions {
   margin-top: auto;

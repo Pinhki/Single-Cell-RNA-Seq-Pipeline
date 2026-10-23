@@ -564,6 +564,24 @@ figure_entry_reduction_names <- function(entry) {
   unique(tolower(reduction_names[!is.na(reduction_names) & nzchar(reduction_names)]))
 }
 
+figure_resolve_reduction_name <- function(entry, requested = "umap", preferred_dims = NULL) {
+  sobj <- figure_extract_seurat_object(entry)
+  if (!is.null(sobj) && inherits(sobj, "Seurat")) {
+    return(wanlab_resolve_embedding_reduction(sobj, requested, preferred_dims = preferred_dims))
+  }
+
+  available <- figure_entry_reduction_names(entry)
+  requested <- tolower(as.character(.figure_coalesce(requested, "")))
+  requested <- requested[!is.na(requested) & nzchar(requested)]
+  if (!length(requested) || !length(available)) return("")
+  requested <- requested[[1L]]
+  exact <- match(requested, available)
+  if (!is.na(exact)) return(available[[exact]])
+  if (!(requested %in% c("umap", "tsne"))) return("")
+  family <- available[grepl(sprintf("^%s($|_)", requested), available)]
+  if (length(family)) family[[1L]] else ""
+}
+
 figure_object_is_integrated <- function(name, entry) {
   assay_names <- tolower(figure_entry_assay_names(entry))
   stage_raw <- tryCatch(entry$meta$stage, error = function(e) NULL)
@@ -583,7 +601,10 @@ figure_entry_supports_reductions <- function(entry, required_reductions = charac
   available <- figure_entry_reduction_names(entry)
   if (!length(available)) return(FALSE)
 
-  any(required %in% available)
+  any(vapply(required, function(req) {
+    if (req %in% available) return(TRUE)
+    req %in% c("umap", "tsne") && any(grepl(sprintf("^%s($|_)", req), available))
+  }, logical(1)))
 }
 
 figure_preferred_object_name <- function(registry,
@@ -861,9 +882,8 @@ figure_default_discrete_palette <- function(n) {
   pal <- character(0)
   
   if (identical(palette_choice, "Default Seurat")) {
-    fn <- tryCatch(getFromNamespace("DiscretePalette", "Seurat"), error = function(e) NULL)
     pal <- tryCatch(
-      if (is.function(fn)) suppressWarnings(as.character(fn(n))) else character(0),
+      as.character(scales::hue_pal()(n)),
       error = function(e) character(0)
     )
   } else {
@@ -970,13 +990,8 @@ figure_palette_from_dimplot <- function(sobj, reduction_name, color_col, levels_
   lv <- as.character(.figure_coalesce(levels_vec, character(0)))
   if (!length(lv)) return(NULL)
 
-  reds <- tryCatch(names(sobj@reductions), error = function(e) character(0))
-  if (!length(reds)) return(NULL)
-  red_use <- as.character(.figure_coalesce(reduction_name, ""))
-  if (!nzchar(red_use) || !(red_use %in% reds)) {
-    red_l <- tolower(reds)
-    red_use <- if ("umap" %in% red_l) reds[[match("umap", red_l)]] else reds[[1]]
-  }
+  red_use <- figure_resolve_reduction_name(sobj, reduction_name)
+  if (!nzchar(red_use)) return(NULL)
 
   p_tmp <- tryCatch(Seurat::DimPlot(sobj, reduction = red_use, group.by = color_col), error = function(e) NULL)
   if (is.null(p_tmp) || !inherits(p_tmp, "ggplot")) return(NULL)
@@ -1012,6 +1027,7 @@ figure_resolve_metadata_palette <- function(sobj, reduction_name, color_col, lab
   if (!length(lv)) return(setNames(character(0), character(0)))
   fallback <- figure_default_discrete_palette(length(lv))
   names(fallback) <- lv
+  resolved <- setNames(rep(NA_character_, length(lv)), lv)
 
   # 1. Check sobj@misc$metadata_level_colors first
   misc <- tryCatch(sobj@misc, error = function(e) list())
@@ -1025,32 +1041,34 @@ figure_resolve_metadata_palette <- function(sobj, reduction_name, color_col, lab
         NA_character_
       }
     }, character(1))
-    if (any(!is.na(mapped))) {
-      bad <- is.na(mapped)
-      if (any(bad)) {
-        mapped[bad] <- fallback[bad]
-      }
-      return(mapped)
-    }
+    keep <- !is.na(mapped) & figure_is_hex_color(mapped)
+    resolved[keep] <- mapped[keep]
   }
 
   meta <- tryCatch(sobj@meta.data, error = function(e) NULL)
   from_meta <- figure_palette_from_metadata_colors(meta = meta, label_col = color_col, label_values = label_values, levels_vec = lv)
   if (!is.null(from_meta) && length(from_meta)) {
-    bad <- is.na(from_meta) | !nzchar(from_meta)
-    from_meta[bad] <- fallback[bad]
-    return(from_meta)
+    keep <- is.na(resolved) & !is.na(from_meta) & figure_is_hex_color(from_meta)
+    resolved[keep] <- from_meta[keep]
   }
 
-  # Bypass default ggplot2/DimPlot colors to ensure we match the Data Browser's default palette
-  # from_dimplot <- figure_palette_from_dimplot(sobj = sobj, reduction_name = reduction_name, color_col = color_col, levels_vec = lv)
-  # if (!is.null(from_dimplot) && length(from_dimplot)) {
-  #   bad <- is.na(from_dimplot) | !nzchar(from_dimplot)
-  #   from_dimplot[bad] <- fallback[bad]
-  #   return(from_dimplot)
-  # }
+  # Use actual Seurat DimPlot colors for levels without carried colors.
+  if (anyNA(resolved)) {
+    from_dimplot <- figure_palette_from_dimplot(
+      sobj = sobj,
+      reduction_name = reduction_name,
+      color_col = color_col,
+      levels_vec = lv
+    )
+    if (!is.null(from_dimplot) && length(from_dimplot)) {
+      keep <- is.na(resolved) & !is.na(from_dimplot) & figure_is_hex_color(from_dimplot)
+      resolved[keep] <- from_dimplot[keep]
+    }
+  }
 
-  fallback
+  missing <- is.na(resolved) | !nzchar(resolved)
+  resolved[missing] <- fallback[missing]
+  resolved
 }
 
 figure_axis_prefix_for_reduction <- function(reduction_name) {
@@ -1066,9 +1084,12 @@ figure_default_reduction_name <- function(obj, preferred = c("umap", "tsne", "pc
   reds <- figure_entry_reduction_names(obj)
   if (!length(reds)) return(NULL)
   pref <- tolower(as.character(.figure_coalesce(preferred, character(0))))
-  hit <- pref[pref %in% reds]
-  if (length(hit)) return(hit[[1]])
-  reds[[1]]
+  pref <- pref[!is.na(pref) & nzchar(pref)]
+  for (candidate in pref) {
+    resolved <- figure_resolve_reduction_name(obj, candidate)
+    if (nzchar(resolved)) return(resolved)
+  }
+  reds[[1L]]
 }
 
 figure_prepare_split_factor <- function(values, column_name = NULL) {
@@ -1318,6 +1339,7 @@ figure_build_discrete_embedding_plot <- function(sobj,
                                                  axis_text_size = 10,
                                                  axis_title_size = 14,
                                                  plot_title_size = 16) {
+  reduction_name <- figure_resolve_reduction_name(sobj, reduction_name)
   emb <- tryCatch(Seurat::Embeddings(sobj, reduction_name), error = function(e) NULL)
   shiny::validate(shiny::need(!is.null(emb) && is.matrix(emb) && ncol(emb) >= 2, "Embedding preview unavailable."))
 
@@ -1552,6 +1574,7 @@ figure_build_feature_embedding_plot <- function(sobj,
                                                 axis_text_size = 10,
                                                 axis_title_size = 14,
                                                 plot_title_size = 16) {
+  reduction_name <- figure_resolve_reduction_name(sobj, reduction_name)
   emb <- tryCatch(Seurat::Embeddings(sobj, reduction_name), error = function(e) NULL)
   shiny::validate(shiny::need(!is.null(emb) && is.matrix(emb) && ncol(emb) >= 2, "Embedding preview unavailable."))
 

@@ -691,23 +691,6 @@ body:not(.app-dark-mode) .app-tabs-wrap .nav.nav-pills {
   margin-bottom: 12px !important;
   box-shadow: none;
 }
-body:not(.app-dark-mode) .tabbable > .nav.nav-tabs.app-tab-pill-track::before,
-body:not(.app-dark-mode) .tabbable > .nav.nav-pills.app-tab-pill-track::before,
-body:not(.app-dark-mode) .app-tabs-wrap .nav.nav-tabs.app-tab-pill-track::before,
-body:not(.app-dark-mode) .app-tabs-wrap .nav.nav-pills.app-tab-pill-track::before {
-  content: "";
-  display: block;
-  position: absolute;
-  top: var(--app-tab-track-pad);
-  left: var(--app-tab-pill-x, var(--app-tab-track-pad));
-  width: var(--app-tab-pill-w, 0px);
-  height: calc(100% - (2 * var(--app-tab-track-pad)));
-  border-radius: 999px;
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03), 0 3px 8px rgba(0, 0, 0, 0.02);
-  z-index: 0;
-  transition: left 0.26s ease, width 0.26s ease, box-shadow 0.22s ease;
-}
 body:not(.app-dark-mode) .tabbable > .nav.nav-tabs > li,
 body:not(.app-dark-mode) .tabbable > .nav.nav-pills > li,
 body:not(.app-dark-mode) .tabbable > .nav.nav-tabs > .nav-item,
@@ -806,7 +789,7 @@ body:not(.app-dark-mode) .app-tabs-wrap .nav.nav-tabs .nav-link.active:hover,
 body:not(.app-dark-mode) .app-tabs-wrap .nav.nav-pills .nav-link.active,
 body:not(.app-dark-mode) .app-tabs-wrap .nav.nav-pills .nav-link.active:focus,
 body:not(.app-dark-mode) .app-tabs-wrap .nav.nav-pills .nav-link.active:hover {
-  background: transparent !important;
+  background: #ffffff !important;
   border: 0 !important;
   color: #111827 !important;
   font-weight: 600 !important;
@@ -827,21 +810,6 @@ body.app-dark-mode .app-tabs-wrap .nav.nav-pills {
   gap: 2px !important;
   margin-bottom: 12px !important;
   box-shadow: none;
-}
-body.app-dark-mode .tabbable > .nav.nav-tabs.app-tab-pill-track::before,
-body.app-dark-mode .tabbable > .nav.nav-pills.app-tab-pill-track::before,
-body.app-dark-mode .app-tabs-wrap .nav.nav-tabs.app-tab-pill-track::before,
-body.app-dark-mode .app-tabs-wrap .nav.nav-pills.app-tab-pill-track::before {
-  content: "";
-  position: absolute;
-  top: var(--app-tab-track-pad);
-  left: var(--app-tab-pill-x, var(--app-tab-track-pad));
-  width: var(--app-tab-pill-w, 0px);
-  height: calc(100% - (2 * var(--app-tab-track-pad)));
-  border-radius: 999px;
-  background: #363636;
-  z-index: 0;
-  transition: left 0.26s ease, width 0.26s ease;
 }
 body.app-dark-mode .tabbable > .nav.nav-tabs > li,
 body.app-dark-mode .tabbable > .nav.nav-pills > li,
@@ -937,7 +905,7 @@ body.app-dark-mode .app-tabs-wrap .nav.nav-tabs .nav-link.active:hover,
 body.app-dark-mode .app-tabs-wrap .nav.nav-pills .nav-link.active,
 body.app-dark-mode .app-tabs-wrap .nav.nav-pills .nav-link.active:focus,
 body.app-dark-mode .app-tabs-wrap .nav.nav-pills .nav-link.active:hover {
-  background: transparent !important;
+  background: #363636 !important;
   border: 0 !important;
   color: #f3f4f6 !important;
   font-weight: 500 !important;
@@ -1815,16 +1783,35 @@ body.app-dark-mode .plotting-page .wl-side h4{
 }
 /* Recluster New shared global styling (no page-local CSS). */
 .recluster-new-page{
-  --recluster-plot-h: clamp(520px, calc(var(--app-viewport-h, 100vh) - var(--app-shell-top-h, 0px) - var(--footer-h, 0px) - 320px), 1200px);
+  /* Use shared plotting height token. It tracks actual window/shell height and
+     keeps Data Browser consistent with Analysis and QC plotting pages. */
+  --recluster-plot-h: var(--plot-scroll-box-h);
 }
 .recluster-new-page #recluster_new_workspace_tabs + .tab-content{
   margin: 0;
   padding: 0;
 }
+/* Agent note: Selection Workspace contains vertically stacked UMAP and lower
+   plot cards. Do not let Shiny's nested fill-tab height cap the workspace row;
+   the left sticky panel must remain contained through the lower card. */
+.recluster-new-page #recluster_new_main_content_area,
+.recluster-new-page #recluster_new_main_content_area > .tabbable,
+.recluster-new-page #recluster_new_workspace_tabs + .tab-content,
+.recluster-new-page #recluster_new_workspace_tabs + .tab-content > .tab-pane.active,
+.recluster-new-page .recluster-new-main-row{
+  height: auto !important;
+  max-height: none !important;
+}
+.recluster-new-page #recluster_new_main_content_area > .tabbable,
+.recluster-new-page #recluster_new_workspace_tabs + .tab-content,
+.recluster-new-page #recluster_new_workspace_tabs + .tab-content > .tab-pane.active,
+.recluster-new-page .recluster-new-main-row{
+  flex: 0 0 auto !important;
+}
 .recluster-new-page #recluster_new_workspace_tabs + .tab-content > .tab-pane.active{
   display: block;
   min-height: 0;
-  height: auto;
+  height: auto !important;
 }
 .recluster-new-page .recluster-new-main-row{
   display: flex;
@@ -2008,7 +1995,6 @@ body.app-dark-mode .plotting-page .wl-side h4{
   flex-direction: column;
 }
 .recluster-new-page .recluster-new-violin-resize #recluster_new_violin_plot{
-  height: 100% !important;
   min-height: 320px;
   flex: 1 1 auto;
 }
@@ -2016,7 +2002,6 @@ body.app-dark-mode .plotting-page .wl-side h4{
 .recluster-new-page .recluster-new-violin-resize .html-widget,
 .recluster-new-page .recluster-new-violin-resize .plotly{
   width: 100%;
-  height: 100% !important;
   flex: 1 1 auto;
   min-height: 0 !important;
 }
@@ -2024,7 +2009,6 @@ body.app-dark-mode .plotting-page .wl-side h4{
 .recluster-new-page .recluster-new-violin-resize #recluster_new_violin_plot .plotly,
 .recluster-new-page .recluster-new-violin-resize #recluster_new_violin_plot .js-plotly-plot{
   width: 100%;
-  height: 100% !important;
   min-height: 0 !important;
 }
 .recluster-new-page .recluster-new-lower-plot-card{
@@ -2171,6 +2155,21 @@ body.app-dark-mode .plotting-page .wl-side h4{
   padding-left: 2px;
   padding-right: 2px;
 }
+/* Closed Data Browser folds must hide their content explicitly. Bootstrap and
+   fill-layout rules can override the browser's native details behavior. */
+.recluster-new-page .recluster-new-fold:not([open]) > :not(summary){
+  display: none !important;
+}
+/* Agent note: Metadata lists can grow after accordion measurement. Keep open
+   metadata bodies intrinsic so late rows stay inside their card. */
+.recluster-new-page .recluster-new-metadata-bucket[open] > .app-accordion-body,
+.recluster-new-page .recluster-new-metadata-col[open] > .app-accordion-body{
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  transition: none !important;
+  will-change: auto;
+}
 .recluster-new-page .recluster-new-level-row{
   display: grid;
   grid-template-columns: minmax(0, 1fr) 22px;
@@ -2179,9 +2178,22 @@ body.app-dark-mode .plotting-page .wl-side h4{
   margin: 1px 0;
   width: 100%;
 }
-.recluster-new-page .recluster-new-level-checkbox{
-  flex: 1 1 auto;
+.recluster-new-page .recluster-new-level-main{
+  display: flex;
+  align-items: center;
+  width: max-content;
   min-width: 0;
+  max-width: 100%;
+  gap: 2px;
+}
+.recluster-new-page .recluster-new-level-checkbox{
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: calc(100% - 20px);
+  width: auto;
+}
+.recluster-new-page .recluster-new-level-checkbox .shiny-input-container{
+  width: auto !important;
 }
 .recluster-new-page .recluster-new-level-checkbox .form-group,
 .recluster-new-page .recluster-new-level-checkbox .checkbox{
@@ -2191,7 +2203,8 @@ body.app-dark-mode .plotting-page .wl-side h4{
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   margin: 0;
   padding: 4px 8px;
   border-radius: 9999px;
@@ -2202,10 +2215,16 @@ body.app-dark-mode .plotting-page .wl-side h4{
   line-height: 1.2;
   pointer-events: none;
 }
-.recluster-new-page .recluster-new-level-checkbox .checkbox label .recluster-new-level-name{
-  display: inline-block;
+.recluster-new-page .recluster-new-level-checkbox .checkbox label > span{
+  display: inline-flex;
   min-width: 0;
-  flex: 1 1 auto;
+  max-width: 100%;
+  overflow: hidden;
+}
+.recluster-new-page .recluster-new-level-checkbox .checkbox label .recluster-new-level-name{
+  display: block;
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2234,12 +2253,60 @@ body.app-dark-mode .plotting-page .wl-side h4{
   border-color: #d1d5db;
   box-shadow: none;
 }
+.recluster-new-page .recluster-new-level-rename{
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.recluster-new-page .recluster-new-level-rename-button{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1;
+  opacity: .72;
+}
+.recluster-new-page .recluster-new-bootstrap-icon{
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  fill: currentColor;
+  stroke: none;
+}
+.recluster-new-page .recluster-new-palette-icon{
+  width: 12px;
+  height: 12px;
+}
+.recluster-new-page .recluster-new-level-rename-button:hover,
+.recluster-new-page .recluster-new-level-rename-button:focus-visible{
+  border: 0;
+  background: #f1f5f9;
+  box-shadow: none;
+  color: #475569;
+  opacity: 1;
+}
 .recluster-new-page .recluster-new-level-color{
   width: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
   justify-self: end;
+}
+.recluster-new-page .recluster-new-level-color-swatch{
+  border: 0 !important;
+  outline: 0;
+  box-shadow: none;
 }
 .recluster-new-page .recluster-new-level-color .form-group{
   margin: 0;
@@ -2761,24 +2828,30 @@ body.figure-studio-active ::-webkit-scrollbar-thumb:hover {
     display: flex !important;
     flex-direction: column !important;
   }
-  .plotting-page .plot_area_card_style > .wl-side,
-  .plotting-page .plot_area_card_style .analysis-load-wrap,
-  .plotting-page .plot_area_card_style .elbow-preview-box,
-  .plotting-page .plot_area_card_style .elbow-preview-shell {
+  .plotting-page .plot_area_card_style > .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card),
+  .plotting-page .plot_area_card_style .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card) .analysis-load-wrap,
+  .plotting-page .plot_area_card_style .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card) .elbow-preview-box,
+  .plotting-page .plot_area_card_style .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card) .elbow-preview-shell,
+  .plotting-page .plot_area_card_style > .analysis-load-wrap,
+  .plotting-page .plot_area_card_style > .elbow-preview-box,
+  .plotting-page .plot_area_card_style > .elbow-preview-shell {
     height: 100% !important;
     display: flex !important;
     flex-direction: column !important;
     flex: 1 1 auto !important;
     min-height: 0 !important;
   }
-  .plotting-page .plot_area_card_style .shiny-plot-output,
-  .plotting-page .plot_area_card_style .plotly,
-  .plotting-page .plot_area_card_style .html-widget {
+  .plotting-page .plot_area_card_style .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card) .shiny-plot-output,
+  .plotting-page .plot_area_card_style .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card) .plotly,
+  .plotting-page .plot_area_card_style .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card) .html-widget,
+  .plotting-page .plot_area_card_style > .shiny-plot-output,
+  .plotting-page .plot_area_card_style > .plotly,
+  .plotting-page .plot_area_card_style > .html-widget {
     height: 100% !important;
     flex: 1 1 auto !important;
   }
-  /* Agent note: Data Browser lower plot card follows content height. Keep this
-     exception narrower than the direct .wl-side stretch rule needed by UMAP. */
+  /* Agent note: Data Browser lower cards and QC scatter keep intrinsic output
+     height; generic portrait stretching must exclude these cards. */
   .plotting-page .plot_area_card_style > .wl-side.recluster-new-lower-plot-card {
     height: auto !important;
     flex: 0 0 auto !important;
@@ -2963,14 +3036,16 @@ body.figure-studio-active ::-webkit-scrollbar-thumb:hover {
     display: flex !important;
     flex-direction: column !important;
   }
-  .plotting-page.float-plot-area .plot_area_card_style > .wl-side,
-  .plotting-page.float-left-panel .plot_area_card_style > .wl-side,
-  .plotting-page.float-plot-area .plot_area_card_style .wl-side,
-  .plotting-page.float-left-panel .plot_area_card_style .wl-side,
+  .plotting-page.float-plot-area .plot_area_card_style > .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card),
+  .plotting-page.float-left-panel .plot_area_card_style > .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card),
+  .plotting-page.float-plot-area .plot_area_card_style .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card),
+  .plotting-page.float-left-panel .plot_area_card_style .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card),
   .plotting-page.float-plot-area .plot_area_card_style .analysis-selector-overlay-wrap,
   .plotting-page.float-left-panel .plot_area_card_style .analysis-selector-overlay-wrap,
-  .plotting-page.float-plot-area .plot_area_card_style .analysis-load-wrap,
-  .plotting-page.float-left-panel .plot_area_card_style .analysis-load-wrap,
+  .plotting-page.float-plot-area .plot_area_card_style .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card) .analysis-load-wrap,
+  .plotting-page.float-left-panel .plot_area_card_style .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card) .analysis-load-wrap,
+  .plotting-page.float-plot-area .plot_area_card_style > .analysis-load-wrap,
+  .plotting-page.float-left-panel .plot_area_card_style > .analysis-load-wrap,
   .plotting-page.float-plot-area .plot_area_card_style #prep_elbow_ui,
   .plotting-page.float-left-panel .plot_area_card_style #prep_elbow_ui,
   .plotting-page.float-plot-area .plot_area_card_style .elbow-preview-box,
@@ -3009,12 +3084,18 @@ body.figure-studio-active ::-webkit-scrollbar-thumb:hover {
     height: 100%;
     min-height: 0;
   }
-  .plotting-page.float-plot-area .plot_area_card_style .shiny-plot-output,
-  .plotting-page.float-plot-area .plot_area_card_style .plotly,
-  .plotting-page.float-plot-area .plot_area_card_style .html-widget,
-  .plotting-page.float-left-panel .plot_area_card_style .shiny-plot-output,
-  .plotting-page.float-left-panel .plot_area_card_style .plotly,
-  .plotting-page.float-left-panel .plot_area_card_style .html-widget {
+  .plotting-page.float-plot-area .plot_area_card_style .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card) .shiny-plot-output,
+  .plotting-page.float-plot-area .plot_area_card_style .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card) .plotly,
+  .plotting-page.float-plot-area .plot_area_card_style .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card) .html-widget,
+  .plotting-page.float-left-panel .plot_area_card_style .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card) .shiny-plot-output,
+  .plotting-page.float-left-panel .plot_area_card_style .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card) .plotly,
+  .plotting-page.float-left-panel .plot_area_card_style .wl-side:not(.recluster-new-lower-plot-card):not(.qc-scatter-card) .html-widget,
+  .plotting-page.float-plot-area .plot_area_card_style > .shiny-plot-output,
+  .plotting-page.float-plot-area .plot_area_card_style > .plotly,
+  .plotting-page.float-plot-area .plot_area_card_style > .html-widget,
+  .plotting-page.float-left-panel .plot_area_card_style > .shiny-plot-output,
+  .plotting-page.float-left-panel .plot_area_card_style > .plotly,
+  .plotting-page.float-left-panel .plot_area_card_style > .html-widget {
     flex: 1 1 auto !important;
     height: 100% !important;
   }
@@ -3026,9 +3107,25 @@ body.figure-studio-active ::-webkit-scrollbar-thumb:hover {
   .plotting-page.float-plot-area .recluster-new-page .plot_area_card_style > .recluster-new-workflow-card,
   .plotting-page.float-left-panel .recluster-new-page .plot_area_card_style > .recluster-new-workflow-card {
     display: grid !important;
-    grid-template-rows: auto auto var(--recluster-plot-h);
+    grid-template-rows: auto auto var(--recluster-plot-h) !important;
     flex: 0 0 auto !important;
     height: auto !important;
     min-height: 0 !important;
+    max-height: none !important;
+    align-self: flex-start !important;
+    width: 100% !important;
+  }
+  /* The generic plotting stretch rule has higher specificity because it uses
+     two :not() clauses. Keep this ID-scoped override stronger than that rule. */
+  #recluster_new_main_content_area .recluster-new-page .plot_area_card_style > .recluster-new-workflow-card,
+  .recluster-new-page #recluster_new_main_content_area .plot_area_card_style > .recluster-new-workflow-card {
+    display: grid !important;
+    grid-template-rows: auto auto var(--recluster-plot-h) !important;
+    flex: 0 0 auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    align-self: flex-start !important;
+    width: 100% !important;
   }
 }

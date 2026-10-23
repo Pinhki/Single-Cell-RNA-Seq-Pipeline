@@ -1,0 +1,14 @@
+# Local runtimes, research inputs and generated files
+package_libraries/
+python_envs/
+node_modules/
+Content/demo/
+results/
+further analysis/
+local_settings/
+*.rds
+*.RData
+.Rhistory
+.DS_Store
+.env
+.env.*

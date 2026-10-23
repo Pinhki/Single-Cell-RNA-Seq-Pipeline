@@ -625,8 +625,9 @@ hto_server <- function(input, output, session, shared_data) {
     reg <- shared_data$all_seurat_objects %||% list()
     nms <- names(reg)
     if (!length(nms)) return(helpText(HTO_UI_TEXT$t_text_no_seurat_objects_loaded))
-    sel <- .scalar_chr(hto_selected_object() %||% input$hto_object_name %||% shared_data$active_object_name %||% nms[[1]], default = nms[[1]])
-    if (!.is_valid_choice(sel, nms)) sel <- nms[[1]]
+    newest_object <- nms[[length(nms)]]
+    sel <- .scalar_chr(hto_selected_object() %||% input$hto_object_name %||% shared_data$active_object_name %||% newest_object, default = newest_object)
+    if (!.is_valid_choice(sel, nms)) sel <- newest_object
     selectInput("hto_object_name", HTO_UI_TEXT$t_label_object, choices = nms, selected = sel)
   })
 
@@ -655,7 +656,7 @@ hto_server <- function(input, output, session, shared_data) {
       return(invisible(NULL))
     }
     cur <- .scalar_chr(hto_selected_object() %||% input$hto_object_name %||% shared_data$active_object_name, default = "")
-    if (!nzchar(cur) || !(cur %in% nms)) cur <- nms[[1]]
+    if (!nzchar(cur) || !(cur %in% nms)) cur <- nms[[length(nms)]]
     if (!identical(cur, hto_selected_object())) hto_selected_object(cur)
   }, ignoreInit = FALSE)
 
@@ -680,8 +681,8 @@ hto_server <- function(input, output, session, shared_data) {
           return(invisible(NULL))
         }
 
-        nm <- .scalar_chr(hto_selected_object() %||% input$hto_object_name %||% shared_data$active_object_name %||% nms[[1]], default = nms[[1]])
-        if (!(nm %in% nms)) nm <- nms[[1]]
+        nm <- .scalar_chr(hto_selected_object() %||% input$hto_object_name %||% shared_data$active_object_name %||% nms[[length(nms)]], default = nms[[length(nms)]])
+        if (!(nm %in% nms)) nm <- nms[[length(nms)]]
         if (!identical(nm, hto_selected_object())) hto_selected_object(nm)
         entry <- .get_entry(nm)
         obj <- .get_obj(entry)
@@ -831,7 +832,7 @@ hto_server <- function(input, output, session, shared_data) {
     obj <- .get_obj(entry)
     req(!is.null(obj))
 
-    overlay_show("Running hashtag demultiplexing and hashtag t-SNE…")
+    overlay_show("Running hashtag demultiplexing and hashtag t-SNE…", loader = "embedding")
     on.exit(overlay_hide(), add = TRUE)
 
     seed_val <- suppressWarnings(as.integer(trimws(as.character(input$hto_seed %||% ""))))
@@ -3270,7 +3271,7 @@ hto_server <- function(input, output, session, shared_data) {
     obj <- .get_obj(.get_entry(nm))
     req(!is.null(obj))
 
-    overlay_show("Applying HTO filter and creating workspace object…")
+    overlay_show("Applying HTO filter and creating workspace object…", loader = "filter")
     on.exit(overlay_hide(), add = TRUE)
 
     diag <- tryCatch(.hto_diag_df(), error = function(e) NULL)
@@ -3289,7 +3290,7 @@ hto_server <- function(input, output, session, shared_data) {
       return()
     }
     out <- list(
-      object = .reset_subset_analysis_state(subset(obj, cells = keep_cells)),
+      object = wanlab_reset_subset_analysis_state(subset(obj, cells = keep_cells)),
       n_keep = length(keep_cells),
       n_total = nrow(obj@meta.data)
     )

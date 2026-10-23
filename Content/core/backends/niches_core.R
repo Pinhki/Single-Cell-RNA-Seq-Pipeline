@@ -30,7 +30,7 @@ niches_beta_get_object <- function(shared_data, object_name = NULL) {
   valid_nms <- niches_beta_object_names(shared_data)
   nm <- as.character(object_name %||% "")
   if (!nzchar(nm)) nm <- as.character(tryCatch(shared_data$active_object_name, error = function(e) "") %||% "")
-  if (!nzchar(nm) || !(nm %in% valid_nms)) nm <- if (length(valid_nms)) valid_nms[[1]] else ""
+  if (!nzchar(nm) || !(nm %in% valid_nms)) nm <- if (length(valid_nms)) valid_nms[[length(valid_nms)]] else ""
   if (!nzchar(nm) || !(nm %in% names(reg))) return(NULL)
 
   x <- reg[[nm]]
