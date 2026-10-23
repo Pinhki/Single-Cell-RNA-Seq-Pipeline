@@ -1,0 +1,5 @@
+2026-10-23 - Public preview 0.5.2
+- Added a reproducible public pbmc_small example with Seurat 4 and 5 checks.
+- Added installation guidance, GPL-3.0 license and a current welcome screenshot.
+- Preserved filtered code history; excluded research data and local runtimes.
+- See docs/RELEASE_VERIFICATION.md for tested behavior and limitations.

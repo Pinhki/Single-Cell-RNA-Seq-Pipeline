@@ -2,6 +2,8 @@
 
 R Shiny application for single-cell RNA sequencing analysis. The current source declares version 0.5.2. It provides separate Seurat 4 and Seurat 5 environments, data import, quality control, integration, interactive data browsing, downstream analysis, and workspace recovery.
 
+![Current scRNA welcome screen with no sample data](docs/images/scrna-welcome.png)
+
 ## Workflow
 
 1. Prepare the Seurat environment in the application.
@@ -27,7 +29,7 @@ Runtime libraries belong in `package_libraries/` and Python environments in `pyt
 
 The existing [installation guide](installation.md) and [installer guide](README_Install_Update.txt) also describe packaged distributions. This source repository does not supply the prebuilt installer payload mentioned in those guides.
 
-A clean installation and full analysis workflows have not been tested for this publication. No external user count or adoption claim is asserted.
+Fresh-checkout startup and the public normalization example were checked on macOS using the existing managed Seurat 4 and 5 runtimes. See [release verification](docs/RELEASE_VERIFICATION.md) for versions and limitations. No external adoption count is claimed.
 
 ## Source layout
 
@@ -45,3 +47,7 @@ Sequencing matrices, analysis outputs, saved R sessions, credentials and local r
 ## License
 
 Copyright Pinhki. Original project code is licensed under the [GNU General Public License version 3](LICENSE) (`GPL-3.0-only`). Third-party components retain their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Try the public example
+
+Follow the [public-data example](docs/PUBLIC_EXAMPLE.md) for a runnable check and expected output. Research data and installed dependencies are not bundled.

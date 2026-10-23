@@ -12,3 +12,7 @@ local_settings/
 .DS_Store
 .env
 .env.*
+
+/example-output/
+
+/*-validation.log
